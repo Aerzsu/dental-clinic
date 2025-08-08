@@ -1,0 +1,294 @@
+# core/views.py
+from django.shortcuts import render, redirect
+from django.contrib.auth.mixins import LoginRequiredMixin
+from django.contrib import messages
+from django.urls import reverse_lazy
+from django.views.generic import TemplateView, ListView, CreateView, UpdateView, DeleteView
+from django.utils import timezone
+from django.db.models import Q
+from datetime import datetime, timedelta
+from django import forms
+
+from .models import AuditLog, Holiday, SystemSetting
+from appointments.models import Appointment
+from patients.models import Patient
+from services.models import Service
+from users.models import User
+from appointments.forms import AppointmentRequestForm
+
+class HolidayForm(forms.ModelForm):
+    """Form for creating and updating holidays"""
+    
+    class Meta:
+        model = Holiday
+        fields = ['name', 'date', 'is_recurring']
+        widgets = {
+            'name': forms.TextInput(attrs={'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500'}),
+            'date': forms.DateInput(attrs={'type': 'date', 'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500'}),
+            'is_recurring': forms.CheckboxInput(attrs={'class': 'rounded border-gray-300 text-primary-600 shadow-sm focus:border-primary-500 focus:ring-primary-500'}),
+        }
+        help_texts = {
+            'is_recurring': 'Check if this holiday occurs every year on the same date',
+        }
+    
+    def clean_date(self):
+        date = self.cleaned_data['date']
+        if date < timezone.now().date():
+            raise forms.ValidationError('Holiday date cannot be in the past.')
+        return date
+
+class HomeView(TemplateView):
+    """Public landing page"""
+    template_name = 'core/home.html'
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['services'] = Service.objects.filter(is_archived=False)[:6]
+        context['dentists'] = User.objects.filter(is_active_dentist=True)
+        return context
+
+class BookAppointmentView(TemplateView):
+    """Public appointment booking form"""
+    template_name = 'core/book_appointment.html'
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['services'] = Service.objects.filter(is_archived=False)
+        context['dentists'] = User.objects.filter(is_active_dentist=True)
+        context['form'] = AppointmentRequestForm()
+        return context
+    
+    def post(self, request, *args, **kwargs):
+        form = AppointmentRequestForm(request.POST)
+        if form.is_valid():
+            appointment = form.save()
+            messages.success(
+                request,
+                'Your appointment request has been submitted successfully! '
+                'We will contact you soon to confirm your appointment.'
+            )
+            return redirect('core:home')
+        else:
+            context = self.get_context_data(**kwargs)
+            context['form'] = form
+            return render(request, self.template_name, context)
+
+class DashboardView(LoginRequiredMixin, TemplateView):
+    """Main dashboard for authenticated users"""
+    template_name = 'core/dashboard.html'
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        today = timezone.now().date()
+        
+        # Today's appointments - we'll filter in Python to avoid field lookup issues
+        all_appointments = Appointment.objects.filter(
+            status__in=['approved', 'pending']
+        ).select_related('patient', 'dentist', 'service', 'schedule')
+        
+        # Filter for today's appointments
+        context['todays_appointments'] = [
+            apt for apt in all_appointments if apt.schedule.date == today
+        ]
+        
+        # Pending appointment requests
+        context['pending_requests'] = Appointment.objects.filter(
+            status='pending'
+        ).count()
+        
+        # Recent patients
+        context['recent_patients'] = Patient.objects.filter(
+            is_active=True
+        ).order_by('-created_at')[:5]
+        
+        # Statistics
+        context['stats'] = {
+            'total_patients': Patient.objects.filter(is_active=True).count(),
+            'todays_appointments_count': len(context['todays_appointments']),
+            'pending_requests_count': context['pending_requests'],
+            'active_dentists': User.objects.filter(is_active_dentist=True).count(),
+        }
+        
+        # Quick actions based on user role
+        context['quick_actions'] = self.get_quick_actions()
+        
+        return context
+    
+    def get_quick_actions(self):
+        """Get quick actions based on user permissions"""
+        actions = []
+        user = self.request.user
+        
+        if user.has_permission('appointments'):
+            actions.extend([
+                {'name': 'New Appointment', 'url': 'appointments:appointment_create', 'icon': 'calendar'},
+                {'name': 'View Calendar', 'url': 'appointments:appointment_calendar', 'icon': 'calendar-view'},
+            ])
+        
+        if user.has_permission('patients'):
+            actions.extend([
+                {'name': 'Add Patient', 'url': 'patients:patient_create', 'icon': 'user-plus'},
+                {'name': 'Find Patient', 'url': 'patients:find_patient', 'icon': 'search'},
+            ])
+        
+        if user.has_permission('maintenance'):
+            actions.extend([
+                {'name': 'Manage Users', 'url': 'users:user_list', 'icon': 'users'},
+                {'name': 'System Settings', 'url': 'core:holiday_list', 'icon': 'settings'},
+            ])
+        
+        return actions
+
+class HolidayListView(LoginRequiredMixin, ListView):
+    """Manage holidays that affect appointment availability"""
+    model = Holiday
+    template_name = 'core/holiday_list.html'
+    context_object_name = 'holidays'
+    paginate_by = 20
+    
+    def dispatch(self, request, *args, **kwargs):
+        if not request.user.has_permission('maintenance'):
+            messages.error(request, 'You do not have permission to access this page.')
+            return redirect('core:dashboard')
+        return super().dispatch(request, *args, **kwargs)
+    
+    def get_queryset(self):
+        return Holiday.objects.filter(is_active=True).order_by('date')
+
+class HolidayCreateView(LoginRequiredMixin, CreateView):
+    """Create new holiday"""
+    model = Holiday
+    form_class = HolidayForm
+    template_name = 'core/holiday_form.html'
+    success_url = reverse_lazy('core:holiday_list')
+    
+    def dispatch(self, request, *args, **kwargs):
+        if not request.user.has_permission('maintenance'):
+            messages.error(request, 'You do not have permission to access this page.')
+            return redirect('core:dashboard')
+        return super().dispatch(request, *args, **kwargs)
+    
+    def form_valid(self, form):
+        messages.success(self.request, 'Holiday created successfully.')
+        return super().form_valid(form)
+
+class HolidayUpdateView(LoginRequiredMixin, UpdateView):
+    """Update holiday"""
+    model = Holiday
+    form_class = HolidayForm
+    template_name = 'core/holiday_form.html'
+    success_url = reverse_lazy('core:holiday_list')
+    
+    def dispatch(self, request, *args, **kwargs):
+        if not request.user.has_permission('maintenance'):
+            messages.error(request, 'You do not have permission to access this page.')
+            return redirect('core:dashboard')
+        return super().dispatch(request, *args, **kwargs)
+    
+    def form_valid(self, form):
+        messages.success(self.request, 'Holiday updated successfully.')
+        return super().form_valid(form)
+
+class HolidayDeleteView(LoginRequiredMixin, DeleteView):
+    """Delete holiday"""
+    model = Holiday
+    template_name = 'core/holiday_confirm_delete.html'
+    success_url = reverse_lazy('core:holiday_list')
+    
+    def dispatch(self, request, *args, **kwargs):
+        if not request.user.has_permission('maintenance'):
+            messages.error(request, 'You do not have permission to access this page.')
+            return redirect('core:dashboard')
+        return super().dispatch(request, *args, **kwargs)
+    
+    def delete(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        # Soft delete by setting is_active to False
+        self.object.is_active = False
+        self.object.save()
+        messages.success(request, f'Holiday "{self.object.name}" deleted successfully.')
+        return redirect(self.success_url)
+
+class AuditLogListView(LoginRequiredMixin, ListView):
+    """View audit logs for system activities"""
+    model = AuditLog
+    template_name = 'core/audit_logs.html'
+    context_object_name = 'logs'
+    paginate_by = 50
+    
+    def dispatch(self, request, *args, **kwargs):
+        if not request.user.has_permission('maintenance'):
+            messages.error(request, 'You do not have permission to access this page.')
+            return redirect('core:dashboard')
+        return super().dispatch(request, *args, **kwargs)
+    
+    def get_queryset(self):
+        queryset = AuditLog.objects.select_related('user')
+        
+        # Filter by user if specified
+        user_filter = self.request.GET.get('user')
+        if user_filter:
+            queryset = queryset.filter(user_id=user_filter)
+        
+        # Filter by action if specified
+        action_filter = self.request.GET.get('action')
+        if action_filter:
+            queryset = queryset.filter(action=action_filter)
+        
+        # Filter by date range
+        date_from = self.request.GET.get('date_from')
+        date_to = self.request.GET.get('date_to')
+        
+        if date_from:
+            try:
+                date_from = datetime.strptime(date_from, '%Y-%m-%d').date()
+                queryset = queryset.filter(timestamp__date__gte=date_from)
+            except ValueError:
+                pass
+        
+        if date_to:
+            try:
+                date_to = datetime.strptime(date_to, '%Y-%m-%d').date()
+                queryset = queryset.filter(timestamp__date__lte=date_to)
+            except ValueError:
+                pass
+        
+        return queryset.order_by('-timestamp')
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['users'] = User.objects.filter(is_active=True)
+        context['actions'] = AuditLog.ACTION_CHOICES if hasattr(AuditLog, 'ACTION_CHOICES') else []
+        context['filters'] = {
+            'user': self.request.GET.get('user', ''),
+            'action': self.request.GET.get('action', ''),
+            'date_from': self.request.GET.get('date_from', ''),
+            'date_to': self.request.GET.get('date_to', ''),
+        }
+        return context
+
+class SystemSettingsView(LoginRequiredMixin, TemplateView):
+    """System settings management"""
+    template_name = 'core/system_settings.html'
+    
+    def dispatch(self, request, *args, **kwargs):
+        if not request.user.has_permission('maintenance'):
+            messages.error(request, 'You do not have permission to access this page.')
+            return redirect('core:dashboard')
+        return super().dispatch(request, *args, **kwargs)
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        # Get all system settings
+        settings = {}
+        for setting in SystemSetting.objects.all():
+            settings[setting.key] = setting.value
+        
+        context['settings'] = settings
+        context['stats'] = {
+            'total_appointments': Appointment.objects.count(),
+            'total_patients': Patient.objects.count(),
+            'total_services': Service.objects.count(),
+            'total_users': User.objects.count(),
+        }
+        return context

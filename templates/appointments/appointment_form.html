@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+
+{% block title %}
+    {% if appointment %}Edit Appointment{% else %}New Appointment{% endif %} - Dental Clinic
+{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+    <div class="bg-white shadow rounded-lg">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h2 class="text-xl font-semibold text-gray-900">
+                {% if appointment %}Edit Appointment{% else %}New Appointment{% endif %}
+            </h2>
+            <p class="mt-1 text-sm text-gray-600">
+                {% if appointment %}Update appointment details{% else %}Create a new appointment for a patient{% endif %}
+            </p>
+        </div>
+        
+        <form method="post" class="px-6 py-6 space-y-6">
+            {% csrf_token %}
+            
+            <!-- Display form errors -->
+            {% if form.errors %}
+                <div class="rounded-md bg-red-50 p-4">
+                    <div class="flex">
+                        <div class="flex-shrink-0">
+                            <svg class="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path>
+                            </svg>
+                        </div>
+                        <div class="ml-3">
+                            <h3 class="text-sm font-medium text-red-800">
+                                Please correct the following errors:
+                            </h3>
+                            <div class="mt-2 text-sm text-red-700">
+                                <ul class="list-disc pl-5 space-y-1">
+                                    {% for field, errors in form.errors.items %}
+                                        {% for error in errors %}
+                                            <li>{{ field|capfirst }}: {{ error }}</li>
+                                        {% endfor %}
+                                    {% endfor %}
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            {% endif %}
+            
+            <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                <!-- Patient -->
+                <div>
+                    <label for="{{ form.patient.id_for_label }}" class="block text-sm font-medium text-gray-700">
+                        Patient *
+                    </label>
+                    <div class="mt-1">
+                        {{ form.patient }}
+                    </div>
+                    {% if form.patient.help_text %}
+                        <p class="mt-2 text-sm text-gray-500">{{ form.patient.help_text }}</p>
+                    {% endif %}
+                </div>
+
+                <!-- Dentist -->
+                <div>
+                    <label for="{{ form.dentist.id_for_label }}" class="block text-sm font-medium text-gray-700">
+                        Dentist *
+                    </label>
+                    <div class="mt-1">
+                        {{ form.dentist }}
+                    </div>
+                    {% if form.dentist.help_text %}
+                        <p class="mt-2 text-sm text-gray-500">{{ form.dentist.help_text }}</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                <!-- Service -->
+                <div>
+                    <label for="{{ form.service.id_for_label }}" class="block text-sm font-medium text-gray-700">
+                        Service *
+                    </label>
+                    <div class="mt-1">
+                        {{ form.service }}
+                    </div>
+                    <div id="service-info" class="mt-2 p-3 bg-gray-50 rounded-md hidden">
+                        <div class="text-sm text-gray-600">
+                            <p><strong>Duration:</strong> <span id="service-duration">-</span></p>
+                            <p><strong>Price Range:</strong> <span id="service-price">-</span></p>
+                            <p><strong>Description:</strong> <span id="service-description">-</span></p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Schedule -->
+                <div>
+                    <label for="{{ form.schedule.id_for_label }}" class="block text-sm font-medium text-gray-700">
+                        Schedule *
+                    </label>
+                    <div class="mt-1">
+                        {{ form.schedule }}
+                    </div>
+                    {% if form.schedule.help_text %}
+                        <p class="mt-2 text-sm text-gray-500">{{ form.schedule.help_text }}</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Reason -->
+            <div>
+                <label for="{{ form.reason.id_for_label }}" class="block text-sm font-medium text-gray-700">
+                    Reason for Visit
+                </label>
+                <div class="mt-1">
+                    {{ form.reason }}
+                </div>
+                <p class="mt-2 text-sm text-gray-500">Optional: Patient's reason for the appointment</p>
+            </div>
+
+            <!-- Staff Notes -->
+            {% if user.has_permission.appointments %}
+            <div>
+                <label for="{{ form.staff_notes.id_for_label }}" class="block text-sm font-medium text-gray-700">
+                    Staff Notes
+                </label>
+                <div class="mt-1">
+                    {{ form.staff_notes }}
+                </div>
+                <p class="mt-2 text-sm text-gray-500">Internal notes for staff (not visible to patient)</p>
+            </div>
+            {% endif %}
+
+            <!-- Status (only for updates) -->
+            {% if appointment and user.has_permission.appointments %}
+            <div>
+                <label for="{{ form.status.id_for_label }}" class="block text-sm font-medium text-gray-700">
+                    Status
+                </label>
+                <div class="mt-1">
+                    {{ form.status }}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Form Actions -->
+            <div class="flex justify-end space-x-3">
+                <a href="{% if appointment %}{% url 'appointments:appointment_detail' appointment.pk %}{% else %}{% url 'appointments:appointment_list' %}{% endif %}" 
+                   class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
+                    Cancel
+                </a>
+                <button type="submit" 
+                        class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
+                    {% if appointment %}Update Appointment{% else %}Create Appointment{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+// Service information display
+document.addEventListener('DOMContentLoaded', function() {
+    const serviceSelect = document.getElementById('{{ form.service.id_for_label }}');
+    const serviceInfo = document.getElementById('service-info');
+    const serviceDuration = document.getElementById('service-duration');
+    const servicePrice = document.getElementById('service-price');
+    const serviceDescription = document.getElementById('service-description');
+    
+    // Service data (would be populated from Django context)
+    const serviceData = {
+        {% for service in form.service.queryset %}
+        {{ service.id }}: {
+            duration: '{{ service.duration_display }}',
+            price: '{{ service.price_range_display }}',
+            description: '{{ service.description|escapejs }}'
+        }{% if not forloop.last %},{% endif %}
+        {% endfor %}
+    };
+    
+    function updateServiceInfo() {
+        const selectedId = serviceSelect.value;
+        if (selectedId && serviceData[selectedId]) {
+            const service = serviceData[selectedId];
+            serviceDuration.textContent = service.duration;
+            servicePrice.textContent = service.price;
+            serviceDescription.textContent = service.description;
+            serviceInfo.classList.remove('hidden');
+        } else {
+            serviceInfo.classList.add('hidden');
+        }
+    }
+    
+    serviceSelect.addEventListener('change', updateServiceInfo);
+    updateServiceInfo(); // Initial load
+});
+
+// Schedule filtering based on dentist selection
+document.addEventListener('DOMContentLoaded', function() {
+    const dentistSelect = document.getElementById('{{ form.dentist.id_for_label }}');
+    const scheduleSelect = document.getElementById('{{ form.schedule.id_for_label }}');
+    
+    // Store all schedule options
+    const allScheduleOptions = Array.from(scheduleSelect.options);
+    
+    function filterSchedules() {
+        const selectedDentist = dentistSelect.value;
+        
+        // Clear current options
+        scheduleSelect.innerHTML = '<option value="">Select a schedule...</option>';
+        
+        // Add filtered options
+        allScheduleOptions.forEach(option => {
+            if (option.value === '' || option.dataset.dentist === selectedDentist) {
+                scheduleSelect.appendChild(option.cloneNode(true));
+            }
+        });
+    }
+    
+    dentistSelect.addEventListener('change', filterSchedules);
+    filterSchedules(); // Initial filter
+});
+</script>
+{% endblock %}

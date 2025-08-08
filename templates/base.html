@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Dental Clinic Management System{% endblock %}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: {
+                            50: '#f0f9ff',
+                            100: '#e0f2fe',
+                            500: '#0ea5e9',
+                            600: '#0284c7',
+                            700: '#0369a1',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    {% if user.is_authenticated %}
+        <!-- Navigation -->
+        <nav class="bg-white shadow-sm border-b">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex justify-between h-16">
+                    <div class="flex">
+                        <div class="flex-shrink-0 flex items-center">
+                            <h1 class="text-xl font-bold text-gray-900">Dental Clinic</h1>
+                        </div>
+                        <div class="hidden sm:ml-6 sm:flex sm:space-x-8">
+                            <a href="{% url 'core:dashboard' %}" 
+                               class="{% if request.resolver_match.url_name == 'dashboard' %}border-primary-500 text-gray-900{% else %}border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300{% endif %} inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
+                                Dashboard
+                            </a>
+                            
+                            <!-- Appointments Link -->
+                            {% comment %} {% if user.has_permission.appointments %} {% endcomment %}
+                            <div class="relative" x-data="{ open: false }" @mouseleave="open = false">
+                                <button @mouseenter="open = true" 
+                                        class="{% if 'appointments' in request.resolver_match.namespace %}border-primary-500 text-gray-900{% else %}border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300{% endif %} inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
+                                    Appointments
+                                    <svg class="ml-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                                    </svg>
+                                </button>
+                                <div x-show="open" 
+                                     x-transition:enter="transition ease-out duration-100"
+                                     x-transition:enter-start="transform opacity-0 scale-95"
+                                     x-transition:enter-end="transform opacity-100 scale-100"
+                                     class="absolute z-10 left-0 mt-2 w-48 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5">
+                                    <div class="py-1">
+                                        <a href="{% url 'appointments:appointment_calendar' %}" 
+                                           class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Calendar View</a>
+                                        <a href="{% url 'appointments:appointment_requests' %}" 
+                                           class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Requests</a>
+                                        <a href="{% url 'appointments:appointment_list' %}" 
+                                           class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">All Appointments</a>
+                                        <a href="{% url 'appointments:appointment_create' %}" 
+                                           class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">New Appointment</a>
+                                        <a href="{% url 'appointments:schedule_list' %}" 
+                                           class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Manage Schedules</a>
+                                    </div>
+                                </div>
+                            </div>
+                            {% comment %} {% endif %} {% endcomment %}
+                            
+                            <!-- Patients Link -->
+                            {% comment %} {% if user.has_permission.patients %} {% endcomment %}
+                            <div class="relative" x-data="{ open: false }" @mouseleave="open = false">
+                                <button @mouseenter="open = true" 
+                                        class="{% if 'patients' in request.resolver_match.namespace %}border-primary-500 text-gray-900{% else %}border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300{% endif %} inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
+                                    Patients
+                                    <svg class="ml-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                                    </svg>
+                                </button>
+                                <div x-show="open" 
+                                     x-transition:enter="transition ease-out duration-100"
+                                     x-transition:enter-start="transform opacity-0 scale-95"
+                                     x-transition:enter-end="transform opacity-100 scale-100"
+                                     class="absolute z-10 left-0 mt-2 w-48 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5">
+                                    <div class="py-1">
+                                        <a href="{% url 'patients:patient_list' %}" 
+                                           class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">All Patients</a>
+                                        <a href="{% url 'patients:patient_create' %}" 
+                                           class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Add Patient</a>
+                                        <a href="{% url 'patients:find_patient' %}" 
+                                           class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Find Patient</a>
+                                        <a href="{% url 'patients:patient_search' %}" 
+                                           class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Advanced Search</a>
+                                    </div>
+                                </div>
+                            </div>
+                            {% comment %} {% endif %} {% endcomment %}
+                            
+                            <!-- Services & Billing Link -->
+                            {% comment %} {% if user.has_permission.billing %} {% endcomment %}
+                            <div class="relative" x-data="{ open: false }" @mouseleave="open = false">
+                                <button @mouseenter="open = true" 
+                                        class="{% if 'services' in request.resolver_match.namespace %}border-primary-500 text-gray-900{% else %}border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300{% endif %} inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
+                                    Services & Billing
+                                    <svg class="ml-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                                    </svg>
+                                </button>
+                                <div x-show="open" 
+                                     x-transition:enter="transition ease-out duration-100"
+                                     x-transition:enter-start="transform opacity-0 scale-95"
+                                     x-transition:enter-end="transform opacity-100 scale-100"
+                                     class="absolute z-10 left-0 mt-2 w-48 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5">
+                                    <div class="py-1">
+                                        <a href="{% url 'services:service_list' %}" 
+                                           class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Services</a>
+                                        <a href="{% url 'services:discount_list' %}" 
+                                           class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Discounts</a>
+                                    </div>
+                                </div>
+                            </div>
+                            {% comment %} {% endif %} {% endcomment %}
+                            
+                            <!-- Maintenance Link -->
+                            {% comment %} {% if user.has_permission.maintenance %} {% endcomment %}
+                            <div class="relative" x-data="{ open: false }" @mouseleave="open = false">
+                                <button @mouseenter="open = true" 
+                                        class="{% if 'users' in request.resolver_match.namespace or 'core' in request.resolver_match.namespace and request.resolver_match.url_name != 'dashboard' %}border-primary-500 text-gray-900{% else %}border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300{% endif %} inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
+                                    Maintenance
+                                    <svg class="ml-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                                    </svg>
+                                </button>
+                                <div x-show="open" 
+                                     x-transition:enter="transition ease-out duration-100"
+                                     x-transition:enter-start="transform opacity-0 scale-95"
+                                     x-transition:enter-end="transform opacity-100 scale-100"
+                                     class="absolute z-10 left-0 mt-2 w-48 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5">
+                                    <div class="py-1">
+                                        <a href="{% url 'users:user_list' %}" 
+                                           class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">User Management</a>
+                                        <a href="{% url 'users:role_list' %}" 
+                                           class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Role Management</a>
+                                        <a href="{% url 'core:holiday_list' %}" 
+                                           class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Holidays</a>
+                                        <a href="{% url 'core:audit_logs' %}" 
+                                           class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Audit Logs</a>
+                                        <a href="{% url 'core:system_settings' %}" 
+                                           class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">System Settings</a>
+                                    </div>
+                                </div>
+                            </div>
+                            {% comment %} {% endif %} {% endcomment %}
+                        </div>
+                    </div>
+                    <div class="hidden sm:ml-6 sm:flex sm:items-center">
+                        <div class="relative" x-data="{ open: false }">
+                            <button @click="open = !open" class="bg-white rounded-full flex text-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500" id="user-menu-button">
+                                <span class="sr-only">Open user menu</span>
+                                <div class="h-8 w-8 rounded-full bg-primary-600 flex items-center justify-center">
+                                    <span class="text-sm font-medium text-white">{{ user.first_name|first|default:user.username|first }}</span>
+                                </div>
+                            </button>
+                            <div x-show="open" @click.away="open = false" class="origin-top-right absolute right-0 mt-2 w-48 rounded-md shadow-lg py-1 bg-white ring-1 ring-black ring-opacity-5 z-50">
+                                <div class="px-4 py-2 text-sm text-gray-700 border-b">
+                                    <div class="font-medium">{{ user.get_full_name|default:user.username }}</div>
+                                    <div class="text-gray-500">{{ user.role.display_name|default:"Staff" }}</div>
+                                </div>
+                                <a href="{% url 'users:password_change' %}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Change Password</a>
+                                <a href="{% url 'users:logout' %}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Sign out</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </nav>
+    {% endif %}
+
+    <!-- Messages -->
+    {% if messages %}
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4">
+            {% for message in messages %}
+                <div class="rounded-md p-4 mb-4 {% if message.tags == 'error' %}bg-red-50 text-red-800 border border-red-200{% elif message.tags == 'warning' %}bg-yellow-50 text-yellow-800 border border-yellow-200{% elif message.tags == 'success' %}bg-green-50 text-green-800 border border-green-200{% else %}bg-blue-50 text-blue-800 border border-blue-200{% endif %}">
+                    {{ message }}
+                </div>
+            {% endfor %}
+        </div>
+    {% endif %}
+
+    <!-- Main Content -->
+    <main class="{% if user.is_authenticated %}max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8{% endif %}">
+        {% block content %}
+        {% endblock %}
+    </main>
+
+    <!-- Scripts -->
+    {% block scripts %}
+    {% endblock %}
+</body>
+</html>

@@ -1,0 +1,267 @@
+{% extends "base.html" %}
+
+{% block title %}Appointment Calendar - Dental Clinic{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="sm:flex sm:items-center sm:justify-between">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900">Appointment Calendar</h1>
+            <p class="mt-2 text-sm text-gray-700">View and manage appointments by calendar</p>
+        </div>
+        <div class="mt-4 sm:mt-0">
+            <a href="{% url 'appointments:appointment_create' %}" 
+               class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
+                <svg class="-ml-1 mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                </svg>
+                New Appointment
+            </a>
+        </div>
+    </div>
+
+    <!-- Navigation and Filters -->
+    <div class="bg-white shadow rounded-lg">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <div class="flex items-center justify-between">
+                <!-- Month Navigation -->
+                <div class="flex items-center space-x-4">
+                    <a href="?month={{ current_month|add:'-1' }}&year={{ current_year }}" 
+                       class="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
+                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                        </svg>
+                        Previous
+                    </a>
+                    <h2 class="text-lg font-semibold text-gray-900">
+                        {{ current_month|date:"F Y" }}
+                    </h2>
+                    <a href="?month={{ current_month|add:'1' }}&year={{ current_year }}" 
+                       class="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
+                        Next
+                        <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                        </svg>
+                    </a>
+                </div>
+
+                <!-- Quick Links -->
+                <div class="flex items-center space-x-2">
+                    <a href="{% url 'appointments:appointment_requests' %}" 
+                       class="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
+                        Pending Requests
+                    </a>
+                    <a href="{% url 'appointments:appointment_list' %}" 
+                       class="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
+                        List View
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Calendar Grid -->
+        <div class="p-6">
+            <div class="grid grid-cols-7 gap-px bg-gray-200 rounded-lg overflow-hidden">
+                <!-- Day Headers -->
+                <div class="bg-gray-50 py-2 px-3 text-xs font-medium text-gray-500 text-center uppercase tracking-wide">Mon</div>
+                <div class="bg-gray-50 py-2 px-3 text-xs font-medium text-gray-500 text-center uppercase tracking-wide">Tue</div>
+                <div class="bg-gray-50 py-2 px-3 text-xs font-medium text-gray-500 text-center uppercase tracking-wide">Wed</div>
+                <div class="bg-gray-50 py-2 px-3 text-xs font-medium text-gray-500 text-center uppercase tracking-wide">Thu</div>
+                <div class="bg-gray-50 py-2 px-3 text-xs font-medium text-gray-500 text-center uppercase tracking-wide">Fri</div>
+                <div class="bg-gray-50 py-2 px-3 text-xs font-medium text-gray-500 text-center uppercase tracking-wide">Sat</div>
+                <div class="bg-gray-50 py-2 px-3 text-xs font-medium text-gray-500 text-center uppercase tracking-wide">Sun</div>
+
+                <!-- Calendar Days -->
+                <div id="calendar-grid" class="contents">
+                    <!-- Days will be populated by JavaScript -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Legend -->
+    <div class="bg-white shadow rounded-lg p-6">
+        <h3 class="text-sm font-medium text-gray-900 mb-3">Status Legend</h3>
+        <div class="flex flex-wrap gap-4">
+            <div class="flex items-center">
+                <div class="w-3 h-3 bg-yellow-500 rounded mr-2"></div>
+                <span class="text-sm text-gray-700">Pending</span>
+            </div>
+            <div class="flex items-center">
+                <div class="w-3 h-3 bg-green-500 rounded mr-2"></div>
+                <span class="text-sm text-gray-700">Approved</span>
+            </div>
+            <div class="flex items-center">
+                <div class="w-3 h-3 bg-blue-500 rounded mr-2"></div>
+                <span class="text-sm text-gray-700">Completed</span>
+            </div>
+            <div class="flex items-center">
+                <div class="w-3 h-3 bg-red-500 rounded mr-2"></div>
+                <span class="text-sm text-gray-700">Cancelled</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Appointment Details Modal -->
+<div id="appointmentModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
+    <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+        <div class="mt-3">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-medium text-gray-900" id="modalTitle">Appointment Details</h3>
+                <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            <div id="modalContent">
+                <!-- Content will be populated by JavaScript -->
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Calendar data from Django
+const appointmentsByDate = {{ appointments_by_date|safe }};
+const currentMonth = {{ current_month }};
+const currentYear = {{ current_year }};
+const today = "{{ today }}";
+
+// Generate calendar
+function generateCalendar() {
+    const firstDay = new Date(currentYear, currentMonth - 1, 1);
+    const lastDay = new Date(currentYear, currentMonth, 0);
+    const firstDayOfWeek = firstDay.getDay();
+    const daysInMonth = lastDay.getDate();
+    
+    const calendarGrid = document.getElementById('calendar-grid');
+    calendarGrid.innerHTML = '';
+    
+    // Add empty cells for days before the first day of the month
+    const startDay = firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1; // Adjust for Monday start
+    for (let i = 0; i < startDay; i++) {
+        const emptyCell = document.createElement('div');
+        emptyCell.className = 'bg-gray-50 h-32 p-2';
+        calendarGrid.appendChild(emptyCell);
+    }
+    
+    // Add days of the month
+    for (let day = 1; day <= daysInMonth; day++) {
+        const dateStr = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const dayCell = document.createElement('div');
+        dayCell.className = 'bg-white h-32 p-2 border-r border-b border-gray-100 cursor-pointer hover:bg-gray-50';
+        
+        // Highlight today
+        if (dateStr === today) {
+            dayCell.classList.add('bg-blue-50', 'border-blue-200');
+        }
+        
+        // Day number
+        const dayNumber = document.createElement('div');
+        dayNumber.className = 'font-semibold text-sm text-gray-900 mb-1';
+        dayNumber.textContent = day;
+        dayCell.appendChild(dayNumber);
+        
+        // Appointments for this day
+        const appointments = appointmentsByDate[dateStr] || [];
+        appointments.forEach((appointment, index) => {
+            if (index < 3) { // Show max 3 appointments
+                const appointmentDiv = document.createElement('div');
+                appointmentDiv.className = `text-xs p-1 mb-1 rounded cursor-pointer ${getStatusColor(appointment.status)}`;
+                appointmentDiv.textContent = `${appointment.schedule__start_time} - ${appointment.patient__first_name} ${appointment.patient__last_name}`;
+                appointmentDiv.onclick = (e) => {
+                    e.stopPropagation();
+                    showAppointmentDetails(appointment);
+                };
+                dayCell.appendChild(appointmentDiv);
+            }
+        });
+        
+        // Show "more" indicator if there are more than 3 appointments
+        if (appointments.length > 3) {
+            const moreDiv = document.createElement('div');
+            moreDiv.className = 'text-xs text-gray-500 font-medium';
+            moreDiv.textContent = `+${appointments.length - 3} more`;
+            dayCell.appendChild(moreDiv);
+        }
+        
+        dayCell.onclick = () => showDayAppointments(dateStr, appointments);
+        calendarGrid.appendChild(dayCell);
+    }
+}
+
+function getStatusColor(status) {
+    const colors = {
+        'pending': 'bg-yellow-100 text-yellow-800 border-yellow-200',
+        'approved': 'bg-green-100 text-green-800 border-green-200',
+        'completed': 'bg-blue-100 text-blue-800 border-blue-200',
+        'cancelled': 'bg-red-100 text-red-800 border-red-200',
+        'rejected': 'bg-red-100 text-red-800 border-red-200'
+    };
+    return colors[status] || 'bg-gray-100 text-gray-800 border-gray-200';
+}
+
+function showDayAppointments(dateStr, appointments) {
+    const modal = document.getElementById('appointmentModal');
+    const modalTitle = document.getElementById('modalTitle');
+    const modalContent = document.getElementById('modalContent');
+    
+    const date = new Date(dateStr);
+    modalTitle.textContent = `Appointments - ${date.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}`;
+    
+    if (appointments.length === 0) {
+        modalContent.innerHTML = '<p class="text-gray-500">No appointments scheduled for this day.</p>';
+    } else {
+        let content = '<div class="space-y-3">';
+        appointments.forEach(appointment => {
+            content += `
+                <div class="border border-gray-200 rounded-lg p-3">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="font-medium">${appointment.patient__first_name} ${appointment.patient__last_name}</span>
+                        <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(appointment.status)}">${appointment.status}</span>
+                    </div>
+                    <div class="text-sm text-gray-600">
+                        <p><strong>Time:</strong> ${appointment.schedule__start_time} - ${appointment.schedule__end_time}</p>
+                        <p><strong>Service:</strong> ${appointment.service__name}</p>
+                        <p><strong>Dentist:</strong> Dr. ${appointment.dentist__first_name} ${appointment.dentist__last_name}</p>
+                        ${appointment.reason ? `<p><strong>Reason:</strong> ${appointment.reason}</p>` : ''}
+                    </div>
+                    <div class="mt-2 flex space-x-2">
+                        <a href="/appointments/${appointment.id}/" class="text-primary-600 hover:text-primary-500 text-sm font-medium">View Details</a>
+                        ${appointment.status === 'pending' ? `<a href="/appointments/${appointment.id}/approve/" class="text-green-600 hover:text-green-500 text-sm font-medium">Approve</a>` : ''}
+                    </div>
+                </div>
+            `;
+        });
+        content += '</div>';
+        modalContent.innerHTML = content;
+    }
+    
+    modal.classList.remove('hidden');
+}
+
+function showAppointmentDetails(appointment) {
+    // This would show detailed info for a single appointment
+    showDayAppointments(appointment.schedule__date, [appointment]);
+}
+
+function closeModal() {
+    document.getElementById('appointmentModal').classList.add('hidden');
+}
+
+// Initialize calendar when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    generateCalendar();
+});
+
+// Close modal when clicking outside
+document.getElementById('appointmentModal').addEventListener('click', function(e) {
+    if (e.target === this) {
+        closeModal();
+    }
+});
+</script>
+{% endblock %}

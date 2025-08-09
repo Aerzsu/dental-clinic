@@ -1,0 +1,197 @@
+{% extends 'base.html' %}
+
+{% block title %}
+    {% if object %}Edit Discount{% else %}Add New Discount{% endif %} - Dental Clinic Management
+{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto space-y-6">
+    <!-- Header -->
+    <div>
+        <div class="flex items-center space-x-2 text-sm text-gray-500 mb-2">
+            <a href="{% url 'services:discount_list' %}" class="hover:text-gray-700">Discounts</a>
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+            </svg>
+            <span>{% if object %}Edit Discount{% else %}Add New Discount{% endif %}</span>
+        </div>
+        <h1 class="text-2xl font-bold text-gray-900">
+            {% if object %}Edit Discount{% else %}Add New Discount{% endif %}
+        </h1>
+        <p class="mt-1 text-sm text-gray-600">
+            {% if object %}Update the details of this discount{% else %}Create a new discount for services and billing{% endif %}
+        </p>
+    </div>
+
+    <!-- Form -->
+    <div class="bg-white shadow rounded-lg">
+        <form method="post" class="space-y-6 p-6">
+            {% csrf_token %}
+            
+            <!-- Display non-field errors -->
+            {% if form.non_field_errors %}
+                <div class="rounded-md bg-red-50 p-4">
+                    <div class="flex">
+                        <div class="flex-shrink-0">
+                            <svg class="h-5 w-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.728-.833-2.498 0L3.316 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+                            </svg>
+                        </div>
+                        <div class="ml-3">
+                            <h3 class="text-sm font-medium text-red-800">Please correct the following errors:</h3>
+                            <div class="mt-2 text-sm text-red-700">
+                                <ul class="list-disc list-inside space-y-1">
+                                    {% for error in form.non_field_errors %}
+                                        <li>{{ error }}</li>
+                                    {% endfor %}
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            {% endif %}
+
+            <!-- Discount Name -->
+            <div>
+                <label for="{{ form.name.id_for_label }}" class="block text-sm font-medium text-gray-700">
+                    Discount Name <span class="text-red-500">*</span>
+                </label>
+                {{ form.name }}
+                {% if form.name.errors %}
+                    <p class="mt-2 text-sm text-red-600">{{ form.name.errors.0 }}</p>
+                {% endif %}
+                {% if form.name.help_text %}
+                    <p class="mt-2 text-sm text-gray-500">{{ form.name.help_text }}</p>
+                {% endif %}
+            </div>
+
+            <!-- Discount Type and Amount -->
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-3">
+                        Discount Type <span class="text-red-500">*</span>
+                    </label>
+                    <div class="space-y-3" x-data="{ isPercentage: {{ form.is_percentage.value|yesno:'true,false' }} }">
+                        <div class="flex items-center">
+                            <input type="radio" 
+                                   name="discount_type" 
+                                   id="fixed_amount" 
+                                   value="false"
+                                   @click="isPercentage = false"
+                                   :checked="!isPercentage"
+                                   class="focus:ring-primary-500 h-4 w-4 text-primary-600 border-gray-300">
+                            <label for="fixed_amount" class="ml-3 block text-sm font-medium text-gray-700">
+                                Fixed Amount (₱)
+                            </label>
+                        </div>
+                        <div class="flex items-center">
+                            <input type="radio" 
+                                   name="discount_type" 
+                                   id="percentage" 
+                                   value="true"
+                                   @click="isPercentage = true"
+                                   :checked="isPercentage"
+                                   class="focus:ring-primary-500 h-4 w-4 text-primary-600 border-gray-300">
+                            <label for="percentage" class="ml-3 block text-sm font-medium text-gray-700">
+                                Percentage (%)
+                            </label>
+                        </div>
+                        
+                        <!-- Hidden field for form submission -->
+                        {{ form.is_percentage }}
+                    </div>
+                </div>
+
+                <!-- Amount Field -->
+                <div>
+                    <label for="{{ form.amount.id_for_label }}" class="block text-sm font-medium text-gray-700">
+                        <span x-show="!isPercentage">Discount Amount (₱)</span>
+                        <span x-show="isPercentage">Discount Percentage (%)</span>
+                        <span class="text-red-500">*</span>
+                    </label>
+                    <div class="mt-1 relative rounded-md shadow-sm">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <span class="text-gray-500 sm:text-sm" x-show="!isPercentage">₱</span>
+                            <span class="text-gray-500 sm:text-sm" x-show="isPercentage">%</span>
+                        </div>
+                        <input type="number" 
+                               name="amount" 
+                               id="{{ form.amount.id_for_label }}"
+                               value="{{ form.amount.value|default:'' }}"
+                               step="0.01"
+                               min="0.01"
+                               x-bind:max="isPercentage ? '100' : null"
+                               class="focus:ring-primary-500 focus:border-primary-500 block w-full pl-7 pr-12 sm:text-sm border-gray-300 rounded-md">
+                    </div>
+                    {% if form.amount.errors %}
+                        <p class="mt-2 text-sm text-red-600">{{ form.amount.errors.0 }}</p>
+                    {% endif %}
+                    <p class="mt-2 text-sm text-gray-500" x-show="!isPercentage">
+                        Enter the fixed amount to subtract from the total
+                    </p>
+                    <p class="mt-2 text-sm text-gray-500" x-show="isPercentage">
+                        Enter percentage (1-100) to discount from the total
+                    </p>
+                </div>
+            </div>
+
+            <!-- Form Actions -->
+            <div class="flex justify-end space-x-3 pt-6 border-t border-gray-200">
+                <a href="{% url 'services:discount_list' %}" 
+                   class="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
+                    Cancel
+                </a>
+                <button type="submit" 
+                        class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
+                    {% if object %}Update Discount{% else %}Create Discount{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Help Text -->
+    <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <div class="flex">
+            <div class="flex-shrink-0">
+                <svg class="h-5 w-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+            </div>
+            <div class="ml-3">
+                <h3 class="text-sm font-medium text-blue-800">Discount Setup Tips</h3>
+                <div class="mt-2 text-sm text-blue-700">
+                    <ul class="list-disc list-inside space-y-1">
+                        <li><strong>Fixed Amount:</strong> Subtracts a specific peso amount from the total (e.g., ₱100 off)</li>
+                        <li><strong>Percentage:</strong> Reduces the total by a percentage (e.g., 20% off)</li>
+                        <li>Use clear names like "Senior Citizen Discount" or "New Patient Special"</li>
+                        <li>Remember to activate discounts after creating them</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Update the hidden is_percentage field based on radio selection
+document.addEventListener('DOMContentLoaded', function() {
+    const fixedRadio = document.getElementById('fixed_amount');
+    const percentageRadio = document.getElementById('percentage');
+    const hiddenField = document.getElementById('{{ form.is_percentage.id_for_label }}');
+    
+    function updateHiddenField() {
+        hiddenField.checked = percentageRadio.checked;
+    }
+    
+    fixedRadio.addEventListener('change', updateHiddenField);
+    percentageRadio.addEventListener('change', updateHiddenField);
+    
+    // Set initial state
+    if (hiddenField.checked) {
+        percentageRadio.checked = true;
+    } else {
+        fixedRadio.checked = true;
+    }
+});
+</script>
+{% endblock %}

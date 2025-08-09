@@ -1,0 +1,230 @@
+<!-- templates/users/user_form.html -->
+{% extends 'base.html' %}
+
+{% block title %}
+{% if user_obj.pk %}Edit User{% else %}Add New User{% endif %} - {{ block.super }}
+{% endblock %}
+
+{% block content %}
+<!-- spacing for fields -->
+<style> 
+    input,
+    select,
+    textarea {
+    padding: 0.5rem 0.75rem;
+}
+</style>
+
+<div class="max-w-2xl mx-auto">
+    <!-- Header -->
+    <div class="mb-6">
+        <div class="flex items-center space-x-2 text-sm text-gray-500 mb-2">
+            <a href="{% url 'users:user_list' %}" class="hover:text-gray-700">User Management</a>
+            <span>/</span>
+            <span>{% if user_obj.pk %}Edit User{% else %}Add New User{% endif %}</span>
+        </div>
+        <h1 class="text-2xl font-bold text-gray-900">
+            {% if user_obj.pk %}
+                Edit User: {{ user_obj.get_full_name|default:user_obj.username }}
+            {% else %}
+                Add New User
+            {% endif %}
+        </h1>
+    </div>
+
+    <!-- Form -->
+    <div class="bg-white rounded-lg shadow-sm border">
+        <form method="post" class="p-6 space-y-6">
+            {% csrf_token %}
+            
+            <!-- Basic Information -->
+            <div>
+                <h3 class="text-lg font-medium text-gray-900 mb-4">Basic Information</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="{{ form.username.id_for_label }}" class="block text-sm font-medium text-gray-700">
+                            Username *
+                        </label>
+                        {{ form.username }}
+                        {% if form.username.errors %}
+                            <p class="mt-1 text-sm text-red-600">{{ form.username.errors.0 }}</p>
+                        {% endif %}
+                        {% if form.username.help_text %}
+                            <p class="mt-1 text-sm text-gray-500">{{ form.username.help_text }}</p>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.email.id_for_label }}" class="block text-sm font-medium text-gray-700">
+                            Email
+                        </label>
+                        {{ form.email }}
+                        {% if form.email.errors %}
+                            <p class="mt-1 text-sm text-red-600">{{ form.email.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.first_name.id_for_label }}" class="block text-sm font-medium text-gray-700">
+                            First Name
+                        </label>
+                        {{ form.first_name }}
+                        {% if form.first_name.errors %}
+                            <p class="mt-1 text-sm text-red-600">{{ form.first_name.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.last_name.id_for_label }}" class="block text-sm font-medium text-gray-700">
+                            Last Name
+                        </label>
+                        {{ form.last_name }}
+                        {% if form.last_name.errors %}
+                            <p class="mt-1 text-sm text-red-600">{{ form.last_name.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+                    <div class="md:col-span-2">
+                        <label for="{{ form.phone.id_for_label }}" class="block text-sm font-medium text-gray-700">
+                            Phone Number
+                        </label>
+                        {{ form.phone }}
+                        {% if form.phone.errors %}
+                            <p class="mt-1 text-sm text-red-600">{{ form.phone.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Role and Permissions -->
+            <div class="border-t border-gray-200 pt-6">
+                <h3 class="text-lg font-medium text-gray-900 mb-4">Role and Permissions</h3>
+                <div class="space-y-4">
+                    <div>
+                        <label for="{{ form.role.id_for_label }}" class="block text-sm font-medium text-gray-700">
+                            Role *
+                        </label>
+                        {{ form.role }}
+                        {% if form.role.errors %}
+                            <p class="mt-1 text-sm text-red-600">{{ form.role.errors.0 }}</p>
+                        {% endif %}
+                        <p class="mt-1 text-sm text-gray-500">The role determines what modules this user can access.</p>
+                    </div>
+
+                    <div class="flex items-center space-x-3">
+                        {{ form.is_active_dentist }}
+                        <label for="{{ form.is_active_dentist.id_for_label }}" class="text-sm font-medium text-gray-700">
+                            {{ form.is_active_dentist.label }}
+                        </label>
+                        {% if form.is_active_dentist.errors %}
+                            <p class="text-sm text-red-600">{{ form.is_active_dentist.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+                    <p class="text-sm text-gray-500 ml-6">Allow this user to be assigned to appointments as a dentist.</p>
+
+                    <div class="flex items-center space-x-3">
+                        {{ form.is_active }}
+                        <label for="{{ form.is_active.id_for_label }}" class="text-sm font-medium text-gray-700">
+                            {{ form.is_active.label }}
+                        </label>
+                        {% if form.is_active.errors %}
+                            <p class="text-sm text-red-600">{{ form.is_active.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+                    <p class="text-sm text-gray-500 ml-6">Inactive users cannot log in to the system.</p>
+                </div>
+            </div>
+
+            <!-- Password Section -->
+            {% if not user_obj.pk or form.password1.value %}
+            <div class="border-t border-gray-200 pt-6">
+                <h3 class="text-lg font-medium text-gray-900 mb-4">
+                    {% if user_obj.pk %}Change Password{% else %}Set Password{% endif %}
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="{{ form.password1.id_for_label }}" class="block text-sm font-medium text-gray-700">
+                            Password {% if not user_obj.pk %}*{% endif %}
+                        </label>
+                        {{ form.password1 }}
+                        {% if form.password1.errors %}
+                            <p class="mt-1 text-sm text-red-600">{{ form.password1.errors.0 }}</p>
+                        {% endif %}
+                        {% if form.password1.help_text %}
+                            <p class="mt-1 text-sm text-gray-500">{{ form.password1.help_text }}</p>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.password2.id_for_label }}" class="block text-sm font-medium text-gray-700">
+                            Confirm Password {% if not user_obj.pk %}*{% endif %}
+                        </label>
+                        {{ form.password2 }}
+                        {% if form.password2.errors %}
+                            <p class="mt-1 text-sm text-red-600">{{ form.password2.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Form Errors -->
+            {% if form.non_field_errors %}
+                <div class="border-t border-gray-200 pt-6">
+                    <div class="bg-red-50 border border-red-200 rounded-md p-4">
+                        <div class="flex">
+                            <div class="flex-shrink-0">
+                                <svg class="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+                                </svg>
+                            </div>
+                            <div class="ml-3">
+                                <h3 class="text-sm font-medium text-red-800">
+                                    Please correct the following errors:
+                                </h3>
+                                <div class="mt-2 text-sm text-red-700">
+                                    <ul class="list-disc list-inside">
+                                        {% for error in form.non_field_errors %}
+                                        <li>{{ error }}</li>
+                                        {% endfor %}
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            {% endif %}
+
+            <!-- Form Actions -->
+            <div class="border-t border-gray-200 pt-6 flex justify-between">
+                <a href="{% url 'users:user_list' %}" 
+                   class="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-50 transition-colors">
+                    Cancel
+                </a>
+                <button type="submit" 
+                        class="bg-primary-600 hover:bg-primary-700 text-white px-6 py-2 rounded-md text-sm font-medium transition-colors">
+                    {% if user_obj.pk %}Update User{% else %}Create User{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+
+    {% if user_obj.pk %}
+    <!-- Additional Actions -->
+    <div class="mt-6 bg-white rounded-lg shadow-sm border p-6">
+        <h3 class="text-lg font-medium text-gray-900 mb-4">Additional Actions</h3>
+        <div class="flex space-x-4">
+            <a href="{% url 'users:user_detail' user_obj.pk %}" 
+               class="text-primary-600 hover:text-primary-700 text-sm font-medium">
+                View User Details
+            </a>
+            {% if user_obj != user %}
+            <a href="{% url 'users:toggle_user_active' user_obj.pk %}" 
+               class="{% if user_obj.is_active %}text-red-600 hover:text-red-700{% else %}text-green-600 hover:text-green-700{% endif %} text-sm font-medium"
+               onclick="return confirm('Are you sure you want to {% if user_obj.is_active %}deactivate{% else %}activate{% endif %} this user?')">
+                {% if user_obj.is_active %}Deactivate User{% else %}Activate User{% endif %}
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+<style>
+    input
+</style>
+{% endblock %}

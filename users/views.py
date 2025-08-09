@@ -128,11 +128,11 @@ class RoleForm(forms.ModelForm):
         return role
 
 class UserListView(LoginRequiredMixin, ListView):
-    """List all users with search functionality"""
+    """List all users with search and filtering functionality"""
     model = User
     template_name = 'users/user_list.html'
     context_object_name = 'users'
-    paginate_by = 20
+    paginate_by = 15
     
     def dispatch(self, request, *args, **kwargs):
         if not request.user.has_permission('maintenance'):
@@ -142,8 +142,9 @@ class UserListView(LoginRequiredMixin, ListView):
     
     def get_queryset(self):
         queryset = User.objects.select_related('role')
-        search_query = self.request.GET.get('search')
         
+        # Search functionality
+        search_query = self.request.GET.get('search')
         if search_query:
             queryset = queryset.filter(
                 Q(username__icontains=search_query) |
@@ -152,11 +153,61 @@ class UserListView(LoginRequiredMixin, ListView):
                 Q(email__icontains=search_query)
             )
         
-        return queryset.order_by('username')
+        # Role filter
+        role_filter = self.request.GET.get('role_filter')
+        if role_filter:
+            if role_filter == 'no_role':
+                queryset = queryset.filter(role__isnull=True)
+            else:
+                try:
+                    role_id = int(role_filter)
+                    queryset = queryset.filter(role_id=role_id)
+                except (ValueError, TypeError):
+                    pass
+        
+        # Status filter
+        status_filter = self.request.GET.get('status_filter')
+        if status_filter:
+            if status_filter == 'active':
+                queryset = queryset.filter(is_active=True)
+            elif status_filter == 'inactive':
+                queryset = queryset.filter(is_active=False)
+            elif status_filter == 'dentist':
+                queryset = queryset.filter(is_active_dentist=True)
+            elif status_filter == 'non_dentist':
+                queryset = queryset.filter(is_active_dentist=False)
+        
+        # Sorting
+        sort_by = self.request.GET.get('sort', 'username')
+        valid_sorts = [
+            'username', '-username', 'first_name', '-first_name', 
+            'last_name', '-last_name', 'role__display_name', '-role__display_name',
+            'created_at', '-created_at', '-updated_at'
+        ]
+        if sort_by in valid_sorts:
+            # Handle sorting by role for users without roles
+            if sort_by in ['role__display_name', '-role__display_name']:
+                # Put users without roles at the end
+                if sort_by.startswith('-'):
+                    queryset = queryset.order_by('-role__display_name', 'username')
+                else:
+                    queryset = queryset.order_by('role__display_name', 'username')
+            else:
+                queryset = queryset.order_by(sort_by)
+        else:
+            queryset = queryset.order_by('username')
+        
+        return queryset
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['search_query'] = self.request.GET.get('search', '')
+        context.update({
+            'search_query': self.request.GET.get('search', ''),
+            'role_filter': self.request.GET.get('role_filter', ''),
+            'status_filter': self.request.GET.get('status_filter', ''),
+            'sort_by': self.request.GET.get('sort', 'username'),
+            'available_roles': Role.objects.all().order_by('display_name'),
+        })
         return context
 
 class UserDetailView(LoginRequiredMixin, DetailView):
@@ -306,7 +357,7 @@ class RoleUpdateView(LoginRequiredMixin, UpdateView):
         # Prevent editing of default roles
         if role.is_default:
             messages.error(self.request, 'Default roles cannot be edited.')
-            raise redirect('users:role_list')
+            return redirect('users:role_list')
         return role
     
     def form_valid(self, form):

@@ -3,8 +3,16 @@
 {% block title %}
     {% if appointment %}Edit Appointment{% else %}New Appointment{% endif %} - Dental Clinic
 {% endblock %}
-
+{% comment %} backend create new appointment  {% endcomment %}
 {% block content %}
+<style> 
+    input,
+    select,
+    textarea {
+    padding: 0.5rem 0.75rem;
+}
+</style>
+
 <div class="max-w-4xl mx-auto">
     <div class="bg-white shadow rounded-lg">
         <div class="px-6 py-4 border-b border-gray-200">
@@ -93,6 +101,11 @@
                 </div>
 
                 <!-- Schedule -->
+                 <!-- Schedule should be a calendar where the available days can be selected and
+                  unavailable days such as non working days/holidays/etc are unselectable.
+                  Then, beside the calendar would be the list of time slots available which are configurable by the dentists.
+                  For front-end, in the patient side's appointment request form, the appointment request form would have preferred dentist field before the schedule field
+                  and selecting a dentist would load the dentists' available schedules on the calendar and time slot-->
                 <div>
                     <label for="{{ form.schedule.id_for_label }}" class="block text-sm font-medium text-gray-700">
                         Schedule *

@@ -1,0 +1,172 @@
+{% extends 'base.html' %}
+
+{% block title %}
+    {% if object %}Edit Service{% else %}Add New Service{% endif %} - Dental Clinic Management
+{% endblock %}
+
+{% block content %}
+<style> 
+    input,
+    select,
+    textarea {
+    padding: 0.5rem 0.75rem;
+}
+</style>
+
+<div class="max-w-2xl mx-auto space-y-6">
+    <!-- Header -->
+    <div>
+        <div class="flex items-center space-x-2 text-sm text-gray-500 mb-2">
+            <a href="{% url 'services:service_list' %}" class="hover:text-gray-700">Services</a>
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+            </svg>
+            <span>{% if object %}Edit Service{% else %}Add New Service{% endif %}</span>
+        </div>
+        <h1 class="text-2xl font-bold text-gray-900">
+            {% if object %}Edit Service{% else %}Add New Service{% endif %}
+        </h1>
+        <p class="mt-1 text-sm text-gray-600">
+            {% if object %}Update the details of this dental service{% else %}Add a new dental service with pricing and duration{% endif %}
+        </p>
+    </div>
+
+    <!-- Form -->
+    <div class="bg-white shadow rounded-lg">
+        <form method="post" class="space-y-6 p-6">
+            {% csrf_token %}
+            
+            <!-- Display non-field errors -->
+            {% if form.non_field_errors %}
+                <div class="rounded-md bg-red-50 p-4">
+                    <div class="flex">
+                        <div class="flex-shrink-0">
+                            <svg class="h-5 w-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.728-.833-2.498 0L3.316 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+                            </svg>
+                        </div>
+                        <div class="ml-3">
+                            <h3 class="text-sm font-medium text-red-800">Please correct the following errors:</h3>
+                            <div class="mt-2 text-sm text-red-700">
+                                <ul class="list-disc list-inside space-y-1">
+                                    {% for error in form.non_field_errors %}
+                                        <li>{{ error }}</li>
+                                    {% endfor %}
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            {% endif %}
+
+            <!-- Service Name -->
+            <div>
+                <label for="{{ form.name.id_for_label }}" class="block text-sm font-medium text-gray-700">
+                    Service Name <span class="text-red-500">*</span>
+                </label>
+                {{ form.name }}
+                {% if form.name.errors %}
+                    <p class="mt-2 text-sm text-red-600">{{ form.name.errors.0 }}</p>
+                {% endif %}
+                {% if form.name.help_text %}
+                    <p class="mt-2 text-sm text-gray-500">{{ form.name.help_text }}</p>
+                {% endif %}
+            </div>
+
+            <!-- Description -->
+            <div>
+                <label for="{{ form.description.id_for_label }}" class="block text-sm font-medium text-gray-700">
+                    Description
+                </label>
+                {{ form.description }}
+                {% if form.description.errors %}
+                    <p class="mt-2 text-sm text-red-600">{{ form.description.errors.0 }}</p>
+                {% endif %}
+                {% if form.description.help_text %}
+                    <p class="mt-2 text-sm text-gray-500">{{ form.description.help_text }}</p>
+                {% endif %}
+            </div>
+
+            <!-- Pricing Section -->
+            <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                <!-- Minimum Price -->
+                <div>
+                    <label for="{{ form.min_price.id_for_label }}" class="block text-sm font-medium text-gray-700">
+                        Minimum Price (₱) <span class="text-red-500">*</span>
+                    </label>
+                    {{ form.min_price }}
+                    {% if form.min_price.errors %}
+                        <p class="mt-2 text-sm text-red-600">{{ form.min_price.errors.0 }}</p>
+                    {% endif %}
+                    {% if form.min_price.help_text %}
+                        <p class="mt-2 text-sm text-gray-500">{{ form.min_price.help_text }}</p>
+                    {% endif %}
+                </div>
+
+                <!-- Maximum Price -->
+                <div>
+                    <label for="{{ form.max_price.id_for_label }}" class="block text-sm font-medium text-gray-700">
+                        Maximum Price (₱) <span class="text-red-500">*</span>
+                    </label>
+                    {{ form.max_price }}
+                    {% if form.max_price.errors %}
+                        <p class="mt-2 text-sm text-red-600">{{ form.max_price.errors.0 }}</p>
+                    {% endif %}
+                    {% if form.max_price.help_text %}
+                        <p class="mt-2 text-sm text-gray-500">{{ form.max_price.help_text }}</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Duration -->
+            <div>
+                <label for="{{ form.duration_minutes.id_for_label }}" class="block text-sm font-medium text-gray-700">
+                    Duration (Minutes) <span class="text-red-500">*</span>
+                </label>
+                {{ form.duration_minutes }}
+                {% if form.duration_minutes.errors %}
+                    <p class="mt-2 text-sm text-red-600">{{ form.duration_minutes.errors.0 }}</p>
+                {% endif %}
+                {% if form.duration_minutes.help_text %}
+                    <p class="mt-2 text-sm text-gray-500">{{ form.duration_minutes.help_text }}</p>
+                    <p class ="mt-2 text-sm text-gray-500">Duration should include preparation and cleanup time</p>
+                {% endif %}
+            </div>
+
+            <!-- Form Actions -->
+            <div class="flex justify-end space-x-3 pt-6 border-t border-gray-200">
+                <a href="{% url 'services:service_list' %}" 
+                   class="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
+                    Cancel
+                </a>
+                <button type="submit" 
+                        class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
+                    {% if object %}Update Service{% else %}Create Service{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Help Text -->
+    <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <div class="flex">
+            <div class="flex-shrink-0">
+                <svg class="h-5 w-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+            </div>
+            <div class="ml-3">
+                <h3 class="text-sm font-medium text-blue-800">Service Setup Tips</h3>
+                <div class="mt-2 text-sm text-blue-700">
+                    <ul class="list-disc list-inside space-y-1">
+                        <li>Use clear, descriptive names for your services (e.g., "Dental Cleaning", "Root Canal Treatment")</li>
+                        <li>Set realistic price ranges based on complexity and materials needed</li>
+                        
+                        <li>Consider setting minimum 15-minute intervals for easier scheduling</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

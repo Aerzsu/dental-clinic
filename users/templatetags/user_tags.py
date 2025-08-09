@@ -5,21 +5,27 @@ register = template.Library()
 
 @register.filter
 def has_permission(user, module_name):
-    """
-    Template filter to check if user has permission for a module.
-    Usage: {% if user|has_permission:'appointments' %}
-    """
+    """Check if user has permission for a specific module"""
     if not user or not user.is_authenticated:
         return False
-    return user.has_permission(module_name)
+    
+    if user.is_superuser:
+        return True
+        
+    if not hasattr(user, 'role') or not user.role:
+        return False
+        
+    return user.role.permissions.get(module_name, False)
 
 @register.simple_tag
-def user_can(user, module_name):
-    """
-    Template tag to check if user has permission for a module.
-    Usage: {% user_can user 'appointments' as can_view_appointments %}
-           {% if can_view_appointments %}
-    """
-    if not user or not user.is_authenticated:
-        return False
-    return user.has_permission(module_name)
+def can_access(user, module_name):
+    """Template tag to check user permissions"""
+    return has_permission(user, module_name)
+
+@register.inclusion_tag('users/_permission_badge.html')
+def permission_badge(permission_name, has_access):
+    """Display a permission badge"""
+    return {
+        'permission_name': permission_name,
+        'has_access': has_access,
+    }

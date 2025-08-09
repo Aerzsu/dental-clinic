@@ -1,0 +1,227 @@
+<!-- templates/users/role_detail.html -->
+{% extends 'base.html' %}
+
+{% block title %}{{ role.display_name }} - Role Details - {{ block.super }}{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+    <!-- Header -->
+    <div class="mb-6">
+        <div class="flex items-center space-x-2 text-sm text-gray-500 mb-2">
+            <a href="{% url 'users:role_list' %}" class="hover:text-gray-700">Role Management</a>
+            <span>/</span>
+            <span>Role Details</span>
+        </div>
+        <div class="flex justify-between items-start">
+            <div>
+                <div class="flex items-center space-x-3">
+                    <h1 class="text-2xl font-bold text-gray-900">{{ role.display_name }}</h1>
+                    {% if role.is_default %}
+                        <span class="inline-flex items-center px-3 py-0.5 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
+                            Default Role
+                        </span>
+                    {% endif %}
+                </div>
+                <p class="text-gray-600 mt-1">@{{ role.name }}</p>
+                {% if role.description %}
+                    <p class="text-gray-700 mt-2">{{ role.description }}</p>
+                {% endif %}
+            </div>
+            <div class="flex space-x-3">
+                {% if not role.is_default %}
+                <a href="{% url 'users:role_update' role.pk %}" 
+                   class="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors">
+                    Edit Role
+                </a>
+                {% else %}
+                <span class="bg-gray-300 text-gray-500 px-4 py-2 rounded-md text-sm font-medium cursor-not-allowed">
+                    Protected Role
+                </span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Role Information -->
+        <div class="lg:col-span-2">
+            <div class="bg-white rounded-lg shadow-sm border">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <h2 class="text-lg font-medium text-gray-900">Role Information</h2>
+                </div>
+                <div class="p-6 space-y-6">
+                    <!-- Basic Info -->
+                    <div>
+                        <h3 class="text-sm font-medium text-gray-900 mb-3">Basic Information</h3>
+                        <dl class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <dt class="text-sm font-medium text-gray-500">Role Name</dt>
+                                <dd class="mt-1 text-sm text-gray-900">{{ role.name }}</dd>
+                            </div>
+                            <div>
+                                <dt class="text-sm font-medium text-gray-500">Display Name</dt>
+                                <dd class="mt-1 text-sm text-gray-900">{{ role.display_name }}</dd>
+                            </div>
+                            <div class="md:col-span-2">
+                                <dt class="text-sm font-medium text-gray-500">Description</dt>
+                                <dd class="mt-1 text-sm text-gray-900">
+                                    {{ role.description|default:"No description provided" }}
+                                </dd>
+                            </div>
+                        </dl>
+                    </div>
+
+                    <!-- Permissions -->
+                    <div class="border-t border-gray-200 pt-6">
+                        <h3 class="text-sm font-medium text-gray-900 mb-4">Module Permissions</h3>
+                        <div class="space-y-3">
+                            {% for module, has_access in role.permissions.items %}
+                                <div class="flex items-center justify-between p-3 bg-gray-50 rounded-md">
+                                    <div class="flex items-center space-x-3">
+                                        {% if has_access %}
+                                            <div class="flex-shrink-0 w-2 h-2 bg-green-400 rounded-full"></div>
+                                        {% else %}
+                                            <div class="flex-shrink-0 w-2 h-2 bg-red-400 rounded-full"></div>
+                                        {% endif %}
+                                        <div>
+                                            <div class="text-sm font-medium text-gray-900">
+                                                {% if module == "dashboard" %}Dashboard Access
+                                                {% elif module == "appointments" %}Appointment Management
+                                                {% elif module == "patients" %}Patient Management
+                                                {% elif module == "billing" %}Billing & Services
+                                                {% elif module == "reports" %}Reports & Analytics
+                                                {% elif module == "maintenance" %}System Maintenance
+                                                {% else %}{{ module|title }}
+                                                {% endif %}
+                                            </div>
+                                            <div class="text-xs text-gray-500">
+                                                {% if module == "dashboard" %}Access to main dashboard and overview
+                                                {% elif module == "appointments" %}View, create, and manage appointments
+                                                {% elif module == "patients" %}Access patient records and information
+                                                {% elif module == "billing" %}Manage services, pricing, and billing
+                                                {% elif module == "reports" %}Generate and view system reports
+                                                {% elif module == "maintenance" %}System administration and settings
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="flex-shrink-0">
+                                        {% if has_access %}
+                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                                Allowed
+                                            </span>
+                                        {% else %}
+                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                                Denied
+                                            </span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    <!-- System Info -->
+                    <div class="border-t border-gray-200 pt-6">
+                        <h3 class="text-sm font-medium text-gray-900 mb-3">System Information</h3>
+                        <dl class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <dt class="text-sm font-medium text-gray-500">Created</dt>
+                                <dd class="mt-1 text-sm text-gray-900">
+                                    {{ role.created_at|date:"M j, Y g:i A" }}
+                                </dd>
+                            </div>
+                            <div>
+                                <dt class="text-sm font-medium text-gray-500">Last Updated</dt>
+                                <dd class="mt-1 text-sm text-gray-900">
+                                    {{ role.updated_at|date:"M j, Y g:i A" }}
+                                </dd>
+                            </div>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Users with this Role -->
+        <div>
+            <div class="bg-white rounded-lg shadow-sm border">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <h2 class="text-lg font-medium text-gray-900">
+                        Users ({{ role.user_set.count }})
+                    </h2>
+                </div>
+                <div class="p-6">
+                    {% if role.user_set.exists %}
+                        <div class="space-y-3">
+                            {% for user in role.user_set.all %}
+                            <div class="flex items-center space-x-3">
+                                <div class="flex-shrink-0">
+                                    <div class="h-8 w-8 rounded-full bg-primary-600 flex items-center justify-center">
+                                        <span class="text-sm font-medium text-white">
+                                            {{ user.first_name|first|default:user.username|first }}
+                                        </span>
+                                    </div>
+                                </div>
+                                <div class="flex-1 min-w-0">
+                                    <div class="text-sm font-medium text-gray-900">
+                                        {{ user.get_full_name|default:user.username }}
+                                    </div>
+                                    <div class="text-xs text-gray-500">@{{ user.username }}</div>
+                                </div>
+                                <div class="flex-shrink-0">
+                                    {% if user.is_active %}
+                                        <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                            Active
+                                        </span>
+                                    {% else %}
+                                        <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                            Inactive
+                                        </span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        
+                        <div class="mt-4 pt-4 border-t border-gray-200">
+                            <a href="{% url 'users:user_list' %}?role={{ role.pk }}" 
+                               class="text-sm text-primary-600 hover:text-primary-700 font-medium">
+                                View all users with this role →
+                            </a>
+                        </div>
+                    {% else %}
+                        <div class="text-center py-6">
+                            <svg class="mx-auto h-8 w-8 text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                            </svg>
+                            <p class="text-sm text-gray-500">No users assigned to this role</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="mt-6 bg-white rounded-lg shadow-sm border p-6">
+                <h3 class="text-lg font-medium text-gray-900 mb-4">Quick Actions</h3>
+                <div class="space-y-3">
+                    <a href="{% url 'users:user_create' %}?role={{ role.pk }}" 
+                       class="block w-full text-center bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors">
+                        Create User with this Role
+                    </a>
+                    <a href="{% url 'users:user_list' %}" 
+                       class="block w-full text-center bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-md text-sm font-medium transition-colors">
+                        View All Users
+                    </a>
+                    {% if not role.is_default %}
+                    <a href="{% url 'users:role_update' role.pk %}" 
+                       class="block w-full text-center border border-primary-600 text-primary-600 hover:bg-primary-50 px-4 py-2 rounded-md text-sm font-medium transition-colors">
+                        Edit This Role
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -85,19 +85,169 @@ class BookAppointmentView(TemplateView):
         return context
     
     def post(self, request, *args, **kwargs):
-        form = AppointmentRequestForm(request.POST)
-        if form.is_valid():
-            appointment = form.save()
-            messages.success(
-                request,
-                'Your appointment request has been submitted successfully! '
-                'We will contact you soon to confirm your appointment.'
-            )
-            return redirect('core:home')
-        else:
-            context = self.get_context_data(**kwargs)
-            context['form'] = form
-            return render(request, self.template_name, context)
+        """Handle appointment request submission"""
+        try:
+            # Check if request is JSON
+            if request.content_type == 'application/json':
+                data = json.loads(request.body)
+                
+                # Validate required fields
+                required_fields = ['patient_type', 'service', 'dentist', 'selected_date', 'selected_time']
+                for field in required_fields:
+                    if not data.get(field):
+                        return JsonResponse({'success': False, 'error': f'{field} is required'}, status=400)
+                
+                # Handle patient creation/finding
+                if data['patient_type'] == 'new':
+                    # Updated validation: email required, contact_number optional
+                    if not all([data.get('first_name'), data.get('last_name'), data.get('email')]):
+                        return JsonResponse({
+                            'success': False, 
+                            'error': 'First name, last name, and email are required for new patients'
+                        }, status=400)
+                    
+                    # Check for existing patient - fix validation logic
+                    email = data.get('email', '').strip()
+                    contact_number = data.get('contact_number', '').strip()
+                    
+                    # Build query for existing patient check
+                    existing_query = Q()
+                    if email:
+                        existing_query |= Q(email__iexact=email)
+                    if contact_number:
+                        existing_query |= Q(contact_number=contact_number)
+                    
+                    if existing_query:  # Only check if we have something to search for
+                        existing = Patient.objects.filter(existing_query, is_active=True).first()
+                        
+                        if existing:
+                            return JsonResponse({
+                                'success': False, 
+                                'error': 'A patient with this email or contact number already exists. Please use "Existing Patient" option.'
+                            }, status=400)
+                    
+                    # Create new patient
+                    patient = Patient.objects.create(
+                        first_name=data.get('first_name', ''),
+                        last_name=data.get('last_name', ''),
+                        email=email,
+                        contact_number=contact_number,
+                        address=data.get('address', ''),
+                    )
+                    patient_type = 'new'
+                    
+                else:  # existing patient
+                    identifier = data.get('patient_identifier', '').strip()
+                    if not identifier:
+                        return JsonResponse({'success': False, 'error': 'Patient identifier is required'}, status=400)
+                    
+                    # Find existing patient - fix search logic
+                    patient = Patient.objects.filter(
+                        Q(email__iexact=identifier) | Q(contact_number=identifier),
+                        is_active=True
+                    ).first()
+                    
+                    if not patient:
+                        return JsonResponse({
+                            'success': False, 
+                            'error': 'No patient found with the provided information'
+                        }, status=400)
+                    
+                    patient_type = 'returning'
+                
+                # Get service and dentist
+                try:
+                    service = Service.objects.get(id=data['service'], is_archived=False)
+                    dentist = User.objects.get(id=data['dentist'], is_active_dentist=True)
+                except (Service.DoesNotExist, User.DoesNotExist):
+                    return JsonResponse({'success': False, 'error': 'Invalid service or dentist'}, status=400)
+                
+                # Parse date and time - fix timezone handling
+                try:
+                    appointment_date = datetime.strptime(data['selected_date'], '%Y-%m-%d').date()
+                    appointment_time = datetime.strptime(data['selected_time'], '%H:%M').time()
+                except ValueError:
+                    return JsonResponse({'success': False, 'error': 'Invalid date or time format'}, status=400)
+                
+                # Validate appointment date
+                if appointment_date <= timezone.now().date():
+                    return JsonResponse({'success': False, 'error': 'Appointment date must be in the future'}, status=400)
+                
+                if appointment_date.weekday() == 6:  # Sunday
+                    return JsonResponse({'success': False, 'error': 'Appointments are not available on Sundays'}, status=400)
+                
+                # Calculate end time based on service duration
+                start_datetime = datetime.combine(appointment_date, appointment_time)
+                end_time = (start_datetime + timedelta(minutes=service.duration_minutes)).time()
+                
+                # Create or get schedule
+                schedule, created = Schedule.objects.get_or_create(
+                    dentist=dentist,
+                    date=appointment_date,
+                    start_time=appointment_time,
+                    defaults={
+                        'end_time': end_time,
+                        'is_available': True,
+                        'notes': 'Auto-created for online appointment request'
+                    }
+                )
+                
+                # Check for conflicts
+                existing_appointment = Appointment.objects.filter(
+                    schedule=schedule,
+                    status__in=['approved', 'pending']
+                ).first()
+                
+                if existing_appointment:
+                    return JsonResponse({'success': False, 'error': 'This time slot is already booked'}, status=400)
+                
+                # Create appointment
+                appointment = Appointment.objects.create(
+                    patient=patient,
+                    dentist=dentist,
+                    service=service,
+                    schedule=schedule,
+                    patient_type=patient_type,
+                    reason=data.get('reason', ''),
+                    status='pending'
+                )
+                
+                # Generate reference number
+                reference_number = f'APT-{appointment.id:06d}'
+                
+                return JsonResponse({
+                    'success': True,
+                    'reference_number': reference_number,
+                    'appointment_id': appointment.id
+                })
+                
+            else:
+                # Handle regular form submission (fallback)
+                form = AppointmentRequestForm(request.POST)
+                if form.is_valid():
+                    appointment = form.save()
+                    messages.success(
+                        request,
+                        'Your appointment request has been submitted successfully! '
+                        'We will contact you soon to confirm your appointment.'
+                    )
+                    return redirect('core:home')
+                else:
+                    context = self.get_context_data(**kwargs)
+                    context['form'] = form
+                    return render(request, self.template_name, context)
+                    
+        except json.JSONDecodeError:
+            return JsonResponse({'success': False, 'error': 'Invalid JSON data'}, status=400)
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f'Error in BookAppointmentView: {str(e)}', exc_info=True)
+            
+            return JsonResponse({
+                'success': False, 
+                'error': 'An unexpected error occurred. Please try again.'
+            }, status=500)
 
 class DashboardView(LoginRequiredMixin, TemplateView):
     """Main dashboard for authenticated users"""

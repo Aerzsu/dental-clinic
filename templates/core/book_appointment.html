@@ -70,6 +70,29 @@
         </div>
     </div>
 
+    <!-- Success Message -->
+    <div x-show="submitted" class="max-w-4xl mx-auto bg-white shadow-xl rounded-lg overflow-hidden mb-2">
+        <div class="p-8 text-center">
+            <div class="w-16 h-16 bg-green-100 rounded-full mx-auto mb-4 flex items-center justify-center">
+                <svg class="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                </svg>
+            </div>
+            <h2 class="text-2xl font-bold text-gray-900 mb-2">Request Submitted!</h2>
+            <p class="text-gray-600 mb-4">Your appointment request has been successfully submitted. You will receive a confirmation via email or SMS within 24 hours.</p>
+            <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                <p class="text-sm text-blue-700">
+                    <strong>Reference Number:</strong> <span x-text="referenceNumber"></span><br>
+                    Please keep this reference number for your records.
+                </p>
+            </div>
+            <button type="button" @click="resetForm()" 
+                    class="px-6 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500">
+                Book Another Appointment
+            </button>
+        </div>
+    </div>
+
     <form class="max-w-4xl mx-auto bg-white shadow-xl rounded-lg overflow-hidden" @submit.prevent="submitForm">
         <!-- Step 1: Patient Type & Info -->
         <div class="form-step" :class="step === 1 ? 'active' : ''" x-show="step === 1">
@@ -148,13 +171,13 @@
                     </div>
                     <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
                         <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-2">Email Address</label>
-                            <input type="email" x-model="form.email"
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Email Address *</label>
+                            <input type="email" x-model="form.email" required
                                    class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500">
                         </div>
                         <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-2">Contact Number *</label>
-                            <input type="tel" x-model="form.contact_number" required
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Contact Number</label>
+                            <input type="tel" x-model="form.contact_number"
                                    class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
                                    placeholder="+639123456789">
                         </div>
@@ -403,28 +426,7 @@
         </div>
     </form>
 
-    <!-- Success Message -->
-    <div x-show="submitted" class="max-w-4xl mx-auto bg-white shadow-xl rounded-lg overflow-hidden">
-        <div class="p-8 text-center">
-            <div class="w-16 h-16 bg-green-100 rounded-full mx-auto mb-4 flex items-center justify-center">
-                <svg class="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-                </svg>
-            </div>
-            <h2 class="text-2xl font-bold text-gray-900 mb-2">Request Submitted!</h2>
-            <p class="text-gray-600 mb-4">Your appointment request has been successfully submitted. You will receive a confirmation via email or SMS within 24 hours.</p>
-            <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-                <p class="text-sm text-blue-700">
-                    <strong>Reference Number:</strong> <span x-text="referenceNumber"></span><br>
-                    Please keep this reference number for your records.
-                </p>
-            </div>
-            <button type="button" @click="resetForm()" 
-                    class="px-6 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500">
-                Book Another Appointment
-            </button>
-        </div>
-    </div>
+    
 </div>
 
 <style>
@@ -499,7 +501,7 @@
                 agreed_to_terms: false
             },
             
-            // Calendar
+            // Calendar - Use current date in Manila timezone
             currentMonth: new Date().getMonth(),
             currentYear: new Date().getFullYear(),
             
@@ -570,7 +572,7 @@
                         if (this.form.patient_type === 'existing') {
                             return this.form.patient_identifier && this.patientFound;
                         } else if (this.form.patient_type === 'new') {
-                            return this.form.first_name && this.form.last_name && this.form.contact_number;
+                            return this.form.first_name && this.form.last_name && this.form.email;
                         }
                         return false;
                     case 2:
@@ -631,11 +633,11 @@
                 
                 this.calendarDays = [];
                 
-                // Add empty cells for days before the first day - use unique keys
+                // Add empty cells for days before the first day
                 for (let i = 0; i < firstDayOfWeek; i++) {
                     this.calendarDays.push({ 
                         day: '', 
-                        date: `empty-${this.currentYear}-${this.currentMonth}-${i}`, // Unique key for empty cells
+                        date: `empty-${this.currentYear}-${this.currentMonth}-${i}`,
                         available: false,
                         isEmpty: true
                     });
@@ -643,11 +645,15 @@
                 
                 // Add days of the month
                 const today = new Date();
-                today.setHours(0, 0, 0, 0); // Reset time for proper comparison
+                today.setHours(0, 0, 0, 0);
                 
                 for (let day = 1; day <= daysInMonth; day++) {
                     const date = new Date(this.currentYear, this.currentMonth, day);
-                    const dateStr = date.toISOString().split('T')[0];
+                    // Fix: Use local date string to avoid timezone issues
+                    const year = date.getFullYear();
+                    const month = String(date.getMonth() + 1).padStart(2, '0');
+                    const dayStr = String(date.getDate()).padStart(2, '0');
+                    const dateStr = `${year}-${month}-${dayStr}`;
                     
                     // Check availability
                     let available = true;
@@ -658,20 +664,26 @@
                     // Sundays not available
                     if (date.getDay() === 0) available = false;
                     
-                    const isToday = dateStr === today.toISOString().split('T')[0];
+                    const isToday = dateStr === this.getTodayDateString();
                     const isSelected = dateStr === this.form.selected_date;
                     
                     this.calendarDays.push({
                         day: day,
-                        date: dateStr, // This should always be unique now
+                        date: dateStr,
                         available: available,
                         isToday: isToday,
                         isSelected: isSelected,
                         isEmpty: false
                     });
                 }
-                
-                console.log('Generated calendar days:', this.calendarDays.length); // Debug log
+            },
+            
+            getTodayDateString() {
+                const today = new Date();
+                const year = today.getFullYear();
+                const month = String(today.getMonth() + 1).padStart(2, '0');
+                const day = String(today.getDate()).padStart(2, '0');
+                return `${year}-${month}-${day}`;
             },
             
             getDateClasses(day) {
@@ -744,7 +756,9 @@
             
             formatDate(date) {
                 if (!date) return '';
-                const d = new Date(date);
+                // Fix: Parse date correctly to avoid timezone issues
+                const [year, month, day] = date.split('-');
+                const d = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
                 return d.toLocaleDateString('en-US', { 
                     weekday: 'long', 
                     year: 'numeric', 

@@ -141,7 +141,7 @@ class AppointmentRequestForm(forms.ModelForm):
         })
     )
     
-    # New patient fields
+    # New patient fields - Email now required, contact optional
     first_name = forms.CharField(
         max_length=100,
         required=False,
@@ -153,13 +153,16 @@ class AppointmentRequestForm(forms.ModelForm):
         widget=forms.TextInput(attrs={'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500'})
     )
     email = forms.EmailField(
-        required=False,
+        required=False,  # Will be conditionally required in clean()
         widget=forms.EmailInput(attrs={'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500'})
     )
     contact_number = forms.CharField(
         max_length=20,
-        required=False,
-        widget=forms.TextInput(attrs={'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500'})
+        required=False,  # Now optional
+        widget=forms.TextInput(attrs={
+            'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
+            'placeholder': '+639123456789'
+        })
     )
     address = forms.CharField(
         required=False,
@@ -220,11 +223,20 @@ class AppointmentRequestForm(forms.ModelForm):
             if not patient_identifier:
                 raise ValidationError('Please provide your email or phone number to find your record.')
             
-            # Try to find the patient
-            patients = Patient.objects.filter(
-                models.Q(email__iexact=patient_identifier) | models.Q(contact_number=patient_identifier),
-                is_active=True
-            )
+            # Try to find the patient - fix search logic
+            from django.db.models import Q
+            
+            query = Q()
+            identifier = patient_identifier.strip()
+            
+            # Search by email (case insensitive) if it looks like an email
+            if '@' in identifier:
+                query |= Q(email__iexact=identifier, email__isnull=False) & ~Q(email='')
+            else:
+                # Search by contact number
+                query |= Q(contact_number=identifier, contact_number__isnull=False) & ~Q(contact_number='')
+            
+            patients = Patient.objects.filter(query, is_active=True)
             
             if not patients.exists():
                 raise ValidationError(f'No patient record found with {patient_identifier}. Please check your information or register as a new patient.')
@@ -234,25 +246,33 @@ class AppointmentRequestForm(forms.ModelForm):
             cleaned_data['patient'] = patients.first()
         
         elif patient_type == 'new':
-            # Validate new patient fields
-            required_fields = ['first_name', 'last_name', 'contact_number']
+            # Validate new patient fields - email now required
+            required_fields = ['first_name', 'last_name', 'email']
             for field in required_fields:
                 if not cleaned_data.get(field):
                     field_label = self.fields[field].label or field.replace('_', ' ').title()
                     raise ValidationError(f'{field_label} is required for new patients.')
             
-            # Check if patient already exists
-            email = cleaned_data.get('email')
-            contact_number = cleaned_data.get('contact_number')
+            # Check if patient already exists - fix validation logic
+            email = cleaned_data.get('email', '').strip()
+            contact_number = cleaned_data.get('contact_number', '').strip()
             
-            existing_patients = Patient.objects.filter(is_active=True)
+            # Build query for existing patient check
+            existing_query = Q()
             if email:
-                if existing_patients.filter(email__iexact=email).exists():
-                    raise ValidationError(f'A patient with email {email} already exists. Please use "Existing Patient" option.')
-            
+                existing_query |= Q(email__iexact=email, email__isnull=False) & ~Q(email='')
             if contact_number:
-                if existing_patients.filter(contact_number=contact_number).exists():
-                    raise ValidationError(f'A patient with contact number {contact_number} already exists. Please use "Existing Patient" option.')
+                existing_query |= Q(contact_number=contact_number, contact_number__isnull=False) & ~Q(contact_number='')
+            
+            if existing_query:  # Only check if we have something to search for
+                existing_patients = Patient.objects.filter(existing_query, is_active=True)
+                
+                if existing_patients.exists():
+                    existing_patient = existing_patients.first()
+                    if existing_patient.email and existing_patient.email.lower() == email.lower():
+                        raise ValidationError(f'A patient with email {email} already exists. Please use "Existing Patient" option.')
+                    elif existing_patient.contact_number and existing_patient.contact_number == contact_number:
+                        raise ValidationError(f'A patient with contact number {contact_number} already exists. Please use "Existing Patient" option.')
         
         # Validate appointment date and time
         preferred_date = cleaned_data.get('preferred_date')
@@ -294,7 +314,7 @@ class AppointmentRequestForm(forms.ModelForm):
                 first_name=self.cleaned_data['first_name'],
                 last_name=self.cleaned_data['last_name'],
                 email=self.cleaned_data.get('email', ''),
-                contact_number=self.cleaned_data['contact_number'],
+                contact_number=self.cleaned_data.get('contact_number', ''),
                 address=self.cleaned_data.get('address', ''),
             )
             appointment.patient = patient

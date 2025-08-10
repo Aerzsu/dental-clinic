@@ -865,10 +865,16 @@ def find_patient_api(request):
         return JsonResponse({'error': 'Identifier is required'}, status=400)
     
     # Search for patient by email or contact number
-    patient = Patient.objects.filter(
-        Q(email__iexact=identifier) | Q(contact_number=identifier),
-        is_active=True
-    ).first()
+    # Fix: Handle cases where fields might be empty
+    query = Q()
+    
+    # Only add email filter if patient has an email
+    query |= Q(email__iexact=identifier, email__isnull=False) & ~Q(email='')
+    
+    # Only add contact filter if patient has a contact number  
+    query |= Q(contact_number=identifier, contact_number__isnull=False) & ~Q(contact_number='')
+    
+    patient = Patient.objects.filter(query, is_active=True).first()
     
     if patient:
         return JsonResponse({

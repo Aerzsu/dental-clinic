@@ -45,6 +45,13 @@ class SystemSetting(models.Model):
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    CLINIC_OPEN_TIME = "10:00"
+    CLINIC_CLOSE_TIME = "18:00"
+    LUNCH_START_TIME = "12:00"
+    LUNCH_END_TIME = "13:00"
+    DEFAULT_APPOINTMENT_DURATION = "30"  # minutes
+    ADVANCE_BOOKING_DAYS = "60"  # how far in advance patients can book
+    CANCELLATION_HOURS = "24"  # hours before appointment
     
     class Meta:
         ordering = ['key']

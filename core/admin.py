@@ -25,6 +25,13 @@ class SystemSettingAdmin(admin.ModelAdmin):
     list_filter = ['is_active', 'created_at', 'updated_at']
     search_fields = ['key', 'description']
     readonly_fields = ['created_at', 'updated_at']
+    CLINIC_OPEN_TIME = "10:00"
+    CLINIC_CLOSE_TIME = "18:00"
+    LUNCH_START_TIME = "12:00"
+    LUNCH_END_TIME = "13:00"
+    DEFAULT_APPOINTMENT_DURATION = "30"  # minutes
+    ADVANCE_BOOKING_DAYS = "60"  # how far in advance patients can book
+    CANCELLATION_HOURS = "24"  # hours before appointment
     
     def value_preview(self, obj):
         return obj.value[:50] + ('...' if len(obj.value) > 50 else '')

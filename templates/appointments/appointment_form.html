@@ -3,17 +3,9 @@
 {% block title %}
     {% if appointment %}Edit Appointment{% else %}New Appointment{% endif %} - Dental Clinic
 {% endblock %}
-{% comment %} backend create new appointment  {% endcomment %}
-{% block content %}
-<style> 
-    input,
-    select,
-    textarea {
-    padding: 0.5rem 0.75rem;
-}
-</style>
 
-<div class="max-w-4xl mx-auto">
+{% block content %}
+<div class="max-w-6xl mx-auto">
     <div class="bg-white shadow rounded-lg">
         <div class="px-6 py-4 border-b border-gray-200">
             <h2 class="text-xl font-semibold text-gray-900">
@@ -24,213 +16,509 @@
             </p>
         </div>
         
-        <form method="post" class="px-6 py-6 space-y-6">
-            {% csrf_token %}
-            
-            <!-- Display form errors -->
-            {% if form.errors %}
-                <div class="rounded-md bg-red-50 p-4">
-                    <div class="flex">
-                        <div class="flex-shrink-0">
-                            <svg class="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
-                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path>
-                            </svg>
-                        </div>
-                        <div class="ml-3">
-                            <h3 class="text-sm font-medium text-red-800">
-                                Please correct the following errors:
-                            </h3>
-                            <div class="mt-2 text-sm text-red-700">
-                                <ul class="list-disc pl-5 space-y-1">
-                                    {% for field, errors in form.errors.items %}
-                                        {% for error in errors %}
-                                            <li>{{ field|capfirst }}: {{ error }}</li>
+        <div x-data="appointmentForm()" x-init="init()">
+            <form method="post" class="px-6 py-6 space-y-6">
+                {% csrf_token %}
+                
+                <!-- Display form errors -->
+                {% if form.errors %}
+                    <div class="rounded-md bg-red-50 p-4">
+                        <div class="flex">
+                            <div class="flex-shrink-0">
+                                <svg class="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path>
+                                </svg>
+                            </div>
+                            <div class="ml-3">
+                                <h3 class="text-sm font-medium text-red-800">
+                                    Please correct the following errors:
+                                </h3>
+                                <div class="mt-2 text-sm text-red-700">
+                                    <ul class="list-disc pl-5 space-y-1">
+                                        {% for field, errors in form.errors.items %}
+                                            {% for error in errors %}
+                                                <li>{{ field|capfirst }}: {{ error }}</li>
+                                            {% endfor %}
                                         {% endfor %}
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                {% endif %}
+                
+                <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                    <!-- Left Column -->
+                    <div class="space-y-6">
+                        <!-- Patient -->
+                        <div>
+                            <label for="{{ form.patient.id_for_label }}" class="block text-sm font-medium text-gray-700">
+                                Patient *
+                            </label>
+                            <div class="mt-1">
+                                {{ form.patient }}
+                            </div>
+                            {% if form.patient.help_text %}
+                                <p class="mt-2 text-sm text-gray-500">{{ form.patient.help_text }}</p>
+                            {% endif %}
+                        </div>
+
+                        <!-- Dentist -->
+                        <div>
+                            <label for="{{ form.dentist.id_for_label }}" class="block text-sm font-medium text-gray-700">
+                                Dentist *
+                            </label>
+                            <div class="mt-1">
+                                <select x-model="selectedDentist" @change="updateAvailableDates()" 
+                                        name="dentist" id="{{ form.dentist.id_for_label }}" required
+                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500">
+                                    <option value="">Select a dentist...</option>
+                                    {% for dentist in form.dentist.queryset %}
+                                        <option value="{{ dentist.id }}" {% if form.dentist.value == dentist.id %}selected{% endif %}>
+                                            Dr. {{ dentist.first_name }} {{ dentist.last_name }}
+                                        </option>
                                     {% endfor %}
-                                </ul>
+                                </select>
+                            </div>
+                            {% if form.dentist.help_text %}
+                                <p class="mt-2 text-sm text-gray-500">{{ form.dentist.help_text }}</p>
+                            {% endif %}
+                        </div>
+
+                        <!-- Service -->
+                        <div>
+                            <label for="{{ form.service.id_for_label }}" class="block text-sm font-medium text-gray-700">
+                                Service *
+                            </label>
+                            <div class="mt-1">
+                                <select x-model="selectedService" @change="updateServiceInfo(); updateAvailableTimes()" 
+                                        name="service" id="{{ form.service.id_for_label }}" required
+                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500">
+                                    <option value="">Select a service...</option>
+                                    {% for service in form.service.queryset %}
+                                        <option value="{{ service.id }}" 
+                                                data-duration="{{ service.duration_minutes }}"
+                                                data-price="{{ service.price_range_display }}"
+                                                data-description="{{ service.description|escapejs }}"
+                                                {% if form.service.value == service.id %}selected{% endif %}>
+                                            {{ service.name }}
+                                        </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            
+                            <!-- Service Information -->
+                            <div x-show="serviceInfo.show" class="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                                <div class="text-sm text-blue-700">
+                                    <p><strong>Duration:</strong> <span x-text="serviceInfo.duration"></span></p>
+                                    <p><strong>Price Range:</strong> <span x-text="serviceInfo.price"></span></p>
+                                    <p><strong>Description:</strong> <span x-text="serviceInfo.description"></span></p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Reason -->
+                        <div>
+                            <label for="{{ form.reason.id_for_label }}" class="block text-sm font-medium text-gray-700">
+                                Reason for Visit
+                            </label>
+                            <div class="mt-1">
+                                {{ form.reason }}
+                            </div>
+                            <p class="mt-2 text-sm text-gray-500">Optional: Patient's reason for the appointment</p>
+                        </div>
+
+                        <!-- Staff Notes -->
+                        {% if user.has_permission.appointments %}
+                        <div>
+                            <label for="{{ form.staff_notes.id_for_label }}" class="block text-sm font-medium text-gray-700">
+                                Staff Notes
+                            </label>
+                            <div class="mt-1">
+                                {{ form.staff_notes }}
+                            </div>
+                            <p class="mt-2 text-sm text-gray-500">Internal notes for staff (not visible to patient)</p>
+                        </div>
+                        {% endif %}
+
+                        <!-- Status (only for updates) -->
+                        {% if appointment and user.has_permission.appointments %}
+                        <div>
+                            <label for="{{ form.status.id_for_label }}" class="block text-sm font-medium text-gray-700">
+                                Status
+                            </label>
+                            <div class="mt-1">
+                                {{ form.status }}
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    <!-- Right Column - Schedule Selection -->
+                    <div class="space-y-6">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-3">
+                                Schedule * <span class="text-xs text-gray-500">(Select date and time)</span>
+                            </label>
+                            
+                            <!-- Calendar -->
+                            <div class="bg-white border border-gray-200 rounded-lg p-4 mb-4">
+                                <div class="flex items-center justify-between mb-4">
+                                    <button type="button" @click="changeMonth(-1)" 
+                                            class="p-2 hover:bg-gray-100 rounded-md">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                                        </svg>
+                                    </button>
+                                    <h4 class="font-medium text-gray-900" x-text="currentMonthName + ' ' + currentYear"></h4>
+                                    <button type="button" @click="changeMonth(1)" 
+                                            class="p-2 hover:bg-gray-100 rounded-md">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                                        </svg>
+                                    </button>
+                                </div>
+                                <div class="grid grid-cols-7 gap-1 mb-2">
+                                    <div class="text-center text-xs font-medium text-gray-500 py-2">Mon</div>
+                                    <div class="text-center text-xs font-medium text-gray-500 py-2">Tue</div>
+                                    <div class="text-center text-xs font-medium text-gray-500 py-2">Wed</div>
+                                    <div class="text-center text-xs font-medium text-gray-500 py-2">Thu</div>
+                                    <div class="text-center text-xs font-medium text-gray-500 py-2">Fri</div>
+                                    <div class="text-center text-xs font-medium text-gray-500 py-2">Sat</div>
+                                    <div class="text-center text-xs font-medium text-gray-500 py-2 text-red-400">Sun</div>
+                                </div>
+                                <div class="grid grid-cols-7 gap-1">
+                                    <template x-for="day in calendarDays" :key="day.date">
+                                        <button type="button" 
+                                                class="h-10 text-sm rounded-md border transition-colors"
+                                                :class="getDateClasses(day)"
+                                                @click="selectDate(day)"
+                                                :disabled="!day.available"
+                                                x-text="day.day">
+                                        </button>
+                                    </template>
+                                </div>
+                            </div>
+
+                            <!-- Time Slots -->
+                            <div class="border border-gray-200 rounded-lg p-4">
+                                <h5 class="font-medium text-gray-900 mb-3">Available Time Slots</h5>
+                                <div x-show="!selectedDate" class="text-center text-gray-500 py-4">
+                                    <div class="text-2xl mb-2">📅</div>
+                                    <p class="text-sm">Please select a date first</p>
+                                </div>
+                                <div x-show="selectedDate && !selectedDentist" class="text-center text-gray-500 py-4">
+                                    <div class="text-2xl mb-2">👨‍⚕️</div>
+                                    <p class="text-sm">Please select a dentist first</p>
+                                </div>
+                                <div x-show="selectedDate && selectedDentist && loadingTimes" class="text-center text-gray-500 py-4">
+                                    <div class="animate-spin w-6 h-6 border-4 border-primary-600 border-t-transparent rounded-full mx-auto mb-2"></div>
+                                    <p class="text-sm">Loading available times...</p>
+                                </div>
+                                <div x-show="selectedDate && selectedDentist && !loadingTimes && availableTimes.length === 0" class="text-center text-gray-500 py-4">
+                                    <div class="text-2xl mb-2">⏰</div>
+                                    <p class="text-sm">No available times for selected date</p>
+                                </div>
+                                <div x-show="selectedDate && selectedDentist && !loadingTimes && availableTimes.length > 0" class="grid grid-cols-2 gap-2">
+                                    <template x-for="time in availableTimes" :key="time">
+                                        <button type="button" 
+                                                class="p-3 border rounded-lg text-sm font-medium transition-all hover:shadow-sm"
+                                                :class="selectedTime === time ? 'bg-primary-600 text-white border-primary-600' : 'border-gray-300 hover:border-primary-600'"
+                                                @click="selectTime(time)"
+                                                x-text="formatTime(time)">
+                                        </button>
+                                    </template>
+                                </div>
+                            </div>
+
+                            <!-- Hidden form field for schedule -->
+                            <input type="hidden" name="schedule" :value="selectedScheduleId" id="{{ form.schedule.id_for_label }}">
+
+                            <!-- Schedule Info -->
+                            <div x-show="selectedDate && selectedTime" class="mt-4 p-3 bg-green-50 border border-green-200 rounded-md">
+                                <div class="text-sm text-green-700">
+                                    <p><strong>Selected Schedule:</strong></p>
+                                    <p>Date: <span x-text="formatSelectedDate()"></span></p>
+                                    <p>Time: <span x-text="formatTime(selectedTime)"></span></p>
+                                    <p>Dentist: <span x-text="getSelectedDentistName()"></span></p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Note -->
+                        <div class="bg-blue-50 border-l-4 border-blue-400 p-4">
+                            <div class="flex">
+                                <div class="flex-shrink-0">
+                                    <svg class="h-5 w-5 text-blue-400" viewBox="0 0 20 20" fill="currentColor">
+                                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path>
+                                    </svg>
+                                </div>
+                                <div class="ml-3">
+                                    <p class="text-sm text-blue-700">
+                                        <strong>Clinic Hours:</strong> Monday to Saturday, 10:00 AM to 6:00 PM<br>
+                                        <strong>Lunch Break:</strong> 12:00 PM to 1:00 PM (No appointments)
+                                    </p>
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
-            {% endif %}
-            
-            <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
-                <!-- Patient -->
-                <div>
-                    <label for="{{ form.patient.id_for_label }}" class="block text-sm font-medium text-gray-700">
-                        Patient *
-                    </label>
-                    <div class="mt-1">
-                        {{ form.patient }}
-                    </div>
-                    {% if form.patient.help_text %}
-                        <p class="mt-2 text-sm text-gray-500">{{ form.patient.help_text }}</p>
-                    {% endif %}
-                </div>
 
-                <!-- Dentist -->
-                <div>
-                    <label for="{{ form.dentist.id_for_label }}" class="block text-sm font-medium text-gray-700">
-                        Dentist *
-                    </label>
-                    <div class="mt-1">
-                        {{ form.dentist }}
-                    </div>
-                    {% if form.dentist.help_text %}
-                        <p class="mt-2 text-sm text-gray-500">{{ form.dentist.help_text }}</p>
-                    {% endif %}
+                <!-- Form Actions -->
+                <div class="flex justify-end space-x-3 pt-6 border-t border-gray-200">
+                    <a href="{% if appointment %}{% url 'appointments:appointment_detail' appointment.pk %}{% else %}{% url 'appointments:appointment_list' %}{% endif %}" 
+                       class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
+                        Cancel
+                    </a>
+                    <button type="submit" 
+                            :disabled="!selectedScheduleId"
+                            class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed">
+                        {% if appointment %}Update Appointment{% else %}Create Appointment{% endif %}
+                    </button>
                 </div>
-            </div>
-
-            <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
-                <!-- Service -->
-                <div>
-                    <label for="{{ form.service.id_for_label }}" class="block text-sm font-medium text-gray-700">
-                        Service *
-                    </label>
-                    <div class="mt-1">
-                        {{ form.service }}
-                    </div>
-                    <div id="service-info" class="mt-2 p-3 bg-gray-50 rounded-md hidden">
-                        <div class="text-sm text-gray-600">
-                            <p><strong>Duration:</strong> <span id="service-duration">-</span></p>
-                            <p><strong>Price Range:</strong> <span id="service-price">-</span></p>
-                            <p><strong>Description:</strong> <span id="service-description">-</span></p>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Schedule -->
-                 <!-- Schedule should be a calendar where the available days can be selected and
-                  unavailable days such as non working days/holidays/etc are unselectable.
-                  Then, beside the calendar would be the list of time slots available which are configurable by the dentists.
-                  For front-end, in the patient side's appointment request form, the appointment request form would have preferred dentist field before the schedule field
-                  and selecting a dentist would load the dentists' available schedules on the calendar and time slot-->
-                <div>
-                    <label for="{{ form.schedule.id_for_label }}" class="block text-sm font-medium text-gray-700">
-                        Schedule *
-                    </label>
-                    <div class="mt-1">
-                        {{ form.schedule }}
-                    </div>
-                    {% if form.schedule.help_text %}
-                        <p class="mt-2 text-sm text-gray-500">{{ form.schedule.help_text }}</p>
-                    {% endif %}
-                </div>
-            </div>
-
-            <!-- Reason -->
-            <div>
-                <label for="{{ form.reason.id_for_label }}" class="block text-sm font-medium text-gray-700">
-                    Reason for Visit
-                </label>
-                <div class="mt-1">
-                    {{ form.reason }}
-                </div>
-                <p class="mt-2 text-sm text-gray-500">Optional: Patient's reason for the appointment</p>
-            </div>
-
-            <!-- Staff Notes -->
-            {% if user.has_permission.appointments %}
-            <div>
-                <label for="{{ form.staff_notes.id_for_label }}" class="block text-sm font-medium text-gray-700">
-                    Staff Notes
-                </label>
-                <div class="mt-1">
-                    {{ form.staff_notes }}
-                </div>
-                <p class="mt-2 text-sm text-gray-500">Internal notes for staff (not visible to patient)</p>
-            </div>
-            {% endif %}
-
-            <!-- Status (only for updates) -->
-            {% if appointment and user.has_permission.appointments %}
-            <div>
-                <label for="{{ form.status.id_for_label }}" class="block text-sm font-medium text-gray-700">
-                    Status
-                </label>
-                <div class="mt-1">
-                    {{ form.status }}
-                </div>
-            </div>
-            {% endif %}
-
-            <!-- Form Actions -->
-            <div class="flex justify-end space-x-3">
-                <a href="{% if appointment %}{% url 'appointments:appointment_detail' appointment.pk %}{% else %}{% url 'appointments:appointment_list' %}{% endif %}" 
-                   class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
-                    Cancel
-                </a>
-                <button type="submit" 
-                        class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
-                    {% if appointment %}Update Appointment{% else %}Create Appointment{% endif %}
-                </button>
-            </div>
-        </form>
+            </form>
+        </div>
     </div>
 </div>
 
 <script>
-// Service information display
-document.addEventListener('DOMContentLoaded', function() {
-    const serviceSelect = document.getElementById('{{ form.service.id_for_label }}');
-    const serviceInfo = document.getElementById('service-info');
-    const serviceDuration = document.getElementById('service-duration');
-    const servicePrice = document.getElementById('service-price');
-    const serviceDescription = document.getElementById('service-description');
-    
-    // Service data (would be populated from Django context)
-    const serviceData = {
-        {% for service in form.service.queryset %}
-        {{ service.id }}: {
-            duration: '{{ service.duration_display }}',
-            price: '{{ service.price_range_display }}',
-            description: '{{ service.description|escapejs }}'
-        }{% if not forloop.last %},{% endif %}
-        {% endfor %}
-    };
-    
-    function updateServiceInfo() {
-        const selectedId = serviceSelect.value;
-        if (selectedId && serviceData[selectedId]) {
-            const service = serviceData[selectedId];
-            serviceDuration.textContent = service.duration;
-            servicePrice.textContent = service.price;
-            serviceDescription.textContent = service.description;
-            serviceInfo.classList.remove('hidden');
-        } else {
-            serviceInfo.classList.add('hidden');
+function appointmentForm() {
+    return {
+        // Form state
+        selectedDentist: '{{ form.dentist.value|default:"" }}',
+        selectedService: '{{ form.service.value|default:"" }}',
+        selectedDate: '',
+        selectedTime: '',
+        selectedScheduleId: '{{ form.schedule.value|default:"" }}',
+        
+        // Calendar state
+        currentMonth: new Date().getMonth(),
+        currentYear: new Date().getFullYear(),
+        calendarDays: [],
+        
+        // Data loading state
+        loadingTimes: false,
+        availableTimes: [],
+        
+        // Service info
+        serviceInfo: {
+            show: false,
+            duration: '',
+            price: '',
+            description: ''
+        },
+        
+        // Dentist data
+        dentists: [
+            {% for dentist in form.dentist.queryset %}
+            {
+                id: '{{ dentist.id }}',
+                name: 'Dr. {{ dentist.first_name }} {{ dentist.last_name }}'
+            },
+            {% endfor %}
+        ],
+        
+        init() {
+            this.generateCalendar();
+            if (this.selectedService) {
+                this.updateServiceInfo();
+            }
+            // If editing existing appointment, load the schedule details
+            {% if appointment %}
+                this.selectedDate = '{{ appointment.schedule.date|date:"Y-m-d" }}';
+                this.selectedTime = '{{ appointment.schedule.start_time|time:"H:i" }}';
+            {% endif %}
+        },
+        
+        get currentMonthName() {
+            const months = ['January', 'February', 'March', 'April', 'May', 'June', 
+                          'July', 'August', 'September', 'October', 'November', 'December'];
+            return months[this.currentMonth];
+        },
+        
+        changeMonth(direction) {
+            this.currentMonth += direction;
+            if (this.currentMonth > 11) {
+                this.currentMonth = 0;
+                this.currentYear++;
+            } else if (this.currentMonth < 0) {
+                this.currentMonth = 11;
+                this.currentYear--;
+            }
+            this.generateCalendar();
+        },
+        
+        generateCalendar() {
+            const firstDay = new Date(this.currentYear, this.currentMonth, 1);
+            const lastDay = new Date(this.currentYear, this.currentMonth + 1, 0);
+            const firstDayOfWeek = (firstDay.getDay() + 6) % 7; // Adjust for Monday start
+            const daysInMonth = lastDay.getDate();
+            
+            this.calendarDays = [];
+            
+            // Add empty cells for days before the first day
+            for (let i = 0; i < firstDayOfWeek; i++) {
+                this.calendarDays.push({ day: '', date: '', available: false });
+            }
+            
+            // Add days of the month
+            const today = new Date();
+            
+            for (let day = 1; day <= daysInMonth; day++) {
+                const date = new Date(this.currentYear, this.currentMonth, day);
+                const dateStr = date.toISOString().split('T')[0];
+                
+                // Check availability
+                let available = true;
+                
+                // Past dates not available
+                if (date <= today) available = false;
+                
+                // Sundays not available
+                if (date.getDay() === 0) available = false;
+                
+                // TODO: Check for holidays from backend
+                
+                this.calendarDays.push({
+                    day: day,
+                    date: dateStr,
+                    available: available,
+                    isToday: dateStr === today.toISOString().split('T')[0],
+                    isSelected: dateStr === this.selectedDate
+                });
+            }
+        },
+        
+        getDateClasses(day) {
+            let classes = [];
+            
+            if (!day.available || !day.day) {
+                classes.push('text-gray-300', 'cursor-not-allowed', 'border-gray-200');
+            } else {
+                classes.push('hover:bg-blue-50', 'cursor-pointer', 'border-gray-200');
+            }
+            
+            if (day.isSelected) {
+                classes.push('bg-primary-600', 'text-white', 'border-primary-600');
+            } else if (day.isToday && day.available) {
+                classes.push('border-primary-600', 'text-primary-600');
+            }
+            
+            return classes.join(' ');
+        },
+        
+        selectDate(day) {
+            if (!day.available || !day.day) return;
+            
+            this.selectedDate = day.date;
+            this.selectedTime = '';
+            this.selectedScheduleId = '';
+            this.generateCalendar(); // Refresh to update selected state
+            
+            if (this.selectedDentist && this.selectedService) {
+                this.updateAvailableTimes();
+            }
+        },
+        
+        selectTime(time) {
+            this.selectedTime = time;
+            // Create schedule if it doesn't exist or find existing one
+            this.createOrFindSchedule();
+        },
+        
+        updateServiceInfo() {
+            const serviceSelect = document.getElementById('{{ form.service.id_for_label }}');
+            const selectedOption = serviceSelect.options[serviceSelect.selectedIndex];
+            
+            if (selectedOption.value) {
+                this.serviceInfo = {
+                    show: true,
+                    duration: selectedOption.dataset.duration + ' minutes',
+                    price: selectedOption.dataset.price,
+                    description: selectedOption.dataset.description
+                };
+            } else {
+                this.serviceInfo.show = false;
+            }
+            
+            if (this.selectedDate && this.selectedDentist) {
+                this.updateAvailableTimes();
+            }
+        },
+        
+        async updateAvailableDates() {
+            if (!this.selectedDentist) return;
+            this.generateCalendar(); // Will be enhanced to show actual availability
+        },
+        
+        async updateAvailableTimes() {
+            if (!this.selectedDentist || !this.selectedDate || !this.selectedService) {
+                this.availableTimes = [];
+                return;
+            }
+            
+            this.loadingTimes = true;
+            
+            try {
+                const response = await fetch(`{% url 'appointments:get_available_times_api' %}?dentist_id=${this.selectedDentist}&date=${this.selectedDate}&service_id=${this.selectedService}`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    this.availableTimes = data.available_times || [];
+                } else {
+                    console.error('Error loading times:', data.error);
+                    this.availableTimes = [];
+                }
+            } catch (error) {
+                console.error('Network error:', error);
+                this.availableTimes = [];
+            }
+            
+            this.loadingTimes = false;
+        },
+        
+        async createOrFindSchedule() {
+            if (!this.selectedDentist || !this.selectedDate || !this.selectedTime) return;
+            
+            // For now, we'll use a simple approach - the backend will handle schedule creation
+            // In a real implementation, you might want to make an API call here
+            this.selectedScheduleId = `${this.selectedDentist}-${this.selectedDate}-${this.selectedTime}`;
+        },
+        
+        formatTime(time) {
+            if (!time) return '';
+            const [hours, minutes] = time.split(':');
+            const hour = parseInt(hours);
+            const ampm = hour >= 12 ? 'PM' : 'AM';
+            const displayHour = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour;
+            return `${displayHour}:${minutes} ${ampm}`;
+        },
+        
+        formatSelectedDate() {
+            if (!this.selectedDate) return '';
+            const date = new Date(this.selectedDate);
+            return date.toLocaleDateString('en-US', { 
+                weekday: 'long', 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric' 
+            });
+        },
+        
+        getSelectedDentistName() {
+            const dentist = this.dentists.find(d => d.id === this.selectedDentist);
+            return dentist ? dentist.name : '';
         }
     }
-    
-    serviceSelect.addEventListener('change', updateServiceInfo);
-    updateServiceInfo(); // Initial load
-});
-
-// Schedule filtering based on dentist selection
-document.addEventListener('DOMContentLoaded', function() {
-    const dentistSelect = document.getElementById('{{ form.dentist.id_for_label }}');
-    const scheduleSelect = document.getElementById('{{ form.schedule.id_for_label }}');
-    
-    // Store all schedule options
-    const allScheduleOptions = Array.from(scheduleSelect.options);
-    
-    function filterSchedules() {
-        const selectedDentist = dentistSelect.value;
-        
-        // Clear current options
-        scheduleSelect.innerHTML = '<option value="">Select a schedule...</option>';
-        
-        // Add filtered options
-        allScheduleOptions.forEach(option => {
-            if (option.value === '' || option.dataset.dentist === selectedDentist) {
-                scheduleSelect.appendChild(option.cloneNode(true));
-            }
-        });
-    }
-    
-    dentistSelect.addEventListener('change', filterSchedules);
-    filterSchedules(); // Initial filter
-});
+}
 </script>
+
+<style>
+.calendar-day {
+    min-height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+</style>
 {% endblock %}

@@ -1,0 +1,829 @@
+{% extends "base_public.html" %}
+
+{% block title %}Book Appointment - Dental Clinic{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8" x-data="appointmentBooking()">
+    <!-- Header -->
+    <div class="text-center mb-8">
+        <div class="w-16 h-16 bg-primary-600 rounded-full mx-auto mb-4 flex items-center justify-center">
+            <span class="text-white text-2xl">🦷</span>
+        </div>
+        <h1 class="text-3xl font-bold text-gray-900 mb-2">Book Your Appointment</h1>
+        <p class="text-gray-600">Schedule your dental visit with our experienced team</p>
+    </div>
+
+    <!-- Progress Steps -->
+    <div class="max-w-4xl mx-auto mb-8">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center" :class="step >= 1 ? 'text-primary-600' : 'text-gray-400'">
+                <div class="w-8 h-8 rounded-full border-2 flex items-center justify-center" 
+                     :class="step >= 1 ? 'border-primary-600 bg-primary-600 text-white' : 'border-gray-300'">
+                    <span class="text-sm font-medium">1</span>
+                </div>
+                <span class="ml-2 text-sm font-medium">Patient Info</span>
+            </div>
+            <div class="flex-1 h-px mx-4" :class="step >= 2 ? 'bg-primary-600' : 'bg-gray-300'"></div>
+            <div class="flex items-center" :class="step >= 2 ? 'text-primary-600' : 'text-gray-400'">
+                <div class="w-8 h-8 rounded-full border-2 flex items-center justify-center" 
+                     :class="step >= 2 ? 'border-primary-600 bg-primary-600 text-white' : 'border-gray-300'">
+                    <span class="text-sm font-medium">2</span>
+                </div>
+                <span class="ml-2 text-sm font-medium">Service & Dentist</span>
+            </div>
+            <div class="flex-1 h-px mx-4" :class="step >= 3 ? 'bg-primary-600' : 'bg-gray-300'"></div>
+            <div class="flex items-center" :class="step >= 3 ? 'text-primary-600' : 'text-gray-400'">
+                <div class="w-8 h-8 rounded-full border-2 flex items-center justify-center" 
+                     :class="step >= 3 ? 'border-primary-600 bg-primary-600 text-white' : 'border-gray-300'">
+                    <span class="text-sm font-medium">3</span>
+                </div>
+                <span class="ml-2 text-sm font-medium">Date & Time</span>
+            </div>
+            <div class="flex-1 h-px mx-4" :class="step >= 4 ? 'bg-primary-600' : 'bg-gray-300'"></div>
+            <div class="flex items-center" :class="step >= 4 ? 'text-primary-600' : 'text-gray-400'">
+                <div class="w-8 h-8 rounded-full border-2 flex items-center justify-center" 
+                     :class="step >= 4 ? 'border-primary-600 bg-primary-600 text-white' : 'border-gray-300'">
+                    <span class="text-sm font-medium">4</span>
+                </div>
+                <span class="ml-2 text-sm font-medium">Confirm</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Warning Banner -->
+    <div class="max-w-4xl mx-auto mb-6">
+        <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4">
+            <div class="flex">
+                <div class="flex-shrink-0">
+                    <svg class="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                    </svg>
+                </div>
+                <div class="ml-3">
+                    <p class="text-sm text-yellow-700">
+                        <strong>Important:</strong> This is an appointment request, not a confirmed booking. 
+                        Cancellations must be made at least 24 hours in advance. 
+                        Appointments are available Monday to Saturday, 10:00 AM to 6:00 PM.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <form class="max-w-4xl mx-auto bg-white shadow-xl rounded-lg overflow-hidden" @submit.prevent="submitForm">
+        <!-- Step 1: Patient Type & Info -->
+        <div class="form-step" :class="step === 1 ? 'active' : ''" x-show="step === 1">
+            <div class="p-8">
+                <h2 class="text-2xl font-bold text-gray-900 mb-6">Patient Information</h2>
+                
+                <!-- Patient Type Selection -->
+                <div class="mb-6">
+                    <label class="text-base font-medium text-gray-900 block mb-3">Are you a new or existing patient?</label>
+                    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <label class="relative">
+                            <input type="radio" x-model="form.patient_type" value="new" class="sr-only">
+                            <div class="p-4 border rounded-lg cursor-pointer transition-all" 
+                                 :class="form.patient_type === 'new' ? 'border-primary-600 bg-primary-50 ring-2 ring-primary-600' : 'border-gray-300 hover:border-gray-400'">
+                                <div class="flex items-center">
+                                    <div class="text-2xl mr-3">👤</div>
+                                    <div>
+                                        <h3 class="text-lg font-medium text-gray-900">New Patient</h3>
+                                        <p class="text-sm text-gray-500">First time visiting our clinic</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </label>
+                        <label class="relative">
+                            <input type="radio" x-model="form.patient_type" value="existing" class="sr-only">
+                            <div class="p-4 border rounded-lg cursor-pointer transition-all" 
+                                 :class="form.patient_type === 'existing' ? 'border-primary-600 bg-primary-50 ring-2 ring-primary-600' : 'border-gray-300 hover:border-gray-400'">
+                                <div class="flex items-center">
+                                    <div class="text-2xl mr-3">👥</div>
+                                    <div>
+                                        <h3 class="text-lg font-medium text-gray-900">Existing Patient</h3>
+                                        <p class="text-sm text-gray-500">I have visited this clinic before</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Existing Patient Form -->
+                <div x-show="form.patient_type === 'existing'" class="space-y-6">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Email Address or Contact Number</label>
+                        <input type="text" x-model="form.patient_identifier" 
+                               class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                               placeholder="patient@example.com or +639123456789">
+                        <p class="mt-1 text-sm text-gray-500">Enter your email or phone number to find your record</p>
+                    </div>
+                    <div x-show="patientFound" class="p-4 bg-green-50 border border-green-200 rounded-md">
+                        <div class="flex">
+                            <div class="flex-shrink-0">
+                                <svg class="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                                </svg>
+                            </div>
+                            <div class="ml-3">
+                                <p class="text-sm text-green-700">Patient record found: <strong x-text="foundPatient.name"></strong></p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- New Patient Form -->
+                <div x-show="form.patient_type === 'new'" class="space-y-6">
+                    <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">First Name *</label>
+                            <input type="text" x-model="form.first_name" required
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Last Name *</label>
+                            <input type="text" x-model="form.last_name" required
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500">
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Email Address</label>
+                            <input type="email" x-model="form.email"
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Contact Number *</label>
+                            <input type="tel" x-model="form.contact_number" required
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                                   placeholder="+639123456789">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Address</label>
+                        <textarea x-model="form.address" rows="3"
+                                  class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"></textarea>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="px-8 py-4 bg-gray-50 flex justify-end">
+                <button type="button" @click="nextStep()" 
+                        class="px-6 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500">
+                    Next: Service & Dentist
+                </button>
+            </div>
+        </div>
+
+        <!-- Step 2: Service & Dentist Selection -->
+        <div class="form-step" :class="step === 2 ? 'active' : ''" x-show="step === 2">
+            <div class="p-8">
+                <h2 class="text-2xl font-bold text-gray-900 mb-6">Service & Dentist Selection</h2>
+                
+                <!-- Service Selection -->
+                <div class="mb-6">
+                    <label class="block text-sm font-medium text-gray-700 mb-3">Select Service *</label>
+                    <select x-model="form.service" @change="updateServiceInfo()" required
+                            class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500">
+                        <option value="">Choose a service...</option>
+                        <template x-for="service in services" :key="service.id">
+                            <option :value="service.id" x-text="service.name"></option>
+                        </template>
+                    </select>
+                    
+                    <!-- Service Information -->
+                    <div x-show="selectedService" class="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                        <h4 class="font-medium text-blue-900 mb-2">Service Details</h4>
+                        <div class="text-sm text-blue-700 space-y-1">
+                            <p><strong>Duration:</strong> <span x-text="selectedService?.duration"></span></p>
+                            <p><strong>Price Range:</strong> <span x-text="selectedService?.price_range"></span></p>
+                            <p><strong>Description:</strong> <span x-text="selectedService?.description"></span></p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Dentist Selection -->
+                <div class="mb-6">
+                    <label class="block text-sm font-medium text-gray-700 mb-3">Preferred Dentist *</label>
+                    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                        <template x-for="dentist in dentists" :key="dentist.id">
+                            <label class="relative">
+                                <input type="radio" x-model="form.dentist" :value="dentist.id" class="sr-only">
+                                <div class="p-4 border rounded-lg cursor-pointer transition-all" 
+                                     :class="form.dentist == dentist.id ? 'border-primary-600 bg-primary-50 ring-2 ring-primary-600' : 'border-gray-300 hover:border-gray-400'">
+                                    <div class="text-center">
+                                        <div class="w-12 h-12 bg-primary-600 rounded-full mx-auto mb-2 flex items-center justify-center">
+                                            <span class="text-white font-medium" x-text="dentist.initials"></span>
+                                        </div>
+                                        <h3 class="font-medium text-gray-900" x-text="dentist.name"></h3>
+                                        <p class="text-sm text-gray-500" x-text="dentist.specialization || 'General Dentist'"></p>
+                                    </div>
+                                </div>
+                            </label>
+                        </template>
+                    </div>
+                </div>
+
+                <!-- Reason (Optional) -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Reason for Visit (Optional)</label>
+                    <textarea x-model="form.reason" rows="3" 
+                              class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                              placeholder="Please describe your symptoms or reason for the appointment (optional)"></textarea>
+                </div>
+            </div>
+            
+            <div class="px-8 py-4 bg-gray-50 flex justify-between">
+                <button type="button" @click="prevStep()" 
+                        class="px-6 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500">
+                    Back
+                </button>
+                <button type="button" @click="nextStep()" 
+                        class="px-6 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500">
+                    Next: Select Date & Time
+                </button>
+            </div>
+        </div>
+
+        <!-- Step 3: Date & Time Selection -->
+        <div class="form-step" :class="step === 3 ? 'active' : ''" x-show="step === 3">
+            <div class="p-8">
+                <h2 class="text-2xl font-bold text-gray-900 mb-6">Select Date & Time</h2>
+                
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    <!-- Calendar -->
+                    <div>
+                        <h3 class="text-lg font-medium text-gray-900 mb-4">Available Dates</h3>
+                        <div class="bg-white border border-gray-200 rounded-lg p-4">
+                            <div class="flex items-center justify-between mb-4">
+                                <button type="button" @click="changeMonth(-1)" 
+                                        class="p-2 hover:bg-gray-100 rounded-md">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                                    </svg>
+                                </button>
+                                <h4 class="font-medium text-gray-900" x-text="currentMonthName + ' ' + currentYear"></h4>
+                                <button type="button" @click="changeMonth(1)" 
+                                        class="p-2 hover:bg-gray-100 rounded-md">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                                    </svg>
+                                </button>
+                            </div>
+                            <div class="grid grid-cols-7 gap-1 mb-2">
+                                <div class="text-center text-xs font-medium text-gray-500 py-2">Mon</div>
+                                <div class="text-center text-xs font-medium text-gray-500 py-2">Tue</div>
+                                <div class="text-center text-xs font-medium text-gray-500 py-2">Wed</div>
+                                <div class="text-center text-xs font-medium text-gray-500 py-2">Thu</div>
+                                <div class="text-center text-xs font-medium text-gray-500 py-2">Fri</div>
+                                <div class="text-center text-xs font-medium text-gray-500 py-2">Sat</div>
+                                <div class="text-center text-xs font-medium text-gray-500 py-2">Sun</div>
+                            </div>
+                            <div class="grid grid-cols-7 gap-1">
+                                <template x-for="day in calendarDays" :key="day.date">
+                                    <button type="button" 
+                                            class="calendar-day text-sm rounded-md border min-h-[40px] flex items-center justify-center" 
+                                            :class="getDateClasses(day)"
+                                            @click="day.isEmpty ? null : selectDate(day)"
+                                            :disabled="day.isEmpty || !day.available"
+                                            x-text="day.day">
+                                    </button>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Time Slots -->
+                    <div>
+                        <h3 class="text-lg font-medium text-gray-900 mb-4">Available Times</h3>
+                        <div x-show="!form.selected_date" class="text-center text-gray-500 py-8">
+                            <div class="text-4xl mb-2">📅</div>
+                            <p>Please select a date first</p>
+                        </div>
+                        <div x-show="form.selected_date && loading" class="text-center text-gray-500 py-8">
+                            <div class="animate-spin w-8 h-8 border-4 border-primary-600 border-t-transparent rounded-full mx-auto mb-2"></div>
+                            <p>Loading available times...</p>
+                        </div>
+                        <div x-show="form.selected_date && !loading && availableTimes.length === 0" class="text-center text-gray-500 py-8">
+                            <div class="text-4xl mb-2">⏰</div>
+                            <p>No available times for selected date</p>
+                        </div>
+                        <div x-show="form.selected_date && !loading && availableTimes.length > 0" class="grid grid-cols-2 gap-2">
+                            <template x-for="time in availableTimes" :key="time">
+                                <button type="button" 
+                                        class="time-slot p-3 border rounded-lg text-sm font-medium transition-all"
+                                        :class="form.selected_time === time ? 'selected bg-primary-600 text-white' : 'border-gray-300 hover:border-primary-600'"
+                                        @click="form.selected_time = time"
+                                        x-text="formatTime(time)">
+                                </button>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="px-8 py-4 bg-gray-50 flex justify-between">
+                <button type="button" @click="prevStep()" 
+                        class="px-6 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500">
+                    Back
+                </button>
+                <button type="button" @click="nextStep()" 
+                        :disabled="!form.selected_date || !form.selected_time"
+                        class="px-6 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed">
+                    Next: Review & Confirm
+                </button>
+            </div>
+        </div>
+
+        <!-- Step 4: Confirmation -->
+        <div class="form-step" :class="step === 4 ? 'active' : ''" x-show="step === 4">
+            <div class="p-8">
+                <h2 class="text-2xl font-bold text-gray-900 mb-6">Review & Confirm</h2>
+                
+                <div class="bg-gray-50 rounded-lg p-6 mb-6">
+                    <h3 class="text-lg font-medium text-gray-900 mb-4">Appointment Summary</h3>
+                    <div class="space-y-3">
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Patient:</span>
+                            <span class="font-medium" x-text="getPatientName()"></span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Service:</span>
+                            <span class="font-medium" x-text="getSelectedServiceName()"></span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Dentist:</span>
+                            <span class="font-medium" x-text="getSelectedDentistName()"></span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Date:</span>
+                            <span class="font-medium" x-text="formatDate(form.selected_date)"></span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Time:</span>
+                            <span class="font-medium" x-text="formatTime(form.selected_time)"></span>
+                        </div>
+                        <div x-show="form.reason" class="flex justify-between">
+                            <span class="text-gray-600">Reason:</span>
+                            <span class="font-medium" x-text="form.reason"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Terms and Conditions -->
+                <div class="mb-6">
+                    <label class="flex items-start">
+                        <input type="checkbox" x-model="form.agreed_to_terms" required 
+                               class="mt-1 h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded">
+                        <div class="ml-3 text-sm text-gray-600">
+                            I agree to the clinic's terms and conditions. I understand that this is a request and not a confirmed appointment. I will receive confirmation via email or SMS.
+                        </div>
+                    </label>
+                </div>
+            </div>
+            
+            <div class="px-8 py-4 bg-gray-50 flex justify-between">
+                <button type="button" @click="prevStep()" 
+                        class="px-6 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500">
+                    Back
+                </button>
+                <button type="submit" 
+                        :disabled="!form.agreed_to_terms || submitting"
+                        class="px-6 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed">
+                    <span x-show="!submitting">Submit Request</span>
+                    <span x-show="submitting" class="flex items-center">
+                        <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Submitting...
+                    </span>
+                </button>
+            </div>
+        </div>
+    </form>
+
+    <!-- Success Message -->
+    <div x-show="submitted" class="max-w-4xl mx-auto bg-white shadow-xl rounded-lg overflow-hidden">
+        <div class="p-8 text-center">
+            <div class="w-16 h-16 bg-green-100 rounded-full mx-auto mb-4 flex items-center justify-center">
+                <svg class="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                </svg>
+            </div>
+            <h2 class="text-2xl font-bold text-gray-900 mb-2">Request Submitted!</h2>
+            <p class="text-gray-600 mb-4">Your appointment request has been successfully submitted. You will receive a confirmation via email or SMS within 24 hours.</p>
+            <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                <p class="text-sm text-blue-700">
+                    <strong>Reference Number:</strong> <span x-text="referenceNumber"></span><br>
+                    Please keep this reference number for your records.
+                </p>
+            </div>
+            <button type="button" @click="resetForm()" 
+                    class="px-6 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500">
+                Book Another Appointment
+            </button>
+        </div>
+    </div>
+</div>
+
+<style>
+    .calendar-day {
+        min-height: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .calendar-day.unavailable {
+        opacity: 0.3;
+        cursor: not-allowed;
+    }
+    .calendar-day.available:hover {
+        background-color: #dbeafe;
+    }
+    .calendar-day.selected {
+        background-color: #3b82f6;
+        color: white;
+    }
+    .time-slot {
+        transition: all 0.2s;
+    }
+    .time-slot:hover {
+        transform: translateY(-1px);
+    }
+    .time-slot.selected {
+        background-color: #3b82f6;
+        color: white;
+    }
+    .form-step {
+        display: none;
+    }
+    .form-step.active {
+        display: block;
+    }
+</style>
+
+<script>
+    // Get Django data
+    const servicesData = {{ services_json|safe }};
+    const dentistsData = {{ dentists_json|safe }};
+    const csrfToken = '{{ csrf_token }}';
+    
+    function appointmentBooking() {
+        return {
+            step: 1,
+            submitting: false,
+            submitted: false,
+            loading: false,
+            patientFound: false,
+            referenceNumber: '',
+            
+            // Initialize with Django data
+            services: servicesData || [],
+            dentists: dentistsData || [],
+            
+            // Form data
+            form: {
+                patient_type: '',
+                patient_identifier: '',
+                first_name: '',
+                last_name: '',
+                email: '',
+                contact_number: '',
+                address: '',
+                service: '',
+                dentist: '',
+                reason: '',
+                selected_date: '',
+                selected_time: '',
+                agreed_to_terms: false
+            },
+            
+            // Calendar
+            currentMonth: new Date().getMonth(),
+            currentYear: new Date().getFullYear(),
+            
+            // Data
+            foundPatient: {},
+            selectedService: null,
+            availableTimes: [],
+            calendarDays: [],
+            
+            init() {
+                console.log('Initializing appointment booking');
+                this.generateCalendar();
+                
+                // Watch for patient identifier changes
+                this.$watch('form.patient_identifier', (value) => {
+                    if (value && value.length > 3) {
+                        this.searchPatient();
+                    } else {
+                        this.patientFound = false;
+                    }
+                });
+                
+                // Watch for date selection changes
+                this.$watch('form.selected_date', (value) => {
+                    if (value && this.form.dentist && this.form.service) {
+                        this.loadAvailableTimes();
+                    }
+                });
+                
+                // Watch for service/dentist changes to reload times
+                this.$watch('form.dentist', (value) => {
+                    if (value && this.form.selected_date && this.form.service) {
+                        this.loadAvailableTimes();
+                    }
+                });
+                
+                this.$watch('form.service', (value) => {
+                    if (value && this.form.selected_date && this.form.dentist) {
+                        this.loadAvailableTimes();
+                    }
+                });
+            },
+            
+            get currentMonthName() {
+                const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+                return months[this.currentMonth];
+            },
+            
+            nextStep() {
+                if (this.validateStep()) {
+                    this.step++;
+                    if (this.step === 3) {
+                        this.generateCalendar();
+                        if (this.form.dentist && this.form.service) {
+                            this.loadAvailableTimes();
+                        }
+                    }
+                }
+            },
+            
+            prevStep() {
+                this.step--;
+            },
+            
+            validateStep() {
+                switch (this.step) {
+                    case 1:
+                        if (this.form.patient_type === 'existing') {
+                            return this.form.patient_identifier && this.patientFound;
+                        } else if (this.form.patient_type === 'new') {
+                            return this.form.first_name && this.form.last_name && this.form.contact_number;
+                        }
+                        return false;
+                    case 2:
+                        return this.form.service && this.form.dentist;
+                    case 3:
+                        return this.form.selected_date && this.form.selected_time;
+                    default:
+                        return true;
+                }
+            },
+            
+            async searchPatient() {
+                if (!this.form.patient_identifier || this.form.patient_identifier.length < 3) {
+                    this.patientFound = false;
+                    return;
+                }
+                
+                try {
+                    const response = await fetch(`{% url "appointments:find_patient_api" %}?identifier=${encodeURIComponent(this.form.patient_identifier)}`);
+                    const data = await response.json();
+                    
+                    if (data.found) {
+                        this.patientFound = true;
+                        this.foundPatient = data.patient;
+                    } else {
+                        this.patientFound = false;
+                    }
+                } catch (error) {
+                    console.error('Error searching patient:', error);
+                    this.patientFound = false;
+                }
+            },
+            
+            updateServiceInfo() {
+                this.selectedService = this.services.find(s => s.id == this.form.service) || null;
+                if (this.form.dentist && this.form.selected_date) {
+                    this.loadAvailableTimes();
+                }
+            },
+            
+            changeMonth(direction) {
+                this.currentMonth += direction;
+                if (this.currentMonth > 11) {
+                    this.currentMonth = 0;
+                    this.currentYear++;
+                } else if (this.currentMonth < 0) {
+                    this.currentMonth = 11;
+                    this.currentYear--;
+                }
+                this.generateCalendar();
+            },
+            
+            generateCalendar() {
+                const firstDay = new Date(this.currentYear, this.currentMonth, 1);
+                const lastDay = new Date(this.currentYear, this.currentMonth + 1, 0);
+                const firstDayOfWeek = (firstDay.getDay() + 6) % 7; // Adjust for Monday start
+                const daysInMonth = lastDay.getDate();
+                
+                this.calendarDays = [];
+                
+                // Add empty cells for days before the first day - use unique keys
+                for (let i = 0; i < firstDayOfWeek; i++) {
+                    this.calendarDays.push({ 
+                        day: '', 
+                        date: `empty-${this.currentYear}-${this.currentMonth}-${i}`, // Unique key for empty cells
+                        available: false,
+                        isEmpty: true
+                    });
+                }
+                
+                // Add days of the month
+                const today = new Date();
+                today.setHours(0, 0, 0, 0); // Reset time for proper comparison
+                
+                for (let day = 1; day <= daysInMonth; day++) {
+                    const date = new Date(this.currentYear, this.currentMonth, day);
+                    const dateStr = date.toISOString().split('T')[0];
+                    
+                    // Check availability
+                    let available = true;
+                    
+                    // Past dates not available
+                    if (date < today) available = false;
+                    
+                    // Sundays not available
+                    if (date.getDay() === 0) available = false;
+                    
+                    const isToday = dateStr === today.toISOString().split('T')[0];
+                    const isSelected = dateStr === this.form.selected_date;
+                    
+                    this.calendarDays.push({
+                        day: day,
+                        date: dateStr, // This should always be unique now
+                        available: available,
+                        isToday: isToday,
+                        isSelected: isSelected,
+                        isEmpty: false
+                    });
+                }
+                
+                console.log('Generated calendar days:', this.calendarDays.length); // Debug log
+            },
+            
+            getDateClasses(day) {
+                let classes = [];
+                
+                if (!day.available) {
+                    classes.push('unavailable', 'text-gray-300', 'cursor-not-allowed');
+                } else {
+                    classes.push('available', 'hover:bg-blue-100', 'cursor-pointer');
+                }
+                
+                if (day.isSelected) {
+                    classes.push('selected', 'bg-primary-600', 'text-white');
+                } else if (day.isToday) {
+                    classes.push('border-primary-600', 'text-primary-600');
+                } else {
+                    classes.push('border-gray-200');
+                }
+                
+                return classes.join(' ');
+            },
+            
+            selectDate(day) {
+                if (!day.available) return;
+                
+                this.form.selected_date = day.date;
+                this.form.selected_time = '';
+                this.generateCalendar(); // Refresh to update selected state
+                
+                if (this.form.dentist && this.form.service) {
+                    this.loadAvailableTimes();
+                }
+            },
+            
+            async loadAvailableTimes() {
+                if (!this.form.selected_date || !this.form.dentist || !this.form.service) return;
+                
+                this.loading = true;
+                this.availableTimes = [];
+                
+                try {
+                    const params = new URLSearchParams({
+                        dentist_id: this.form.dentist,
+                        date: this.form.selected_date,
+                        service_id: this.form.service
+                    });
+                    
+                    const response = await fetch(`{% url "appointments:get_available_times_api" %}?${params}`);
+                    const data = await response.json();
+                    
+                    if (data.available_times) {
+                        this.availableTimes = data.available_times;
+                    }
+                } catch (error) {
+                    console.error('Error loading available times:', error);
+                    this.availableTimes = [];
+                } finally {
+                    this.loading = false;
+                }
+            },
+            
+            formatTime(time) {
+                if (!time) return '';
+                const [hours, minutes] = time.split(':');
+                const hour = parseInt(hours);
+                const ampm = hour >= 12 ? 'PM' : 'AM';
+                const displayHour = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour;
+                return `${displayHour}:${minutes} ${ampm}`;
+            },
+            
+            formatDate(date) {
+                if (!date) return '';
+                const d = new Date(date);
+                return d.toLocaleDateString('en-US', { 
+                    weekday: 'long', 
+                    year: 'numeric', 
+                    month: 'long', 
+                    day: 'numeric' 
+                });
+            },
+            
+            getPatientName() {
+                if (this.form.patient_type === 'existing') {
+                    return this.foundPatient.name || 'Existing Patient';
+                } else {
+                    return `${this.form.first_name} ${this.form.last_name}`;
+                }
+            },
+            
+            getSelectedServiceName() {
+                return this.selectedService?.name || '';
+            },
+            
+            getSelectedDentistName() {
+                const dentist = this.dentists.find(d => d.id == this.form.dentist);
+                return dentist?.name || '';
+            },
+            
+            async submitForm() {
+                this.submitting = true;
+                
+                try {
+                    const response = await fetch('{% url "core:book_appointment" %}', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': csrfToken,
+                        },
+                        body: JSON.stringify(this.form)
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        this.referenceNumber = data.reference_number;
+                        this.submitted = true;
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                    } else {
+                        alert(data.error || 'An error occurred while submitting your request.');
+                    }
+                } catch (error) {
+                    console.error('Submit error:', error);
+                    alert('Network error. Please try again.');
+                } finally {
+                    this.submitting = false;
+                }
+            },
+            
+            resetForm() {
+                this.step = 1;
+                this.submitted = false;
+                this.patientFound = false;
+                this.form = {
+                    patient_type: '',
+                    patient_identifier: '',
+                    first_name: '',
+                    last_name: '',
+                    email: '',
+                    contact_number: '',
+                    address: '',
+                    service: '',
+                    dentist: '',
+                    reason: '',
+                    selected_date: '',
+                    selected_time: '',
+                    agreed_to_terms: false
+                };
+                this.selectedService = null;
+                this.availableTimes = [];
+                this.generateCalendar();
+            }
+        }
+    }
+</script>
+{% endblock %}

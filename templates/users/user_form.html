@@ -107,7 +107,7 @@
                         <p class="mt-1 text-sm text-gray-500">The role determines what modules this user can access.</p>
                     </div>
 
-                    <div class="flex items-center space-x-3">
+                    <div class="flex items-center space-x-3" id="is-active-dentist-container">
                         {{ form.is_active_dentist }}
                         <label for="{{ form.is_active_dentist.id_for_label }}" class="text-sm font-medium text-gray-700">
                             {{ form.is_active_dentist.label }}
@@ -224,24 +224,35 @@
     </div>
     {% endif %}
 </div>
+
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const roleSelect = document.querySelector('#{{ form.role.id_for_label }}');
     const isDentistCheckbox = document.querySelector('#{{ form.is_active_dentist.id_for_label }}');
+    const isDentistContainer = document.querySelector('#is-active-dentist-container');
     
-    if (roleSelect && isDentistCheckbox) {
+    if (roleSelect && isDentistCheckbox && isDentistContainer) {
         function toggleDentistCheckbox() {
-            const selectedRoleText = roleSelect.options[roleSelect.selectedIndex].text.toLowerCase();
-            const selectedRoleName = selectedRoleText.includes('admin') || selectedRoleText.includes('dentist');
-            
-            if (!selectedRoleName) {
+            const selectedOption = roleSelect.options[roleSelect.selectedIndex];
+            if (!selectedOption || !selectedOption.value) {
+                // No role selected, disable the checkbox
                 isDentistCheckbox.disabled = true;
                 isDentistCheckbox.checked = false;
-                // Add visual indication
-                isDentistCheckbox.parentElement.parentElement.style.opacity = '0.5';
+                isDentistContainer.style.opacity = '0.5';
+                return;
+            }
+            
+            // Get the selected role text to check if it's admin or dentist
+            const selectedRoleText = selectedOption.text.toLowerCase();
+            const isAdminOrDentist = selectedRoleText.includes('admin') || selectedRoleText.includes('dentist');
+            
+            if (!isAdminOrDentist) {
+                isDentistCheckbox.disabled = true;
+                isDentistCheckbox.checked = false;
+                isDentistContainer.style.opacity = '0.5';
             } else {
                 isDentistCheckbox.disabled = false;
-                isDentistCheckbox.parentElement.parentElement.style.opacity = '1';
+                isDentistContainer.style.opacity = '1';
             }
         }
         

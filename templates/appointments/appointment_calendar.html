@@ -49,11 +49,16 @@
                 <!-- Quick Links -->
                 <div class="flex items-center space-x-2">
                     <a href="{% url 'appointments:appointment_requests' %}" 
-                       class="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
+                    class="relative inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
                         Pending Requests
+                        {% if pending_count %}
+                        <span class="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                            {{ pending_count }}
+                        </span>
+                        {% endif %}
                     </a>
                     <a href="{% url 'appointments:appointment_list' %}" 
-                       class="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
+                    class="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
                         List View
                     </a>
                 </div>

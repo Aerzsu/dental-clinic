@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+
+{% block title %}Bulk Create Schedules - Dental Clinic{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+    <div class="bg-white shadow rounded-lg">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h2 class="text-xl font-semibold text-gray-900">Bulk Create Schedules</h2>
+            <p class="mt-1 text-sm text-gray-600">Create multiple schedules for dentists across date ranges</p>
+        </div>
+        
+        <form method="post" class="px-6 py-6 space-y-6">
+            {% csrf_token %}
+            
+            <!-- Dentist Selection -->
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Select Dentist *</label>
+                <select name="dentist" required class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500">
+                    <option value="">Choose a dentist...</option>
+                    {% for dentist in dentists %}
+                        <option value="{{ dentist.id }}">Dr. {{ dentist.first_name }} {{ dentist.last_name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- Date Range -->
+            <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Start Date *</label>
+                    <input type="date" name="start_date" required 
+                           class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">End Date *</label>
+                    <input type="date" name="end_date" required 
+                           class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500">
+                </div>
+            </div>
+
+            <!-- Days of Week -->
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-3">Select Days of Week</label>
+                <div class="grid grid-cols-2 gap-2 sm:grid-cols-7">
+                    <label class="relative flex items-center">
+                        <input type="checkbox" name="days_of_week" value="0" class="rounded border-gray-300 text-primary-600 shadow-sm focus:border-primary-500 focus:ring-primary-500">
+                        <span class="ml-2 text-sm text-gray-700">Monday</span>
+                    </label>
+                    <label class="relative flex items-center">
+                        <input type="checkbox" name="days_of_week" value="1" class="rounded border-gray-300 text-primary-600 shadow-sm focus:border-primary-500 focus:ring-primary-500">
+                        <span class="ml-2 text-sm text-gray-700">Tuesday</span>
+                    </label>
+                    <label class="relative flex items-center">
+                        <input type="checkbox" name="days_of_week" value="2" class="rounded border-gray-300 text-primary-600 shadow-sm focus:border-primary-500 focus:ring-primary-500">
+                        <span class="ml-2 text-sm text-gray-700">Wednesday</span>
+                    </label>
+                    <label class="relative flex items-center">
+                        <input type="checkbox" name="days_of_week" value="3" class="rounded border-gray-300 text-primary-600 shadow-sm focus:border-primary-500 focus:ring-primary-500">
+                        <span class="ml-2 text-sm text-gray-700">Thursday</span>
+                    </label>
+                    <label class="relative flex items-center">
+                        <input type="checkbox" name="days_of_week" value="4" class="rounded border-gray-300 text-primary-600 shadow-sm focus:border-primary-500 focus:ring-primary-500">
+                        <span class="ml-2 text-sm text-gray-700">Friday</span>
+                    </label>
+                    <label class="relative flex items-center">
+                        <input type="checkbox" name="days_of_week" value="5" class="rounded border-gray-300 text-primary-600 shadow-sm focus:border-primary-500 focus:ring-primary-500">
+                        <span class="ml-2 text-sm text-gray-700">Saturday</span>
+                    </label>
+                    <label class="relative flex items-center opacity-50">
+                        <input type="checkbox" disabled class="rounded border-gray-300 text-primary-600 shadow-sm">
+                        <span class="ml-2 text-sm text-gray-500">Sunday</span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- Time Slots -->
+            <div class="border-t border-gray-200 pt-6">
+                <h3 class="text-lg font-medium text-gray-900 mb-4">Time Slots</h3>
+                
+                <div class="space-y-4">
+                    <!-- Morning Schedule -->
+                    <div class="bg-blue-50 p-4 rounded-lg">
+                        <h4 class="font-medium text-blue-900 mb-3">Morning Schedule (Optional)</h4>
+                        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Start Time</label>
+                                <input type="time" name="morning_start" 
+                                       class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">End Time</label>
+                                <input type="time" name="morning_end" 
+                                       class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Afternoon Schedule -->
+                    <div class="bg-green-50 p-4 rounded-lg">
+                        <h4 class="font-medium text-green-900 mb-3">Afternoon Schedule (Optional)</h4>
+                        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Start Time</label>
+                                <input type="time" name="afternoon_start" 
+                                       class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">End Time</label>
+                                <input type="time" name="afternoon_end" 
+                                       class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Note -->
+            <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4">
+                <div class="flex">
+                    <div class="flex-shrink-0">
+                        <svg class="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                        </svg>
+                    </div>
+                    <div class="ml-3">
+                        <p class="text-sm text-yellow-700">
+                            <strong>Note:</strong> Existing schedules for the same dentist, date, and time will not be overwritten. 
+                            Holidays and Sundays will be automatically skipped.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Form Actions -->
+            <div class="flex justify-end space-x-3">
+                <a href="{% url 'appointments:schedule_list' %}" 
+                   class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
+                    Cancel
+                </a>
+                <button type="submit" 
+                        class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
+                    Create Schedules
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

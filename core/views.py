@@ -1,4 +1,5 @@
 # core/views.py
+import json
 from django.shortcuts import render, redirect
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib import messages
@@ -6,11 +7,12 @@ from django.urls import reverse_lazy
 from django.views.generic import TemplateView, ListView, CreateView, UpdateView, DeleteView
 from django.utils import timezone
 from django.db.models import Q
-from datetime import datetime, timedelta
+from django.http import JsonResponse
+from datetime import datetime, timedelta, date, time
 from django import forms
 
 from .models import AuditLog, Holiday, SystemSetting
-from appointments.models import Appointment
+from appointments.models import Appointment, Schedule
 from patients.models import Patient
 from services.models import Service
 from users.models import User
@@ -53,9 +55,33 @@ class BookAppointmentView(TemplateView):
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['services'] = Service.objects.filter(is_archived=False)
-        context['dentists'] = User.objects.filter(is_active_dentist=True)
-        context['form'] = AppointmentRequestForm()
+        
+        # Format services data
+        services = []
+        for service in Service.objects.filter(is_archived=False):
+            services.append({
+                'id': service.id,
+                'name': service.name,
+                'duration': f"{service.duration_minutes} minutes",
+                'price_range': f"₱{service.min_price:,.0f} - ₱{service.max_price:,.0f}",
+                'description': service.description or "Professional dental service"
+            })
+        
+        # Format dentists data  
+        dentists = []
+        for dentist in User.objects.filter(is_active_dentist=True):
+            dentists.append({
+                'id': dentist.id,
+                'name': f"Dr. {dentist.first_name} {dentist.last_name}",
+                'initials': f"{dentist.first_name[0]}{dentist.last_name[0]}",
+                'specialization': getattr(dentist, 'specialization', 'General Dentist')
+            })
+        
+        context.update({
+            'services_json': json.dumps(services),
+            'dentists_json': json.dumps(dentists),
+        })
+        
         return context
     
     def post(self, request, *args, **kwargs):

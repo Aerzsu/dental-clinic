@@ -85,6 +85,16 @@ class UserForm(forms.ModelForm):
         # Filter out archived roles from the dropdown
         self.fields['role'].queryset = Role.objects.filter(is_archived=False).order_by('display_name')
         
+        # Remove the empty '--------' option and set default role to 'dentist' for new users only
+        if not self.is_update and not self.instance.pk:
+            self.fields['role'].empty_label = None  # Remove the '--------' option
+            try:
+                dentist_role = Role.objects.get(name='dentist', is_archived=False)
+                self.fields['role'].initial = dentist_role.pk
+            except Role.DoesNotExist:
+                # If dentist role doesn't exist, still remove empty label but no default
+                pass
+        
         # Protect admin users from changing their own role and is_active status
         # Only apply protection if this is the last admin in the system
         if (self.is_update and self.instance and self.request_user and 

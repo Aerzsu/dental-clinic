@@ -6,9 +6,23 @@ from decimal import Decimal
 class Service(models.Model):
     name = models.CharField(max_length=200)
     description = models.TextField(blank=True)
-    min_price = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(Decimal('0.01'))])
-    max_price = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(Decimal('0.01'))])
-    duration_minutes = models.PositiveIntegerField(default=30)
+    # min_price = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(Decimal('0.01'))])
+    # max_price = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(Decimal('0.01'))])
+    # duration_minutes = models.PositiveIntegerField(default=30)
+    duration_minutes = models.PositiveIntegerField(
+        default=30,
+        help_text="Duration of the service in minutes"
+    )
+    min_price = models.DecimalField(
+        max_digits=10, 
+        decimal_places=2, 
+        help_text="Minimum price for this service"
+    )
+    max_price = models.DecimalField(
+        max_digits=10, 
+        decimal_places=2, 
+        help_text="Maximum price for this service"
+    )
     is_archived = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -24,21 +38,35 @@ class Service(models.Model):
         if self.max_price < self.min_price:
             raise ValidationError('Max price cannot be less than min price.')
     
+    # @property
+    # def price_range_display(self):
+    #     if self.min_price == self.max_price:
+    #         return f"₱{self.min_price:,.2f}"
+    #     return f"₱{self.min_price:,.2f} - ₱{self.max_price:,.2f}"
+    
+    # @property
+    # def duration_display(self):
+    #     if self.duration_minutes < 60:
+    #         return f"{self.duration_minutes} minutes"
+    #     hours = self.duration_minutes // 60
+    #     minutes = self.duration_minutes % 60
+    #     if minutes == 0:
+    #         return f"{hours} hour{'s' if hours > 1 else ''}"
+    #     return f"{hours}h {minutes}m"
     @property
     def price_range_display(self):
         if self.min_price == self.max_price:
-            return f"₱{self.min_price:,.2f}"
-        return f"₱{self.min_price:,.2f} - ₱{self.max_price:,.2f}"
+            return f"₱{self.min_price:,.0f}"
+        return f"₱{self.min_price:,.0f} - ₱{self.max_price:,.0f}"
     
     @property
     def duration_display(self):
-        if self.duration_minutes < 60:
-            return f"{self.duration_minutes} minutes"
         hours = self.duration_minutes // 60
         minutes = self.duration_minutes % 60
-        if minutes == 0:
-            return f"{hours} hour{'s' if hours > 1 else ''}"
-        return f"{hours}h {minutes}m"
+        
+        if hours > 0:
+            return f"{hours}h {minutes}m" if minutes > 0 else f"{hours}h"
+        return f"{minutes}m"
 
 class Discount(models.Model):
     name = models.CharField(max_length=100)

@@ -1,13 +1,15 @@
+#core/urls.py
 from django.urls import path
 from . import views
+from appointments.views import BookAppointmentView as AppointmentBookingView
 
 app_name = 'core'
 
 urlpatterns = [
     # Public pages
     path('', views.HomeView.as_view(), name='home'),
-    path('book-appointment/', views.BookAppointmentView.as_view(), name='book_appointment'),
-    
+    # path('book-appointment/', views.BookAppointmentView.as_view(), name='book_appointment'),
+    path('book-appointment/', AppointmentBookingView.as_view(), name='book_appointment'),
     # Authenticated pages
     path('dashboard/', views.DashboardView.as_view(), name='dashboard'),
     

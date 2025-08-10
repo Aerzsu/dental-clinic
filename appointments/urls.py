@@ -24,8 +24,10 @@ urlpatterns = [
     # Schedule management
     path('schedules/', views.ScheduleListView.as_view(), name='schedule_list'),
     path('schedules/create/', views.ScheduleCreateView.as_view(), name='schedule_create'),
+    path('schedules/bulk-create/', views.ScheduleBulkCreateView.as_view(), name='schedule_bulk_create'),
     
-    # AJAX endpoints
-    path('api/available-dates/', views.get_available_dates, name='get_available_dates'),
-    path('api/available-times/', views.get_available_times, name='get_available_times'),
+    # API endpoints
+    path('api/available-dates/', views.get_available_dates_api, name='get_available_dates_api'),
+    path('api/available-times/', views.get_available_times_api, name='get_available_times_api'),
+    path('api/find-patient/', views.find_patient_api, name='find_patient_api'),
 ]

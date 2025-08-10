@@ -224,7 +224,33 @@
     </div>
     {% endif %}
 </div>
-<style>
-    input
-</style>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const roleSelect = document.querySelector('#{{ form.role.id_for_label }}');
+    const isDentistCheckbox = document.querySelector('#{{ form.is_active_dentist.id_for_label }}');
+    
+    if (roleSelect && isDentistCheckbox) {
+        function toggleDentistCheckbox() {
+            const selectedRoleText = roleSelect.options[roleSelect.selectedIndex].text.toLowerCase();
+            const selectedRoleName = selectedRoleText.includes('admin') || selectedRoleText.includes('dentist');
+            
+            if (!selectedRoleName) {
+                isDentistCheckbox.disabled = true;
+                isDentistCheckbox.checked = false;
+                // Add visual indication
+                isDentistCheckbox.parentElement.parentElement.style.opacity = '0.5';
+            } else {
+                isDentistCheckbox.disabled = false;
+                isDentistCheckbox.parentElement.parentElement.style.opacity = '1';
+            }
+        }
+        
+        // Run on page load
+        toggleDentistCheckbox();
+        
+        // Run when role changes
+        roleSelect.addEventListener('change', toggleDentistCheckbox);
+    }
+});
+</script>
 {% endblock %}

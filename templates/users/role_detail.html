@@ -5,9 +5,13 @@
 
 {% block content %}
 <div class="max-w-4xl mx-auto">
-    <!-- Header -->
+    <!-- Header with Back to Users -->
     <div class="mb-6">
         <div class="flex items-center space-x-2 text-sm text-gray-500 mb-2">
+            <a href="{% url 'users:user_list' %}" class="hover:text-gray-700 flex items-center">
+                ← Back to Users
+            </a>
+            <span>/</span>
             <a href="{% url 'users:role_list' %}" class="hover:text-gray-700">Role Management</a>
             <span>/</span>
             <span>Role Details</span>
@@ -16,9 +20,17 @@
             <div>
                 <div class="flex items-center space-x-3">
                     <h1 class="text-2xl font-bold text-gray-900">{{ role.display_name }}</h1>
-                    {% if role.is_default %}
+                    {% if role.is_protected %}
+                        <span class="inline-flex items-center px-3 py-0.5 rounded-full text-sm font-medium bg-red-100 text-red-800">
+                            🔒 Protected Role
+                        </span>
+                    {% elif role.is_archived %}
+                        <span class="inline-flex items-center px-3 py-0.5 rounded-full text-sm font-medium bg-gray-100 text-gray-600">
+                            📁 Archived
+                        </span>
+                    {% elif role.is_default %}
                         <span class="inline-flex items-center px-3 py-0.5 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
-                            Default Role
+                            ⭐ Default Role
                         </span>
                     {% endif %}
                 </div>
@@ -28,15 +40,21 @@
                 {% endif %}
             </div>
             <div class="flex space-x-3">
-                {% if not role.is_default %}
-                <a href="{% url 'users:role_update' role.pk %}" 
-                   class="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors">
-                    Edit Role
-                </a>
+                {% if role.is_archived %}
+                    <a href="{% url 'users:role_toggle_archive' role.pk %}" 
+                       class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
+                       onclick="return confirm('Are you sure you want to restore this role?')">
+                        Restore Role
+                    </a>
+                {% elif role.is_protected %}
+                    <span class="bg-gray-300 text-gray-500 px-4 py-2 rounded-md text-sm font-medium cursor-not-allowed">
+                        Protected Role
+                    </span>
                 {% else %}
-                <span class="bg-gray-300 text-gray-500 px-4 py-2 rounded-md text-sm font-medium cursor-not-allowed">
-                    Protected Role
-                </span>
+                    <a href="{% url 'users:role_update' role.pk %}" 
+                       class="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors">
+                        Edit Role
+                    </a>
                 {% endif %}
             </div>
         </div>
@@ -185,7 +203,7 @@
                         </div>
                         
                         <div class="mt-4 pt-4 border-t border-gray-200">
-                            <a href="{% url 'users:user_list' %}?role={{ role.pk }}" 
+                            <a href="{% url 'users:user_list' %}?role_filter={{ role.pk }}" 
                                class="text-sm text-primary-600 hover:text-primary-700 font-medium">
                                 View all users with this role →
                             </a>
@@ -205,19 +223,41 @@
             <div class="mt-6 bg-white rounded-lg shadow-sm border p-6">
                 <h3 class="text-lg font-medium text-gray-900 mb-4">Quick Actions</h3>
                 <div class="space-y-3">
-                    <a href="{% url 'users:user_create' %}?role={{ role.pk }}" 
-                       class="block w-full text-center bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors">
-                        Create User with this Role
-                    </a>
+                    {% if not role.is_archived %}
+                        <a href="{% url 'users:user_create' %}?role={{ role.pk }}" 
+                           class="block w-full text-center bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors">
+                            Create User with this Role
+                        </a>
+                    {% endif %}
+                    
                     <a href="{% url 'users:user_list' %}" 
                        class="block w-full text-center bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-md text-sm font-medium transition-colors">
                         View All Users
                     </a>
-                    {% if not role.is_default %}
-                    <a href="{% url 'users:role_update' role.pk %}" 
-                       class="block w-full text-center border border-primary-600 text-primary-600 hover:bg-primary-50 px-4 py-2 rounded-md text-sm font-medium transition-colors">
-                        Edit This Role
-                    </a>
+                    
+                    {% if role.is_archived %}
+                        <a href="{% url 'users:role_toggle_archive' role.pk %}" 
+                           class="block w-full text-center bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
+                           onclick="return confirm('Are you sure you want to restore this role?')">
+                            Restore This Role
+                        </a>
+                    {% elif role.is_protected %}
+                        <span class="block w-full text-center bg-gray-300 text-gray-500 px-4 py-2 rounded-md text-sm font-medium cursor-not-allowed">
+                            Protected Role
+                        </span>
+                    {% else %}
+                        <a href="{% url 'users:role_update' role.pk %}" 
+                           class="block w-full text-center border border-primary-600 text-primary-600 hover:bg-primary-50 px-4 py-2 rounded-md text-sm font-medium transition-colors">
+                            Edit This Role
+                        </a>
+                        
+                        {% if role.can_be_archived %}
+                            <a href="{% url 'users:role_toggle_archive' role.pk %}" 
+                               class="block w-full text-center border border-red-300 text-red-600 hover:bg-red-50 px-4 py-2 rounded-md text-sm font-medium transition-colors"
+                               onclick="return confirm('Are you sure you want to archive this role? Users with this role will lose access to system modules until the role is restored or they are assigned a different role.')">
+                                Archive This Role
+                            </a>
+                        {% endif %}
                     {% endif %}
                 </div>
             </div>

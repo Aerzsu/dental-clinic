@@ -7,9 +7,11 @@
 
 {% block content %}
 <div class="max-w-2xl mx-auto">
-    <!-- Header -->
+    <!-- Header with Back Navigation -->
     <div class="mb-6">
         <div class="flex items-center space-x-2 text-sm text-gray-500 mb-2">
+            <a href="{% url 'users:user_list' %}" class="hover:text-gray-700">← Back to Users</a>
+            <span>/</span>
             <a href="{% url 'users:role_list' %}" class="hover:text-gray-700">Role Management</a>
             <span>/</span>
             <span>{% if role.pk %}Edit Role{% else %}Add New Role{% endif %}</span>
@@ -17,15 +19,40 @@
         <h1 class="text-2xl font-bold text-gray-900">
             {% if role.pk %}
                 Edit Role: {{ role.display_name }}
+                {% if role.is_protected %}
+                    <span class="inline-flex items-center px-3 py-0.5 rounded-full text-sm font-medium bg-red-100 text-red-800 ml-3">
+                        🔒 Protected
+                    </span>
+                {% endif %}
             {% else %}
                 Add New Role
             {% endif %}
         </h1>
+        
+        {% if role.pk and role.user_set.filter.count > 0 %}
+            <div class="mt-2 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+                <div class="flex">
+                    <div class="flex-shrink-0">
+                        <svg class="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                        </svg>
+                    </div>
+                    <div class="ml-3">
+                        <h3 class="text-sm font-medium text-yellow-800">
+                            Permission Changes Will Affect Active Users
+                        </h3>
+                        <div class="mt-2 text-sm text-yellow-700">
+                            <p>This role is assigned to {{ role.user_set.filter.count }} user{{ role.user_set.filter.count|pluralize }}. Changes to permissions will take effect immediately for all active users with this role.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        {% endif %}
     </div>
 
     <!-- Form -->
     <div class="bg-white rounded-lg shadow-sm border">
-        <form method="post" class="p-6 space-y-6">
+        <form method="post" class="p-6 space-y-6" onsubmit="return confirmChanges()">
             {% csrf_token %}
             
             <!-- Basic Information -->
@@ -92,7 +119,7 @@
                                     {% elif field.name == "perm_patients" %}
                                         Access patient records and information
                                     {% elif field.name == "perm_billing" %}
-                                        Manage services, pricing, and billing
+                                        Manage payment processing
                                     {% elif field.name == "perm_reports" %}
                                         Generate and view system reports
                                     {% elif field.name == "perm_maintenance" %}
@@ -150,26 +177,16 @@
         </form>
     </div>
 
-    <!-- Permission Guide -->
-    <div class="mt-6 bg-blue-50 border border-blue-200 rounded-md p-4">
-        <div class="flex">
-            <div class="flex-shrink-0">
-                <svg class="h-5 w-5 text-blue-400" viewBox="0 0 20 20" fill="currentColor">
-                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
-                </svg>
-            </div>
-            <div class="ml-3">
-                <h3 class="text-sm font-medium text-blue-800">Permission Guide</h3>
-                <div class="mt-2 text-sm text-blue-700 space-y-1">
-                    <p><strong>Dashboard:</strong> Required for all users to access the main interface</p>
-                    <p><strong>Appointments:</strong> Schedule, view, and manage patient appointments</p>
-                    <p><strong>Patients:</strong> Access patient records and medical information</p>
-                    <p><strong>Billing:</strong> Manage services, pricing, and payment processing</p>
-                    <p><strong>Reports:</strong> Generate analytics and business reports</p>
-                    <p><strong>Maintenance:</strong> System administration, user management, and settings</p>
-                </div>
-            </div>
-        </div>
-    </div>
 </div>
+
+<script>
+function confirmChanges() {
+    {% if role.pk and role.user_set.filter.count > 0 %}
+        const userCount = {{ role.user_set.filter.count }};
+        const message = `Are you sure you want to update this role? This will immediately affect ${userCount} user${userCount !== 1 ? 's' : ''} with this role.`;
+        return confirm(message);
+    {% endif %}
+    return true;
+}
+</script>
 {% endblock %}

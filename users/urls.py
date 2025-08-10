@@ -20,10 +20,11 @@ urlpatterns = [
     path('<int:pk>/', views.UserDetailView.as_view(), name='user_detail'),
     path('<int:pk>/edit/', views.UserUpdateView.as_view(), name='user_update'),
     path('<int:pk>/toggle-active/', views.toggle_user_active, name='toggle_user_active'),
-    
+
     # Role management
     path('roles/', views.RoleListView.as_view(), name='role_list'),
     path('roles/create/', views.RoleCreateView.as_view(), name='role_create'),
     path('roles/<int:pk>/', views.RoleDetailView.as_view(), name='role_detail'),
     path('roles/<int:pk>/edit/', views.RoleUpdateView.as_view(), name='role_update'),
+    path('roles/<int:pk>/toggle-archive/', views.toggle_role_archive, name='role_toggle_archive'),
 ]

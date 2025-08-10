@@ -73,6 +73,7 @@ class UserForm(forms.ModelForm):
     
     def __init__(self, *args, **kwargs):
         self.is_update = kwargs.pop('is_update', False)
+        self.request_user = kwargs.pop('request_user', None)  # Pass current user from view
         super().__init__(*args, **kwargs)
         
         # Make password required for new users
@@ -80,6 +81,35 @@ class UserForm(forms.ModelForm):
             self.fields['password1'].required = True
             self.fields['password2'].required = True
             self.fields['password1'].help_text = "Password must be at least 8 characters long."
+        
+        # Filter out archived roles from the dropdown
+        self.fields['role'].queryset = Role.objects.filter(is_archived=False).order_by('display_name')
+        
+        # Protect admin users from changing their own role and is_active status
+        # Only apply protection if this is the last admin in the system
+        if (self.is_update and self.instance and self.request_user and 
+            self.instance == self.request_user and 
+            self.request_user.role and self.request_user.role.name == 'admin'):
+            
+            # Check if this is the last admin
+            admin_count = User.objects.filter(
+                role__name='admin', 
+                is_active=True
+            ).exclude(pk=self.instance.pk).count()
+            
+            if admin_count == 0:  # This is the last admin
+                self.fields['role'].disabled = True
+                self.fields['is_active'].disabled = True
+        
+        # Restrict is_active_dentist to only admin and dentist roles
+        if self.instance and self.instance.pk:  # Editing existing user
+            if self.instance.role and self.instance.role.name not in ['admin', 'dentist']:
+                self.fields['is_active_dentist'].disabled = True
+                self.fields['is_active_dentist'].help_text = "Only Admin and Dentist roles can accept appointments."
+        else:  # Creating new user - we'll handle this with JavaScript
+            self.fields['is_active_dentist'].widget.attrs.update({
+                'data-restricted-roles': 'admin,dentist'
+            })
     
     def clean(self):
         cleaned_data = super().clean()
@@ -164,9 +194,17 @@ class RoleForm(forms.ModelForm):
     def clean_name(self):
         name = self.cleaned_data['name'].lower().strip()
         
-        # Check for reserved names
-        if name in ['admin', 'dentist', 'staff'] and not self.instance.is_default:
-            raise forms.ValidationError("This name is reserved for default roles.")
+        # Only prevent new roles from using reserved names
+        # Allow editing existing roles (including default ones)
+        reserved_names = ['admin', 'dentist', 'staff']
+        
+        if name in reserved_names:
+            # If this is an existing role with the same name, allow it (editing existing role)
+            if self.instance and self.instance.pk and self.instance.name == name:
+                return name
+            # If this is a new role or changing name to reserved name, prevent it
+            else:
+                raise forms.ValidationError("This name is reserved for system roles.")
         
         return name
     

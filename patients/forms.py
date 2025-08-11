@@ -5,6 +5,46 @@ from django.utils import timezone
 from datetime import date
 from .models import Patient
 
+
+def clean_philippine_phone_number(phone, field_name="phone number"):
+    """
+    Utility function to clean and validate Philippine phone numbers.
+    
+    Args:
+        phone: The phone number string to clean
+        field_name: Name of the field for error messages
+    
+    Returns:
+        Cleaned phone number string or empty string if invalid/empty
+        
+    Raises:
+        ValidationError: If phone number format is invalid
+    """
+    if not phone:
+        return ''
+    
+    # Strip whitespace and handle None values
+    phone = phone.strip()
+    if not phone:
+        return ''
+        
+    # Remove spaces and dashes
+    phone = phone.replace(' ', '').replace('-', '')
+    
+    # Convert local format to international
+    if phone.startswith('09'):
+        phone = '+63' + phone[1:]
+    elif phone.startswith('9') and len(phone) == 10:
+        phone = '+63' + phone
+    
+    # Validate format
+    if not phone.startswith('+63') or len(phone) != 13:
+        if not (phone.startswith('09') and len(phone) == 11):
+            raise ValidationError(f'Please enter a valid Philippine {field_name} (e.g., +639123456789 or 09123456789)')
+    
+    return phone
+
+
 class PatientForm(forms.ModelForm):
     """Form for creating and updating patient information"""
     
@@ -89,24 +129,9 @@ class PatientForm(forms.ModelForm):
         return email
     
     def clean_contact_number(self):
-        """Clean and validate contact number"""
-        contact_number = self.cleaned_data.get('contact_number', '').strip()
-        if contact_number:
-            # Remove spaces and dashes
-            contact_number = contact_number.replace(' ', '').replace('-', '')
-            
-            # Convert local format to international
-            if contact_number.startswith('09'):
-                contact_number = '+63' + contact_number[1:]
-            elif contact_number.startswith('9') and len(contact_number) == 10:
-                contact_number = '+63' + contact_number
-            
-            # Validate format
-            if not contact_number.startswith('+63') or len(contact_number) != 13:
-                if not (contact_number.startswith('09') and len(contact_number) == 11):
-                    raise ValidationError('Please enter a valid Philippine phone number (e.g., +639123456789 or 09123456789)')
-        
-        return contact_number
+        """Clean and validate contact number using utility function"""
+        contact_number = self.cleaned_data.get('contact_number')
+        return clean_philippine_phone_number(contact_number, "phone number")
     
     def clean_date_of_birth(self):
         """Validate date of birth"""
@@ -123,22 +148,9 @@ class PatientForm(forms.ModelForm):
         return dob
     
     def clean_emergency_contact_phone(self):
-        """Clean emergency contact phone"""
-        phone = self.cleaned_data.get('emergency_contact_phone', '').strip()
-        if phone:
-            # Same validation as contact_number
-            phone = phone.replace(' ', '').replace('-', '')
-            
-            if phone.startswith('09'):
-                phone = '+63' + phone[1:]
-            elif phone.startswith('9') and len(phone) == 10:
-                phone = '+63' + phone
-            
-            if not phone.startswith('+63') or len(phone) != 13:
-                if not (phone.startswith('09') and len(phone) == 11):
-                    raise ValidationError('Please enter a valid Philippine phone number for emergency contact.')
-        
-        return phone
+        """Clean emergency contact phone using utility function"""
+        phone = self.cleaned_data.get('emergency_contact_phone')
+        return clean_philippine_phone_number(phone, "emergency contact phone number")
     
     def clean(self):
         """Cross-field validation"""
@@ -196,24 +208,27 @@ class FindPatientForm(forms.Form):
     
     def clean_identifier(self):
         """Clean and validate identifier"""
-        identifier = self.cleaned_data.get('identifier', '').strip()
+        identifier = self.cleaned_data.get('identifier')
+        if not identifier:
+            raise ValidationError('Please enter an email address or phone number.')
+        
+        # Strip whitespace and handle None values
+        identifier = identifier.strip()
         if not identifier:
             raise ValidationError('Please enter an email address or phone number.')
         
         # Basic validation - check if it looks like email or phone
         if '@' in identifier:
             # Looks like email
-            if not forms.EmailField().clean(identifier):
+            try:
+                forms.EmailField().clean(identifier)
+            except ValidationError:
                 raise ValidationError('Please enter a valid email address.')
         else:
-            # Assume it's a phone number
-            phone = identifier.replace(' ', '').replace('-', '')
-            if phone.startswith('09'):
-                phone = '+63' + phone[1:]
-            elif phone.startswith('9') and len(phone) == 10:
-                phone = '+63' + phone
-            
-            if not (phone.startswith('+63') and len(phone) == 13) and not (phone.startswith('09') and len(phone) == 11):
+            # Assume it's a phone number - use utility function
+            try:
+                clean_philippine_phone_number(identifier, "phone number")
+            except ValidationError:
                 raise ValidationError('Please enter a valid phone number or email address.')
         
         return identifier

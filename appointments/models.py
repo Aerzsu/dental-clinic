@@ -68,7 +68,7 @@ class Appointment(models.Model):
     staff_notes = models.TextField(blank=True)
     
     class Meta:
-        ordering = ['requested_at']  # Changed from schedule__date to avoid field lookup issues
+        ordering = ['requested_at']
         indexes = [
             models.Index(fields=['status']),
             models.Index(fields=['patient']),
@@ -81,7 +81,10 @@ class Appointment(models.Model):
     
     @property
     def appointment_datetime(self):
-        return datetime.combine(self.schedule.date, self.schedule.start_time)
+        """Returns timezone-aware datetime for appointment"""
+        naive_dt = datetime.combine(self.schedule.date, self.schedule.start_time)
+        # Make it timezone-aware using the current timezone
+        return timezone.make_aware(naive_dt) if timezone.is_naive(naive_dt) else naive_dt
     
     @property
     def is_today(self):
@@ -96,7 +99,13 @@ class Appointment(models.Model):
         """Can be cancelled if at least 24 hours before appointment"""
         if self.status in ['cancelled', 'completed', 'did_not_arrive']:
             return False
-        return self.appointment_datetime > timezone.now() + timedelta(hours=24)
+        
+        # Compare timezone-aware datetimes
+        current_time = timezone.now()
+        appointment_time = self.appointment_datetime
+        cutoff_time = current_time + timedelta(hours=24)
+        
+        return appointment_time > cutoff_time
     
     def approve(self, approved_by_user):
         """Approve the appointment"""

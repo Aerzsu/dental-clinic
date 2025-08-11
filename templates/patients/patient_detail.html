@@ -1,352 +1,383 @@
-{% extends "base.html" %}
+<!-- templates/patients/patient_detail.html -->
+{% extends 'base.html' %}
 {% load user_tags %}
 
-{% block title %}{{ patient.full_name }} - Patient Details - Dental Clinic{% endblock %}
+{% block title %}{{ patient.full_name }} - Patient Details - {{ block.super }}{% endblock %}
 
 {% block content %}
-<div class="max-w-7xl mx-auto">
+<div class="max-w-4xl mx-auto space-y-6">
     <!-- Header -->
-    <div class="mb-8">
-        <div class="flex items-center justify-between">
-            <div>
-                <h1 class="text-3xl font-bold text-gray-900">{{ patient.full_name }}</h1>
-                <p class="mt-2 text-sm text-gray-600">Patient ID: #{{ patient.pk }}</p>
+    <div>
+        <!-- Back button -->
+        <div class="mb-4">
+            <a href="{% url 'patients:patient_list' %}" 
+               class="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-colors">
+                <svg class="-ml-1 mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                </svg>
+                Back to Patient Management
+            </a>
+        </div>
+        
+        <!-- Breadcrumb -->
+        <div class="flex items-center space-x-2 text-sm text-gray-500 mb-2">
+            <a href="{% url 'patients:patient_list' %}" class="hover:text-gray-700">Patient Management</a>
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+            </svg>
+            <span>{{ patient.full_name }}</span>
+        </div>
+        
+        <div class="flex justify-between items-start">
+            <div class="flex items-center space-x-4">
+                <div class="h-16 w-16 rounded-full bg-primary-600 flex items-center justify-center">
+                    <span class="text-xl font-medium text-white">
+                        {{ patient.first_name|first }}{{ patient.last_name|first }}
+                    </span>
+                </div>
+                <div>
+                    <div class="flex items-center space-x-3">
+                        <h1 class="text-2xl font-bold text-gray-900">
+                            {{ patient.full_name }}
+                        </h1>
+                        {% if patient.is_minor %}
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                                Minor
+                            </span>
+                        {% endif %}
+                    </div>
+                    {% if patient.age %}
+                        <p class="mt-1 text-gray-600">Age: {{ patient.age }}</p>
+                    {% endif %}
+                    {% if patient.contact_info %}
+                        <p class="text-sm text-gray-500">{{ patient.contact_info }}</p>
+                    {% endif %}
+                </div>
             </div>
-            <div class="flex space-x-3">
-                <a href="{% url 'patients:patient_list' %}" 
-                   class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
-                    <svg class="-ml-1 mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
-                    </svg>
-                    Back to Patients
-                </a>
-                <a href="{% url 'patients:patient_update' patient.pk %}" 
-                   class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
-                    <svg class="-ml-1 mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
-                    </svg>
-                    Edit Patient
-                </a>
+            
+            <!-- Actions -->
+            <div class="flex items-center space-x-3">
                 {% if user|has_permission:'appointments' %}
                 <a href="{% url 'appointments:appointment_create' %}?patient={{ patient.pk }}" 
-                   class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
-                    <svg class="-ml-1 mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                   class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors">
+                    <svg class="-ml-1 mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
                     </svg>
                     Book Appointment
                 </a>
                 {% endif %}
+                <a href="{% url 'patients:patient_update' patient.pk %}" 
+                   class="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-colors">
+                    <svg class="-ml-1 mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                    </svg>
+                    Edit Patient
+                </a>
             </div>
         </div>
     </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <!-- Patient Information -->
-        <div class="lg:col-span-1">
-            <!-- Basic Info Card -->
-            <div class="bg-white shadow rounded-lg p-6 mb-6">
-                <div class="flex items-center mb-6">
-                    <div class="flex-shrink-0 h-16 w-16">
-                        <div class="h-16 w-16 rounded-full bg-primary-600 flex items-center justify-center">
-                            <span class="text-xl font-medium text-white">
-                                {{ patient.first_name|first }}{{ patient.last_name|first }}
-                            </span>
-                        </div>
-                    </div>
-                    <div class="ml-4">
-                        <h3 class="text-lg font-medium text-gray-900">{{ patient.full_name }}</h3>
-                        {% if patient.date_of_birth %}
-                        <p class="text-sm text-gray-500">
-                            Age: {{ patient.age }}
-                            {% if patient.is_minor %}
-                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 ml-2">
-                                    Minor
-                                </span>
-                            {% endif %}
-                        </p>
-                        {% endif %}
-                        <div class="flex items-center mt-1">
-                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-                                {% if patient.is_active %}bg-green-100 text-green-800{% else %}bg-red-100 text-red-800{% endif %}">
-                                {% if patient.is_active %}Active{% else %}Inactive{% endif %}
-                            </span>
-                        </div>
-                    </div>
+    <!-- Patient Details -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Main Details -->
+        <div class="lg:col-span-2 space-y-6">
+            <!-- Personal Information -->
+            <div class="bg-white shadow rounded-lg overflow-hidden">
+                <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
+                    <h3 class="text-lg leading-6 font-medium text-gray-900">Personal Information</h3>
                 </div>
-
-                <dl class="space-y-4">
-                    {% if patient.date_of_birth %}
-                    <div>
-                        <dt class="text-sm font-medium text-gray-500">Date of Birth</dt>
-                        <dd class="mt-1 text-sm text-gray-900">{{ patient.date_of_birth|date:"F d, Y" }}</dd>
-                    </div>
-                    {% endif %}
-
-                    <div>
-                        <dt class="text-sm font-medium text-gray-500">Contact Information</dt>
-                        <dd class="mt-1 text-sm text-gray-900">
-                            {% if patient.email %}
-                                <div class="flex items-center">
-                                    <svg class="flex-shrink-0 h-4 w-4 text-gray-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207"></path>
-                                    </svg>
-                                    <a href="mailto:{{ patient.email }}" class="text-primary-600 hover:text-primary-500">{{ patient.email }}</a>
-                                </div>
-                            {% endif %}
-                            {% if patient.contact_number %}
-                                <div class="flex items-center mt-1">
-                                    <svg class="flex-shrink-0 h-4 w-4 text-gray-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"></path>
-                                    </svg>
-                                    <a href="tel:{{ patient.contact_number }}" class="text-primary-600 hover:text-primary-500">{{ patient.contact_number }}</a>
-                                </div>
-                            {% endif %}
-                            {% if not patient.email and not patient.contact_number %}
-                                <span class="text-gray-400 text-sm">No contact information</span>
-                            {% endif %}
-                        </dd>
-                    </div>
-
-                    {% if patient.address %}
-                    <div>
-                        <dt class="text-sm font-medium text-gray-500">Address</dt>
-                        <dd class="mt-1 text-sm text-gray-900">{{ patient.address }}</dd>
-                    </div>
-                    {% endif %}
-
-                    {% if patient.emergency_contact_name or patient.emergency_contact_phone %}
-                    <div>
-                        <dt class="text-sm font-medium text-gray-500">Emergency Contact</dt>
-                        <dd class="mt-1 text-sm text-gray-900">
-                            {% if patient.emergency_contact_name %}
-                                <div>{{ patient.emergency_contact_name }}</div>
-                            {% endif %}
-                            {% if patient.emergency_contact_phone %}
-                                <a href="tel:{{ patient.emergency_contact_phone }}" class="text-primary-600 hover:text-primary-500">{{ patient.emergency_contact_phone }}</a>
-                            {% endif %}
-                        </dd>
-                    </div>
-                    {% endif %}
-
-                    <div>
-                        <dt class="text-sm font-medium text-gray-500">Patient Since</dt>
-                        <dd class="mt-1 text-sm text-gray-900">{{ patient.created_at|date:"F d, Y" }}</dd>
-                    </div>
-
-                    <div>
-                        <dt class="text-sm font-medium text-gray-500">Last Updated</dt>
-                        <dd class="mt-1 text-sm text-gray-900">{{ patient.updated_at|date:"M d, Y g:i A" }}</dd>
-                    </div>
-                </dl>
-            </div>
-
-            <!-- Quick Stats -->
-            <div class="bg-white shadow rounded-lg p-6">
-                <h3 class="text-lg font-medium text-gray-900 mb-4">Quick Stats</h3>
-                <div class="space-y-4">
-                    <div class="flex items-center justify-between">
-                        <span class="text-sm text-gray-500">Total Appointments</span>
-                        <span class="text-lg font-semibold text-gray-900">{{ appointments.count }}</span>
-                    </div>
-                    <div class="flex items-center justify-between">
-                        <span class="text-sm text-gray-500">Completed Visits</span>
-                        <span class="text-lg font-semibold text-green-600">{{ completed_appointments.count }}</span>
-                    </div>
-                    <div class="flex items-center justify-between">
-                        <span class="text-sm text-gray-500">Upcoming</span>
-                        <span class="text-lg font-semibold text-blue-600">{{ upcoming_appointments.count }}</span>
-                    </div>
-                    <div class="flex items-center justify-between">
-                        <span class="text-sm text-gray-500">Cancelled</span>
-                        <span class="text-lg font-semibold text-red-600">{{ cancelled_appointments.count }}</span>
-                    </div>
+                <div class="px-4 py-5 sm:p-6">
+                    <dl class="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2">
+                        <div>
+                            <dt class="text-sm font-medium text-gray-500">Full Name</dt>
+                            <dd class="mt-1 text-sm text-gray-900">{{ patient.full_name }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-sm font-medium text-gray-500">Date of Birth</dt>
+                            <dd class="mt-1 text-sm text-gray-900">
+                                {% if patient.date_of_birth %}
+                                    {{ patient.date_of_birth|date:"M j, Y" }}
+                                    {% if patient.age %}(Age: {{ patient.age }}){% endif %}
+                                {% else %}
+                                    <span class="text-gray-400">Not provided</span>
+                                {% endif %}
+                            </dd>
+                        </div>
+                        <div>
+                            <dt class="text-sm font-medium text-gray-500">Email Address</dt>
+                            <dd class="mt-1 text-sm text-gray-900">
+                                {% if patient.email %}
+                                    <a href="mailto:{{ patient.email }}" class="text-primary-600 hover:text-primary-700 flex items-center">
+                                        <svg class="h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                                        </svg>
+                                        {{ patient.email }}
+                                    </a>
+                                {% else %}
+                                    <span class="text-gray-400">Not provided</span>
+                                {% endif %}
+                            </dd>
+                        </div>
+                        <div>
+                            <dt class="text-sm font-medium text-gray-500">Contact Number</dt>
+                            <dd class="mt-1 text-sm text-gray-900">
+                                {% if patient.contact_number %}
+                                    <a href="tel:{{ patient.contact_number }}" class="text-primary-600 hover:text-primary-700 flex items-center">
+                                        <svg class="h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"></path>
+                                        </svg>
+                                        {{ patient.contact_number }}
+                                    </a>
+                                {% else %}
+                                    <span class="text-gray-400">Not provided</span>
+                                {% endif %}
+                            </dd>
+                        </div>
+                        <div class="sm:col-span-2">
+                            <dt class="text-sm font-medium text-gray-500">Address</dt>
+                            <dd class="mt-1 text-sm text-gray-900">
+                                {% if patient.address %}
+                                    {{ patient.address|linebreaksbr }}
+                                {% else %}
+                                    <span class="text-gray-400">Not provided</span>
+                                {% endif %}
+                            </dd>
+                        </div>
+                    </dl>
                 </div>
             </div>
-        </div>
-
-        <!-- Appointment History and Medical Info -->
-        <div class="lg:col-span-2">
-            <!-- Medical Notes -->
-            {% if patient.medical_notes %}
-            <div class="bg-white shadow rounded-lg p-6 mb-6">
-                <h3 class="text-lg font-medium text-gray-900 mb-4">Medical Notes</h3>
-                <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4">
-                    <div class="flex">
-                        <div class="flex-shrink-0">
-                            <svg class="h-5 w-5 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L3.314 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
-                            </svg>
-                        </div>
-                        <div class="ml-3">
-                            <p class="text-sm text-yellow-700">{{ patient.medical_notes|linebreaksbr }}</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            {% endif %}
 
             <!-- Appointment History -->
-            <div class="bg-white shadow rounded-lg" id="appointments">
-                <div class="px-6 py-4 border-b border-gray-200">
-                    <div class="flex items-center justify-between">
-                        <h3 class="text-lg font-medium text-gray-900">Appointment History</h3>
-                        {% if user|has_permission:'appointments' %}
-                        <a href="{% url 'appointments:appointment_create' %}?patient={{ patient.pk }}" 
-                           class="inline-flex items-center px-3 py-1 border border-transparent rounded-md text-sm font-medium text-white bg-primary-600 hover:bg-primary-700">
-                            <svg class="-ml-1 mr-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
-                            </svg>
-                            New Appointment
-                        </a>
-                        {% endif %}
-                    </div>
+            <div class="bg-white shadow rounded-lg overflow-hidden">
+                <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
+                    <h3 class="text-lg leading-6 font-medium text-gray-900">Appointment History</h3>
+                    <p class="mt-1 text-sm text-gray-500">Complete appointment history for this patient</p>
                 </div>
-
-                {% if appointments %}
-                    <div class="overflow-x-auto">
-                        <table class="min-w-full divide-y divide-gray-200">
-                            <thead class="bg-gray-50">
-                                <tr>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                        Date & Time
-                                    </th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                        Service
-                                    </th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                        Dentist
-                                    </th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                        Status
-                                    </th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                        Actions
-                                    </th>
-                                </tr>
-                            </thead>
-                            <tbody class="bg-white divide-y divide-gray-200">
-                                {% for appointment in appointments %}
-                                <tr class="hover:bg-gray-50">
-                                    <td class="px-6 py-4 whitespace-nowrap">
-                                        <div class="text-sm font-medium text-gray-900">
-                                            {{ appointment.schedule.date|date:"M d, Y" }}
+                <div class="px-4 py-5 sm:p-6">
+                    {% if appointments %}
+                        <div class="space-y-4">
+                            {% for appointment in appointments|slice:":5" %}
+                                <div class="border-l-4 {% if appointment.status == 'completed' %}border-green-400{% elif appointment.status == 'approved' %}border-blue-400{% elif appointment.status == 'pending' %}border-yellow-400{% else %}border-red-400{% endif %} pl-4">
+                                    <div class="flex items-center justify-between">
+                                        <div>
+                                            <h4 class="text-sm font-medium text-gray-900">
+                                                {{ appointment.service.name }}
+                                            </h4>
+                                            <p class="text-sm text-gray-500">
+                                                {{ appointment.schedule.date|date:"M j, Y" }} at {{ appointment.schedule.start_time|time:"g:i A" }}
+                                                {% if appointment.dentist %}
+                                                    - Dr. {{ appointment.dentist.get_full_name|default:appointment.dentist.username }}
+                                                {% endif %}
+                                            </p>
                                         </div>
-                                        <div class="text-sm text-gray-500">
-                                            {{ appointment.schedule.start_time|time:"g:i A" }} - {{ appointment.schedule.end_time|time:"g:i A" }}
-                                        </div>
-                                    </td>
-                                    <td class="px-6 py-4 whitespace-nowrap">
-                                        <div class="text-sm text-gray-900">{{ appointment.service.name }}</div>
-                                        {% if appointment.reason %}
-                                        <div class="text-sm text-gray-500">{{ appointment.reason|truncatechars:50 }}</div>
-                                        {% endif %}
-                                    </td>
-                                    <td class="px-6 py-4 whitespace-nowrap">
-                                        <div class="text-sm text-gray-900">{{ appointment.dentist.full_name }}</div>
-                                    </td>
-                                    <td class="px-6 py-4 whitespace-nowrap">
                                         <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
                                             {% if appointment.status == 'completed' %}bg-green-100 text-green-800
                                             {% elif appointment.status == 'approved' %}bg-blue-100 text-blue-800
                                             {% elif appointment.status == 'pending' %}bg-yellow-100 text-yellow-800
-                                            {% elif appointment.status == 'cancelled' %}bg-red-100 text-red-800
-                                            {% elif appointment.status == 'rejected' %}bg-red-100 text-red-800
-                                            {% elif appointment.status == 'did_not_arrive' %}bg-gray-100 text-gray-800
-                                            {% else %}bg-gray-100 text-gray-800{% endif %}">
+                                            {% else %}bg-red-100 text-red-800{% endif %}">
                                             {{ appointment.get_status_display }}
                                         </span>
-                                    </td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                        {% if user|has_permission:'appointments' %}
-                                            <a href="{% url 'appointments:appointment_detail' appointment.pk %}" 
-                                               class="text-primary-600 hover:text-primary-900">View</a>
-                                            {% if appointment.status == 'pending' and user|has_permission:'appointments' %}
-                                                <span class="text-gray-300 mx-1">|</span>
-                                                <a href="#" class="text-green-600 hover:text-green-900">Approve</a>
-                                                <span class="text-gray-300 mx-1">|</span>
-                                                <a href="#" class="text-red-600 hover:text-red-900">Reject</a>
-                                            {% elif appointment.can_be_cancelled %}
-                                                <span class="text-gray-300 mx-1">|</span>
-                                                <a href="#" class="text-red-600 hover:text-red-900">Cancel</a>
-                                            {% endif %}
-                                        {% endif %}
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                {% else %}
-                    <div class="text-center py-12">
-                        <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
-                        </svg>
-                        <h3 class="mt-2 text-sm font-medium text-gray-900">No appointments yet</h3>
-                        <p class="mt-1 text-sm text-gray-500">This patient hasn't had any appointments yet.</p>
-                        {% if user|has_permission:'appointments' %}
-                        <div class="mt-6">
-                            <a href="{% url 'appointments:appointment_create' %}?patient={{ patient.pk }}" 
-                               class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700">
-                                <svg class="-ml-1 mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
-                                </svg>
-                                Book First Appointment
-                            </a>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                            {% if appointments.count > 5 %}
+                                <div class="text-center pt-4">
+                                    <p class="text-sm text-gray-500">Showing 5 of {{ appointments.count }} appointments</p>
+                                </div>
+                            {% endif %}
                         </div>
-                        {% endif %}
-                    </div>
-                {% endif %}
+                    {% else %}
+                        <div class="text-center py-8">
+                            <svg class="mx-auto h-12 w-12 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                            </svg>
+                            <h4 class="text-sm font-medium text-gray-900 mb-1">No Appointments</h4>
+                            <p class="text-sm text-gray-500">This patient has no appointment history.</p>
+                            {% if user|has_permission:'appointments' %}
+                                <div class="mt-4">
+                                    <a href="{% url 'appointments:appointment_create' %}?patient={{ patient.pk }}" 
+                                       class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700">
+                                        Book First Appointment
+                                    </a>
+                                </div>
+                            {% endif %}
+                        </div>
+                    {% endif %}
+                </div>
             </div>
 
-            <!-- Treatment Notes Section -->
-            <div class="bg-white shadow rounded-lg mt-6">
-                <div class="px-6 py-4 border-b border-gray-200">
-                    <h3 class="text-lg font-medium text-gray-900">Treatment Notes</h3>
+            <!-- Medical Notes -->
+            <div class="bg-white shadow rounded-lg overflow-hidden">
+                <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
+                    <h3 class="text-lg leading-6 font-medium text-gray-900">Medical Notes</h3>
+                    <p class="mt-1 text-sm text-gray-500">Allergies, medical conditions, and important notes</p>
                 </div>
-                {% if patient.treatment_notes.exists %}
-                    <div class="divide-y divide-gray-200">
-                        {% for note in patient.treatment_notes.all|slice:":5" %}
-                        <div class="p-6">
-                            <div class="flex items-start space-x-3">
-                                <div class="flex-shrink-0">
-                                    <div class="h-8 w-8 rounded-full bg-gray-400 flex items-center justify-center">
-                                        <span class="text-xs font-medium text-white">{{ note.recorded_by.first_name|first }}{{ note.recorded_by.last_name|first }}</span>
-                                    </div>
-                                </div>
-                                <div class="flex-1 min-w-0">
-                                    <div class="text-sm text-gray-900">
-                                        {{ note.notes|linebreaksbr }}
-                                    </div>
-                                    {% if note.tooth_number %}
-                                    <div class="mt-1 text-xs text-gray-500">
-                                        Tooth: {{ note.tooth_number }}
-                                    </div>
-                                    {% endif %}
-                                    <div class="mt-2 flex items-center space-x-2">
-                                        <span class="text-xs text-gray-500">{{ note.date_recorded|date:"M d, Y g:i A" }}</span>
-                                        <span class="text-xs text-gray-500">by {{ note.recorded_by.full_name }}</span>
-                                        {% if note.uploaded_file %}
-                                        <a href="{{ note.uploaded_file.url }}" class="text-xs text-primary-600 hover:text-primary-500">View File</a>
-                                        {% endif %}
-                                    </div>
-                                </div>
+                <div class="px-4 py-5 sm:p-6">
+                    {% if patient.medical_notes %}
+                        <div class="prose prose-sm max-w-none">
+                            <p class="text-sm text-gray-900">{{ patient.medical_notes|linebreaksbr }}</p>
+                        </div>
+                    {% else %}
+                        <div class="text-center text-gray-500 py-8">
+                            <svg class="mx-auto h-12 w-12 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                            <h4 class="text-sm font-medium text-gray-900 mb-1">No Medical Notes</h4>
+                            <p class="text-sm text-gray-500">No medical notes or allergies have been recorded.</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Emergency Contact -->
+            <div class="bg-white shadow rounded-lg overflow-hidden">
+                <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
+                    <h3 class="text-lg leading-6 font-medium text-gray-900">Emergency Contact</h3>
+                </div>
+                <div class="px-4 py-5 sm:p-6">
+                    {% if patient.emergency_contact_name or patient.emergency_contact_phone %}
+                        <dl class="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2">
+                            <div>
+                                <dt class="text-sm font-medium text-gray-500">Contact Name</dt>
+                                <dd class="mt-1 text-sm text-gray-900">
+                                    {{ patient.emergency_contact_name|default:"Not provided" }}
+                                </dd>
                             </div>
+                            <div>
+                                <dt class="text-sm font-medium text-gray-500">Contact Phone</dt>
+                                <dd class="mt-1 text-sm text-gray-900">
+                                    {% if patient.emergency_contact_phone %}
+                                        <a href="tel:{{ patient.emergency_contact_phone }}" class="text-primary-600 hover:text-primary-700 flex items-center">
+                                            <svg class="h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"></path>
+                                            </svg>
+                                            {{ patient.emergency_contact_phone }}
+                                        </a>
+                                    {% else %}
+                                        <span class="text-gray-400">Not provided</span>
+                                    {% endif %}
+                                </dd>
+                            </div>
+                        </dl>
+                    {% else %}
+                        <div class="text-center text-gray-500 py-8">
+                            <svg class="mx-auto h-12 w-12 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                            </svg>
+                            <h4 class="text-sm font-medium text-gray-900 mb-1">No Emergency Contact</h4>
+                            <p class="text-sm text-gray-500">Emergency contact information has not been provided.</p>
                         </div>
-                        {% endfor %}
-                        {% if patient.treatment_notes.count > 5 %}
-                        <div class="px-6 py-3 bg-gray-50">
-                            <p class="text-sm text-gray-500 text-center">
-                                Showing 5 of {{ patient.treatment_notes.count }} treatment notes
-                            </p>
-                        </div>
+                    {% endif %}
+                </div>
+            </div>       
+
+        </div>
+
+        <!-- Sidebar -->
+        <div class="space-y-6">
+            <!-- Quick Actions -->
+            <div class="bg-white shadow rounded-lg overflow-hidden">
+                <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
+                    <h3 class="text-lg leading-6 font-medium text-gray-900">Quick Actions</h3>
+                </div>
+                <div class="px-4 py-5 sm:p-6">
+                    <div class="space-y-3">
+                        {% if patient.email %}
+                        <a href="mailto:{{ patient.email }}" 
+                           class="block w-full text-left px-3 py-2 text-sm font-medium text-gray-700 hover:text-gray-800 hover:bg-gray-50 rounded-md transition-colors">
+                            <svg class="inline h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                            </svg>
+                            Send Email
+                        </a>
+                        {% endif %}
+
+                        {% if patient.contact_number %}
+                        <a href="tel:{{ patient.contact_number }}" 
+                           class="block w-full text-left px-3 py-2 text-sm font-medium text-gray-700 hover:text-gray-800 hover:bg-gray-50 rounded-md transition-colors">
+                            <svg class="inline h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"></path>
+                            </svg>
+                            Call Patient
+                        </a>
                         {% endif %}
                     </div>
-                {% else %}
-                    <div class="text-center py-6">
-                        <p class="text-sm text-gray-500">No treatment notes recorded yet.</p>
-                    </div>
-                {% endif %}
+                </div>
             </div>
+
+            <!-- Patient Statistics -->
+            <div class="bg-white shadow rounded-lg overflow-hidden">
+                <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
+                    <h3 class="text-lg leading-6 font-medium text-gray-900">Patient Statistics</h3>
+                    <p class="mt-1 text-sm text-gray-500">Account overview</p>
+                </div>
+                <div class="px-4 py-5 sm:p-6">
+                    <dl class="space-y-4">
+                        <div>
+                            <dt class="text-xs font-medium text-gray-500 uppercase tracking-wide">Patient Since</dt>
+                            <dd class="mt-1 text-sm text-gray-900">
+                                {{ patient.created_at|date:"M j, Y" }}
+                                <div class="text-xs text-gray-500">{{ patient.created_at|timesince }} ago</div>
+                            </dd>
+                        </div>
+                        <div>
+                            <dt class="text-xs font-medium text-gray-500 uppercase tracking-wide">Total Appointments</dt>
+                            <dd class="mt-1 text-sm text-gray-900">{{ appointments.count|default:0 }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-xs font-medium text-gray-500 uppercase tracking-wide">Completed Visits</dt>
+                            <dd class="mt-1 text-sm text-gray-900">{{ completed_appointments.count|default:0 }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-xs font-medium text-gray-500 uppercase tracking-wide">Upcoming Appointments</dt>
+                            <dd class="mt-1 text-sm text-gray-900">{{ upcoming_appointments.count|default:0 }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-xs font-medium text-gray-500 uppercase tracking-wide">Account Status</dt>
+                            <dd class="mt-1">
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium 
+                                    {% if patient.is_active %}bg-green-100 text-green-800{% else %}bg-red-100 text-red-800{% endif %}">
+                                    <svg class="-ml-0.5 mr-1.5 h-2 w-2 
+                                        {% if patient.is_active %}text-green-400{% else %}text-red-400{% endif %}" fill="currentColor" viewBox="0 0 8 8">
+                                        <circle cx="4" cy="4" r="3"></circle>
+                                    </svg>
+                                    {% if patient.is_active %}Active{% else %}Inactive{% endif %}
+                                </span>
+                            </dd>
+                        </div>
+                        <div>
+                            <dt class="text-xs font-medium text-gray-500 uppercase tracking-wide">Last Updated</dt>
+                            <dd class="mt-1 text-sm text-gray-900">
+                                {{ patient.updated_at|date:"M j, Y \a\t g:i A" }}
+                            </dd>
+                        </div>
+                    </dl>
+                </div>
+            </div>
+
+            <!-- Upcoming Appointments -->
+            {% if upcoming_appointments %}
+            <div class="bg-white shadow rounded-lg overflow-hidden">
+                <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
+                    <h3 class="text-lg leading-6 font-medium text-gray-900">Upcoming Appointments</h3>
+                </div>
+                <div class="px-4 py-5 sm:p-6">
+                    <div class="space-y-3">
+                        {% for appointment in upcoming_appointments|slice:":3" %}
+                            <div class="border-l-4 border-blue-400 pl-3">
+                                <p class="text-sm font-medium text-gray-900">{{ appointment.service.name }}</p>
+                                <p class="text-xs text-gray-500">
+                                    {{ appointment.schedule.date|date:"M j, Y" }} at {{ appointment.schedule.start_time|time:"g:i A" }}
+                                </p>
+                                {% if appointment.dentist %}
+                                    <p class="text-xs text-gray-400">Dr. {{ appointment.dentist.get_full_name|default:appointment.dentist.username }}</p>
+                                {% endif %}
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            {% endif %}
         </div>
     </div>
 </div>

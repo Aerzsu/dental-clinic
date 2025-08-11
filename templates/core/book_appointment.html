@@ -50,6 +50,31 @@
         </div>
     </div>
 
+    <!-- Error Banner -->
+    <div x-show="errorMessage" class="max-w-4xl mx-auto mb-6">
+        <div class="bg-red-50 border-l-4 border-red-400 p-4">
+            <div class="flex">
+                <div class="flex-shrink-0">
+                    <svg class="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L10 9.414l1.707-1.707a1 1 0 011.414 1.414L11.414 10l1.707 1.707a1 1 0 01-1.414 1.414L10 10.586l-1.707 1.707a1 1 0 01-1.414-1.414L8.586 10 6.879 8.293a1 1 0 011.414-1.414L10 8.586z" clip-rule="evenodd" />
+                    </svg>
+                </div>
+                <div class="ml-3">
+                    <p class="text-sm text-red-700" x-text="errorMessage"></p>
+                </div>
+                <div class="ml-auto pl-3">
+                    <div class="-mx-1.5 -my-1.5">
+                        <button type="button" @click="errorMessage = ''" class="inline-flex bg-red-50 rounded-md p-1.5 text-red-400 hover:bg-red-100">
+                            <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Warning Banner -->
     <div class="max-w-4xl mx-auto mb-6">
         <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4">
@@ -101,10 +126,10 @@
                 
                 <!-- Patient Type Selection -->
                 <div class="mb-6">
-                    <label class="text-base font-medium text-gray-900 block mb-3">Are you a new or existing patient?</label>
+                    <label class="text-base font-medium text-gray-900 block mb-3">Are you a new or existing patient? *</label>
                     <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <label class="relative">
-                            <input type="radio" x-model="form.patient_type" value="new" class="sr-only">
+                            <input type="radio" x-model="form.patient_type" value="new" class="sr-only" @change="clearErrors()">
                             <div class="p-4 border rounded-lg cursor-pointer transition-all" 
                                  :class="form.patient_type === 'new' ? 'border-primary-600 bg-primary-50 ring-2 ring-primary-600' : 'border-gray-300 hover:border-gray-400'">
                                 <div class="flex items-center">
@@ -117,7 +142,7 @@
                             </div>
                         </label>
                         <label class="relative">
-                            <input type="radio" x-model="form.patient_type" value="existing" class="sr-only">
+                            <input type="radio" x-model="form.patient_type" value="existing" class="sr-only" @change="clearErrors()">
                             <div class="p-4 border rounded-lg cursor-pointer transition-all" 
                                  :class="form.patient_type === 'existing' ? 'border-primary-600 bg-primary-50 ring-2 ring-primary-600' : 'border-gray-300 hover:border-gray-400'">
                                 <div class="flex items-center">
@@ -130,16 +155,19 @@
                             </div>
                         </label>
                     </div>
+                    <p x-show="errors.patient_type" class="mt-2 text-sm text-red-600" x-text="errors.patient_type"></p>
                 </div>
 
                 <!-- Existing Patient Form -->
                 <div x-show="form.patient_type === 'existing'" class="space-y-6">
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Email Address or Contact Number</label>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Email Address or Contact Number *</label>
                         <input type="text" x-model="form.patient_identifier" 
-                               class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
-                               placeholder="patient@example.com or +639123456789">
+                               :class="['w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500', errors.patient_identifier ? 'border-red-300' : 'border-gray-300']"
+                               placeholder="patient@example.com or +639123456789"
+                               @input="clearErrors('patient_identifier')">
                         <p class="mt-1 text-sm text-gray-500">Enter your email or phone number to find your record</p>
+                        <p x-show="errors.patient_identifier" class="mt-1 text-sm text-red-600" x-text="errors.patient_identifier"></p>
                     </div>
                     <div x-show="patientFound" class="p-4 bg-green-50 border border-green-200 rounded-md">
                         <div class="flex">
@@ -153,6 +181,9 @@
                             </div>
                         </div>
                     </div>
+                    <div x-show="form.patient_identifier && !patientFound && !searchingPatient" class="p-4 bg-red-50 border border-red-200 rounded-md">
+                        <p class="text-sm text-red-700">No patient record found with this information. Please check your details or register as a new patient.</p>
+                    </div>
                 </div>
 
                 <!-- New Patient Form -->
@@ -160,26 +191,39 @@
                     <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-2">First Name *</label>
-                            <input type="text" x-model="form.first_name" required
-                                   class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500">
+                            <input type="text" x-model="form.first_name" 
+                                   :class="['w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500', errors.first_name ? 'border-red-300' : 'border-gray-300']"
+                                   @input="clearErrors('first_name')"
+                                   @blur="validateName('first_name')">
+                            <p x-show="errors.first_name" class="mt-1 text-sm text-red-600" x-text="errors.first_name"></p>
                         </div>
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-2">Last Name *</label>
-                            <input type="text" x-model="form.last_name" required
-                                   class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500">
+                            <input type="text" x-model="form.last_name" 
+                                   :class="['w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500', errors.last_name ? 'border-red-300' : 'border-gray-300']"
+                                   @input="clearErrors('last_name')"
+                                   @blur="validateName('last_name')">
+                            <p x-show="errors.last_name" class="mt-1 text-sm text-red-600" x-text="errors.last_name"></p>
                         </div>
                     </div>
                     <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-2">Email Address *</label>
-                            <input type="email" x-model="form.email" required
-                                   class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500">
+                            <input type="email" x-model="form.email" 
+                                   :class="['w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500', errors.email ? 'border-red-300' : 'border-gray-300']"
+                                   @input="clearErrors('email')"
+                                   @blur="validateEmail()">
+                            <p x-show="errors.email" class="mt-1 text-sm text-red-600" x-text="errors.email"></p>
                         </div>
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-2">Contact Number</label>
                             <input type="tel" x-model="form.contact_number"
-                                   class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
-                                   placeholder="+639123456789">
+                                   :class="['w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500', errors.contact_number ? 'border-red-300' : 'border-gray-300']"
+                                   placeholder="+639123456789"
+                                   @input="clearErrors('contact_number')"
+                                   @blur="validateContactNumber()">
+                            <p class="mt-1 text-sm text-gray-500">Optional: Provide for SMS updates</p>
+                            <p x-show="errors.contact_number" class="mt-1 text-sm text-red-600" x-text="errors.contact_number"></p>
                         </div>
                     </div>
                     <div>
@@ -206,13 +250,14 @@
                 <!-- Service Selection -->
                 <div class="mb-6">
                     <label class="block text-sm font-medium text-gray-700 mb-3">Select Service *</label>
-                    <select x-model="form.service" @change="updateServiceInfo()" required
-                            class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500">
+                    <select x-model="form.service" @change="updateServiceInfo(); clearErrors('service')" 
+                            :class="['w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500', errors.service ? 'border-red-300' : 'border-gray-300']">
                         <option value="">Choose a service...</option>
                         <template x-for="service in services" :key="service.id">
                             <option :value="service.id" x-text="service.name"></option>
                         </template>
                     </select>
+                    <p x-show="errors.service" class="mt-1 text-sm text-red-600" x-text="errors.service"></p>
                     
                     <!-- Service Information -->
                     <div x-show="selectedService" class="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
@@ -231,7 +276,7 @@
                     <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                         <template x-for="dentist in dentists" :key="dentist.id">
                             <label class="relative">
-                                <input type="radio" x-model="form.dentist" :value="dentist.id" class="sr-only">
+                                <input type="radio" x-model="form.dentist" :value="dentist.id" class="sr-only" @change="clearErrors('dentist')">
                                 <div class="p-4 border rounded-lg cursor-pointer transition-all" 
                                      :class="form.dentist == dentist.id ? 'border-primary-600 bg-primary-50 ring-2 ring-primary-600' : 'border-gray-300 hover:border-gray-400'">
                                     <div class="text-center">
@@ -245,11 +290,12 @@
                             </label>
                         </template>
                     </div>
+                    <p x-show="errors.dentist" class="mt-2 text-sm text-red-600" x-text="errors.dentist"></p>
                 </div>
 
                 <!-- Reason (Optional) -->
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">Reason for Visit (Optional)</label>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Reason for Visit</label>
                     <textarea x-model="form.reason" rows="3" 
                               class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
                               placeholder="Please describe your symptoms or reason for the appointment (optional)"></textarea>
@@ -314,6 +360,7 @@
                                 </template>
                             </div>
                         </div>
+                        <p x-show="errors.selected_date" class="mt-2 text-sm text-red-600" x-text="errors.selected_date"></p>
                     </div>
 
                     <!-- Time Slots -->
@@ -336,11 +383,12 @@
                                 <button type="button" 
                                         class="time-slot p-3 border rounded-lg text-sm font-medium transition-all"
                                         :class="form.selected_time === time ? 'selected bg-primary-600 text-white' : 'border-gray-300 hover:border-primary-600'"
-                                        @click="form.selected_time = time"
+                                        @click="form.selected_time = time; clearErrors('selected_time')"
                                         x-text="formatTime(time)">
                                 </button>
                             </template>
                         </div>
+                        <p x-show="errors.selected_time" class="mt-2 text-sm text-red-600" x-text="errors.selected_time"></p>
                     </div>
                 </div>
             </div>
@@ -351,8 +399,7 @@
                     Back
                 </button>
                 <button type="button" @click="nextStep()" 
-                        :disabled="!form.selected_date || !form.selected_time"
-                        class="px-6 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed">
+                        class="px-6 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500">
                     Next: Review & Confirm
                 </button>
             </div>
@@ -396,12 +443,14 @@
                 <!-- Terms and Conditions -->
                 <div class="mb-6">
                     <label class="flex items-start">
-                        <input type="checkbox" x-model="form.agreed_to_terms" required 
-                               class="mt-1 h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded">
+                        <input type="checkbox" x-model="form.agreed_to_terms" 
+                               :class="['mt-1 h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded', errors.agreed_to_terms ? 'border-red-300' : '']"
+                               @change="clearErrors('agreed_to_terms')">
                         <div class="ml-3 text-sm text-gray-600">
-                            I agree to the clinic's terms and conditions. I understand that this is a request and not a confirmed appointment. I will receive confirmation via email or SMS.
+                            I agree to the clinic's terms and conditions. I understand that this is a request and not a confirmed appointment. I will receive confirmation via email or SMS. *
                         </div>
                     </label>
+                    <p x-show="errors.agreed_to_terms" class="mt-2 text-sm text-red-600" x-text="errors.agreed_to_terms"></p>
                 </div>
             </div>
             
@@ -411,7 +460,7 @@
                     Back
                 </button>
                 <button type="submit" 
-                        :disabled="!form.agreed_to_terms || submitting"
+                        :disabled="submitting"
                         class="px-6 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed">
                     <span x-show="!submitting">Submit Request</span>
                     <span x-show="submitting" class="flex items-center">
@@ -478,7 +527,12 @@
             submitted: false,
             loading: false,
             patientFound: false,
+            searchingPatient: false,
             referenceNumber: '',
+            errorMessage: '',
+            
+            // Validation errors
+            errors: {},
             
             // Initialize with Django data
             services: servicesData || [],
@@ -515,12 +569,17 @@
                 console.log('Initializing appointment booking');
                 this.generateCalendar();
                 
-                // Watch for patient identifier changes
+                // Watch for patient identifier changes with debounce
+                let searchTimeout;
                 this.$watch('form.patient_identifier', (value) => {
+                    clearTimeout(searchTimeout);
                     if (value && value.length > 3) {
-                        this.searchPatient();
+                        searchTimeout = setTimeout(() => {
+                            this.searchPatient();
+                        }, 500); // 500ms debounce
                     } else {
                         this.patientFound = false;
+                        this.foundPatient = {};
                     }
                 });
                 
@@ -550,6 +609,154 @@
                 return months[this.currentMonth];
             },
             
+            clearErrors(field = null) {
+                if (field) {
+                    delete this.errors[field];
+                } else {
+                    this.errors = {};
+                }
+                this.errorMessage = '';
+            },
+            
+            validateName(field) {
+                const value = this.form[field];
+                if (!value || !value.trim()) {
+                    return; // Don't validate empty fields on blur
+                }
+                
+                // Check if name contains only letters, spaces, hyphens, and apostrophes
+                const namePattern = /^[a-zA-Z\s\-']+$/;
+                if (!namePattern.test(value)) {
+                    this.errors[field] = 'Name should only contain letters, spaces, hyphens, and apostrophes';
+                } else {
+                    delete this.errors[field];
+                }
+            },
+            
+            validateEmail() {
+                const email = this.form.email;
+                if (!email || !email.trim()) {
+                    return; // Don't validate empty fields on blur
+                }
+                
+                const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                if (!emailPattern.test(email)) {
+                    this.errors.email = 'Please enter a valid email address';
+                } else {
+                    delete this.errors.email;
+                }
+            },
+            
+            validateContactNumber() {
+                const contact = this.form.contact_number;
+                if (!contact || !contact.trim()) {
+                    return; // Contact number is optional
+                }
+                
+                // Basic phone number validation (Philippine format)
+                const phonePattern = /^(\+63|0)?[9]\d{9}$/;
+                if (!phonePattern.test(contact.replace(/\s/g, ''))) {
+                    this.errors.contact_number = 'Please enter a valid Philippine mobile number (e.g., +639123456789)';
+                } else {
+                    delete this.errors.contact_number;
+                }
+            },
+            
+            validateStep() {
+                this.clearErrors();
+                let isValid = true;
+                
+                switch (this.step) {
+                    case 1:
+                        if (!this.form.patient_type) {
+                            this.errors.patient_type = 'Please select patient type';
+                            isValid = false;
+                        }
+                        
+                        if (this.form.patient_type === 'existing') {
+                            if (!this.form.patient_identifier || !this.form.patient_identifier.trim()) {
+                                this.errors.patient_identifier = 'Please enter your email or contact number';
+                                isValid = false;
+                            } else if (!this.patientFound) {
+                                this.errors.patient_identifier = 'No patient record found. Please check your information or register as new patient';
+                                isValid = false;
+                            }
+                        } else if (this.form.patient_type === 'new') {
+                            if (!this.form.first_name || !this.form.first_name.trim()) {
+                                this.errors.first_name = 'First name is required';
+                                isValid = false;
+                            } else {
+                                this.validateName('first_name');
+                                if (this.errors.first_name) isValid = false;
+                            }
+                            
+                            if (!this.form.last_name || !this.form.last_name.trim()) {
+                                this.errors.last_name = 'Last name is required';
+                                isValid = false;
+                            } else {
+                                this.validateName('last_name');
+                                if (this.errors.last_name) isValid = false;
+                            }
+                            
+                            if (!this.form.email || !this.form.email.trim()) {
+                                this.errors.email = 'Email address is required';
+                                isValid = false;
+                            } else {
+                                this.validateEmail();
+                                if (this.errors.email) isValid = false;
+                            }
+                            
+                            // Validate contact number if provided
+                            if (this.form.contact_number && this.form.contact_number.trim()) {
+                                this.validateContactNumber();
+                                if (this.errors.contact_number) isValid = false;
+                            }
+                        }
+                        break;
+                        
+                    case 2:
+                        if (!this.form.service) {
+                            this.errors.service = 'Please select a service';
+                            isValid = false;
+                        }
+                        if (!this.form.dentist) {
+                            this.errors.dentist = 'Please select a dentist';
+                            isValid = false;
+                        }
+                        break;
+                        
+                    case 3:
+                        if (!this.form.selected_date) {
+                            this.errors.selected_date = 'Please select an appointment date';
+                            isValid = false;
+                        }
+                        if (!this.form.selected_time) {
+                            this.errors.selected_time = 'Please select an appointment time';
+                            isValid = false;
+                        }
+                        break;
+                        
+                    case 4:
+                        if (!this.form.agreed_to_terms) {
+                            this.errors.agreed_to_terms = 'Please agree to the terms and conditions';
+                            isValid = false;
+                        }
+                        break;
+                }
+                
+                if (!isValid) {
+                    // Scroll to first error
+                    this.$nextTick(() => {
+                        const firstError = document.querySelector('.text-red-600');
+                        if (firstError) {
+                            firstError.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }
+                    });
+                }
+                
+                return isValid;
+            },
+            
             nextStep() {
                 if (this.validateStep()) {
                     this.step++;
@@ -559,29 +766,15 @@
                             this.loadAvailableTimes();
                         }
                     }
+                    // Scroll to top of form
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
                 }
             },
             
             prevStep() {
                 this.step--;
-            },
-            
-            validateStep() {
-                switch (this.step) {
-                    case 1:
-                        if (this.form.patient_type === 'existing') {
-                            return this.form.patient_identifier && this.patientFound;
-                        } else if (this.form.patient_type === 'new') {
-                            return this.form.first_name && this.form.last_name && this.form.email;
-                        }
-                        return false;
-                    case 2:
-                        return this.form.service && this.form.dentist;
-                    case 3:
-                        return this.form.selected_date && this.form.selected_time;
-                    default:
-                        return true;
-                }
+                this.clearErrors();
+                window.scrollTo({ top: 0, behavior: 'smooth' });
             },
             
             async searchPatient() {
@@ -589,6 +782,9 @@
                     this.patientFound = false;
                     return;
                 }
+                
+                this.searchingPatient = true;
+                this.clearErrors('patient_identifier');
                 
                 try {
                     const response = await fetch(`{% url "appointments:find_patient_api" %}?identifier=${encodeURIComponent(this.form.patient_identifier)}`);
@@ -599,10 +795,14 @@
                         this.foundPatient = data.patient;
                     } else {
                         this.patientFound = false;
+                        this.foundPatient = {};
                     }
                 } catch (error) {
                     console.error('Error searching patient:', error);
                     this.patientFound = false;
+                    this.errors.patient_identifier = 'Error searching for patient. Please try again.';
+                } finally {
+                    this.searchingPatient = false;
                 }
             },
             
@@ -711,6 +911,7 @@
                 
                 this.form.selected_date = day.date;
                 this.form.selected_time = '';
+                this.clearErrors('selected_date');
                 this.generateCalendar(); // Refresh to update selected state
                 
                 if (this.form.dentist && this.form.service) {
@@ -785,7 +986,13 @@
             },
             
             async submitForm() {
+                // Final validation before submission
+                if (!this.validateStep()) {
+                    return;
+                }
+                
                 this.submitting = true;
+                this.clearErrors();
                 
                 try {
                     const response = await fetch('{% url "core:book_appointment" %}', {
@@ -804,11 +1011,13 @@
                         this.submitted = true;
                         window.scrollTo({ top: 0, behavior: 'smooth' });
                     } else {
-                        alert(data.error || 'An error occurred while submitting your request.');
+                        this.errorMessage = data.error || 'An error occurred while submitting your request.';
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
                     }
                 } catch (error) {
                     console.error('Submit error:', error);
-                    alert('Network error. Please try again.');
+                    this.errorMessage = 'Network error. Please check your connection and try again.';
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
                 } finally {
                     this.submitting = false;
                 }
@@ -818,6 +1027,7 @@
                 this.step = 1;
                 this.submitted = false;
                 this.patientFound = false;
+                this.clearErrors();
                 this.form = {
                     patient_type: '',
                     patient_identifier: '',
@@ -835,6 +1045,7 @@
                 };
                 this.selectedService = null;
                 this.availableTimes = [];
+                this.foundPatient = {};
                 this.generateCalendar();
             }
         }

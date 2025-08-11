@@ -3,11 +3,14 @@ from django import forms
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 from datetime import datetime, date, time, timedelta
+from django.db.models import Q
 from .models import Appointment, Schedule
 from patients.models import Patient
 from services.models import Service
 from users.models import User
 from core.models import Holiday
+import re
+from django.core.validators import validate_email
 
 class AppointmentForm(forms.ModelForm):
     """Form for creating and updating appointments (staff use)"""
@@ -123,7 +126,8 @@ class ScheduleForm(forms.ModelForm):
         return cleaned_data
 
 class AppointmentRequestForm(forms.ModelForm):
-    """Form for public appointment requests"""
+    """Form for public appointment requests with enhanced validation"""
+    
     patient_type = forms.ChoiceField(
         choices=[('new', 'New Patient'), ('existing', 'Existing Patient')],
         widget=forms.RadioSelect(attrs={'class': 'focus:ring-primary-500 h-4 w-4 text-primary-600 border-gray-300'})
@@ -141,7 +145,7 @@ class AppointmentRequestForm(forms.ModelForm):
         })
     )
     
-    # New patient fields - Email now required, contact optional
+    # New patient fields - Email required, contact optional
     first_name = forms.CharField(
         max_length=100,
         required=False,
@@ -158,7 +162,7 @@ class AppointmentRequestForm(forms.ModelForm):
     )
     contact_number = forms.CharField(
         max_length=20,
-        required=False,  # Now optional
+        required=False,  # Optional for new patients
         widget=forms.TextInput(attrs={
             'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
             'placeholder': '+639123456789'
@@ -213,66 +217,103 @@ class AppointmentRequestForm(forms.ModelForm):
         # Make reason optional
         self.fields['reason'].required = False
     
+    def clean_first_name(self):
+        """Validate first name contains only valid characters"""
+        first_name = self.cleaned_data.get('first_name', '').strip()
+        if first_name:
+            name_pattern = re.compile(r'^[a-zA-Z\s\-\']+$')
+            if not name_pattern.match(first_name):
+                raise ValidationError('First name should only contain letters, spaces, hyphens, and apostrophes.')
+        return first_name
+    
+    def clean_last_name(self):
+        """Validate last name contains only valid characters"""
+        last_name = self.cleaned_data.get('last_name', '').strip()
+        if last_name:
+            name_pattern = re.compile(r'^[a-zA-Z\s\-\']+$')
+            if not name_pattern.match(last_name):
+                raise ValidationError('Last name should only contain letters, spaces, hyphens, and apostrophes.')
+        return last_name
+    
+    def clean_email(self):
+        """Validate email format"""
+        email = self.cleaned_data.get('email', '').strip()
+        if email:
+            try:
+                validate_email(email)
+            except ValidationError:
+                raise ValidationError('Please enter a valid email address.')
+        return email
+    
+    def clean_contact_number(self):
+        """Validate contact number format if provided"""
+        contact_number = self.cleaned_data.get('contact_number', '').strip()
+        if not contact_number:
+            return None
+        
+        # Philippine mobile number pattern
+        phone_pattern = re.compile(r'^(\+63|0)?[9]\d{9}$')
+        clean_contact = contact_number.replace(' ', '')
+        if not phone_pattern.match(clean_contact):
+            raise ValidationError('Please enter a valid Philippine mobile number (e.g., +639123456789).')
+        
+        return contact_number
+    
     def clean(self):
         cleaned_data = super().clean()
         patient_type = cleaned_data.get('patient_type')
         
         if patient_type == 'existing':
             # Validate existing patient identification
-            patient_identifier = cleaned_data.get('patient_identifier')
+            patient_identifier = cleaned_data.get('patient_identifier', '').strip()
             if not patient_identifier:
                 raise ValidationError('Please provide your email or phone number to find your record.')
             
-            # Try to find the patient - fix search logic
-            from django.db.models import Q
+            # Try to find the patient
+            patient = Patient.objects.filter(
+                Q(email__iexact=patient_identifier) | Q(contact_number=patient_identifier),
+                is_active=True
+            ).first()
             
-            query = Q()
-            identifier = patient_identifier.strip()
+            if not patient:
+                raise ValidationError(f'No patient record found with "{patient_identifier}". Please check your information or register as a new patient.')
             
-            # Search by email (case insensitive) if it looks like an email
-            if '@' in identifier:
-                query |= Q(email__iexact=identifier, email__isnull=False) & ~Q(email='')
-            else:
-                # Search by contact number
-                query |= Q(contact_number=identifier, contact_number__isnull=False) & ~Q(contact_number='')
-            
-            patients = Patient.objects.filter(query, is_active=True)
-            
-            if not patients.exists():
-                raise ValidationError(f'No patient record found with {patient_identifier}. Please check your information or register as a new patient.')
-            elif patients.count() > 1:
-                raise ValidationError(f'Multiple patient records found with {patient_identifier}. Please contact the clinic for assistance.')
-            
-            cleaned_data['patient'] = patients.first()
+            cleaned_data['patient'] = patient
         
         elif patient_type == 'new':
-            # Validate new patient fields - email now required
+            # Validate new patient fields - email is required, contact is optional
             required_fields = ['first_name', 'last_name', 'email']
             for field in required_fields:
-                if not cleaned_data.get(field):
+                value = cleaned_data.get(field, '').strip() if cleaned_data.get(field) else ''
+                if not value:
                     field_label = self.fields[field].label or field.replace('_', ' ').title()
                     raise ValidationError(f'{field_label} is required for new patients.')
             
-            # Check if patient already exists - fix validation logic
+            # Check if patient already exists
             email = cleaned_data.get('email', '').strip()
             contact_number = cleaned_data.get('contact_number', '').strip()
             
-            # Build query for existing patient check
+            # Build query for existing patient check - ONLY include non-empty values
             existing_query = Q()
-            if email:
-                existing_query |= Q(email__iexact=email, email__isnull=False) & ~Q(email='')
-            if contact_number:
-                existing_query |= Q(contact_number=contact_number, contact_number__isnull=False) & ~Q(contact_number='')
             
-            if existing_query:  # Only check if we have something to search for
-                existing_patients = Patient.objects.filter(existing_query, is_active=True)
+            # Always check email if provided (email is required for new patients)
+            if email:
+                existing_query |= Q(email__iexact=email, is_active=True)
+            
+            # Only check contact number if it's not empty
+            if contact_number:
+                existing_query |= Q(contact_number=contact_number, is_active=True)
+            
+            # Only run the query if we have something to search for
+            if existing_query:
+                existing_patient = Patient.objects.filter(existing_query).first()
                 
-                if existing_patients.exists():
-                    existing_patient = existing_patients.first()
-                    if existing_patient.email and existing_patient.email.lower() == email.lower():
-                        raise ValidationError(f'A patient with email {email} already exists. Please use "Existing Patient" option.')
-                    elif existing_patient.contact_number and existing_patient.contact_number == contact_number:
-                        raise ValidationError(f'A patient with contact number {contact_number} already exists. Please use "Existing Patient" option.')
+                if existing_patient:
+                    # Check which field matched
+                    if existing_patient.email and email and existing_patient.email.lower() == email.lower():
+                        raise ValidationError(f'A patient with email "{email}" already exists. Please use "Existing Patient" option.')
+                    elif existing_patient.contact_number and contact_number and existing_patient.contact_number == contact_number:
+                        raise ValidationError(f'A patient with contact number "{contact_number}" already exists. Please use "Existing Patient" option.')
         
         # Validate appointment date and time
         preferred_date = cleaned_data.get('preferred_date')
@@ -288,8 +329,8 @@ class AppointmentRequestForm(forms.ModelForm):
                 raise ValidationError('Appointments are not available on Sundays.')
             
             # Check for holidays
-            if Holiday.objects.filter(date=preferred_date, is_active=True).exists():
-                holiday = Holiday.objects.filter(date=preferred_date, is_active=True).first()
+            holiday = Holiday.objects.filter(date=preferred_date, is_active=True).first()
+            if holiday:
                 raise ValidationError(f'Appointments are not available on {holiday.name}.')
         
         if preferred_time:
@@ -298,7 +339,16 @@ class AppointmentRequestForm(forms.ModelForm):
             clinic_end = time(18, 0)    # 6:00 PM
             
             if preferred_time < clinic_start or preferred_time >= clinic_end:
-                raise ValidationError('Appointments are available Monday to Saturday 10:00 AM to 6:00 PM.')
+                raise ValidationError('Appointments are available Monday to Saturday, 10:00 AM to 6:00 PM.')
+        
+        # Validate service duration doesn't extend beyond clinic hours
+        if preferred_date and preferred_time and cleaned_data.get('service'):
+            service = cleaned_data['service']
+            start_datetime = datetime.combine(preferred_date, preferred_time)
+            end_time = (start_datetime + timedelta(minutes=service.duration_minutes)).time()
+            
+            if end_time > time(18, 0):  # 6:00 PM
+                raise ValidationError(f'Selected time is too late. Service duration is {service.duration_minutes} minutes and clinic closes at 6:00 PM.')
         
         return cleaned_data
     
@@ -311,11 +361,11 @@ class AppointmentRequestForm(forms.ModelForm):
         if patient_type == 'new':
             # Create new patient
             patient = Patient.objects.create(
-                first_name=self.cleaned_data['first_name'],
-                last_name=self.cleaned_data['last_name'],
-                email=self.cleaned_data.get('email', ''),
-                contact_number=self.cleaned_data.get('contact_number', ''),
-                address=self.cleaned_data.get('address', ''),
+                first_name=self.cleaned_data['first_name'].strip(),
+                last_name=self.cleaned_data['last_name'].strip(),
+                email=self.cleaned_data.get('email', '').strip(),
+                contact_number=self.cleaned_data.get('contact_number', '').strip(),
+                address=self.cleaned_data.get('address', '').strip(),
             )
             appointment.patient = patient
             appointment.patient_type = 'new'

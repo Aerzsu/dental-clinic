@@ -10,6 +10,7 @@ from django.db.models import Q
 from django.http import JsonResponse
 from datetime import datetime, timedelta, date, time
 from django import forms
+import re
 
 from .models import AuditLog, Holiday, SystemSetting
 from appointments.models import Appointment, Schedule
@@ -49,6 +50,7 @@ class HomeView(TemplateView):
         context['dentists'] = User.objects.filter(is_active_dentist=True)
         return context
 
+    
 class BookAppointmentView(TemplateView):
     """Public appointment booking form"""
     template_name = 'core/book_appointment.html'
@@ -99,40 +101,81 @@ class BookAppointmentView(TemplateView):
                 
                 # Handle patient creation/finding
                 if data['patient_type'] == 'new':
-                    # Updated validation: email required, contact_number optional
-                    if not all([data.get('first_name'), data.get('last_name'), data.get('email')]):
-                        return JsonResponse({
-                            'success': False, 
-                            'error': 'First name, last name, and email are required for new patients'
-                        }, status=400)
+                    # Create new patient - FIXED: contact_number is now optional
+                    required_new_fields = ['first_name', 'last_name', 'email']
+                    for field in required_new_fields:
+                        if not data.get(field, '').strip():
+                            field_label = field.replace('_', ' ').title()
+                            return JsonResponse({
+                                'success': False, 
+                                'error': f'{field_label} is required for new patients'
+                            }, status=400)
                     
-                    # Check for existing patient - fix validation logic
+                    # Validate name fields
+                    name_pattern = re.compile(r'^[a-zA-Z\s\-\']+$')
+                    
+                    first_name = data.get('first_name', '').strip()
+                    last_name = data.get('last_name', '').strip()
                     email = data.get('email', '').strip()
                     contact_number = data.get('contact_number', '').strip()
                     
-                    # Build query for existing patient check
+                    if not name_pattern.match(first_name):
+                        return JsonResponse({
+                            'success': False,
+                            'error': 'First name should only contain letters, spaces, hyphens, and apostrophes'
+                        }, status=400)
+                    
+                    if not name_pattern.match(last_name):
+                        return JsonResponse({
+                            'success': False,
+                            'error': 'Last name should only contain letters, spaces, hyphens, and apostrophes'
+                        }, status=400)
+                    
+                    # Validate email format
+                    from django.core.validators import validate_email
+                    from django.core.exceptions import ValidationError as DjangoValidationError
+                    
+                    try:
+                        validate_email(email)
+                    except DjangoValidationError:
+                        return JsonResponse({
+                            'success': False,
+                            'error': 'Please enter a valid email address'
+                        }, status=400)
+                    
+                    # Validate contact number if provided (optional)
+                    if contact_number:
+                        phone_pattern = re.compile(r'^(\+63|0)?9\d{9}$')
+                        clean_contact = contact_number.replace(' ', '').replace('-', '')
+                        if not phone_pattern.match(clean_contact):
+                            return JsonResponse({
+                                'success': False,
+                                'error': 'Please enter a valid Philippine mobile number (e.g., +639123456789)'
+                            }, status=400)
+                        contact_number = clean_contact  # Use cleaned version
+                    
+                    # Check for existing patient
                     existing_query = Q()
                     if email:
-                        existing_query |= Q(email__iexact=email)
+                        existing_query |= Q(email__iexact=email, is_active=True)
                     if contact_number:
-                        existing_query |= Q(contact_number=contact_number)
+                        existing_query |= Q(contact_number=contact_number, is_active=True)
                     
-                    if existing_query:  # Only check if we have something to search for
-                        existing = Patient.objects.filter(existing_query, is_active=True).first()
+                    if existing_query:
+                        existing = Patient.objects.filter(existing_query).first()
                         
                         if existing:
                             return JsonResponse({
                                 'success': False, 
-                                'error': 'A patient with this email or contact number already exists. Please use "Existing Patient" option.'
+                                'error': 'A patient with this email or contact number already exists'
                             }, status=400)
                     
-                    # Create new patient
                     patient = Patient.objects.create(
-                        first_name=data.get('first_name', ''),
-                        last_name=data.get('last_name', ''),
+                        first_name=first_name,
+                        last_name=last_name,
                         email=email,
-                        contact_number=contact_number,
-                        address=data.get('address', ''),
+                        contact_number=contact_number or '',  # Allow empty string
+                        address=data.get('address', '').strip(),
                     )
                     patient_type = 'new'
                     
@@ -141,7 +184,6 @@ class BookAppointmentView(TemplateView):
                     if not identifier:
                         return JsonResponse({'success': False, 'error': 'Patient identifier is required'}, status=400)
                     
-                    # Find existing patient - fix search logic
                     patient = Patient.objects.filter(
                         Q(email__iexact=identifier) | Q(contact_number=identifier),
                         is_active=True
@@ -162,7 +204,7 @@ class BookAppointmentView(TemplateView):
                 except (Service.DoesNotExist, User.DoesNotExist):
                     return JsonResponse({'success': False, 'error': 'Invalid service or dentist'}, status=400)
                 
-                # Parse date and time - fix timezone handling
+                # Parse date and time
                 try:
                     appointment_date = datetime.strptime(data['selected_date'], '%Y-%m-%d').date()
                     appointment_time = datetime.strptime(data['selected_time'], '%H:%M').time()
@@ -175,6 +217,10 @@ class BookAppointmentView(TemplateView):
                 
                 if appointment_date.weekday() == 6:  # Sunday
                     return JsonResponse({'success': False, 'error': 'Appointments are not available on Sundays'}, status=400)
+                
+                # Check for holidays
+                if Holiday.objects.filter(date=appointment_date, is_active=True).exists():
+                    return JsonResponse({'success': False, 'error': 'Appointments are not available on this date (holiday)'}, status=400)
                 
                 # Calculate end time based on service duration
                 start_datetime = datetime.combine(appointment_date, appointment_time)
@@ -202,15 +248,18 @@ class BookAppointmentView(TemplateView):
                     return JsonResponse({'success': False, 'error': 'This time slot is already booked'}, status=400)
                 
                 # Create appointment
-                appointment = Appointment.objects.create(
-                    patient=patient,
-                    dentist=dentist,
-                    service=service,
-                    schedule=schedule,
-                    patient_type=patient_type,
-                    reason=data.get('reason', ''),
-                    status='pending'
-                )
+                from django.db import transaction
+                
+                with transaction.atomic():
+                    appointment = Appointment.objects.create(
+                        patient=patient,
+                        dentist=dentist,
+                        service=service,
+                        schedule=schedule,
+                        patient_type=patient_type,
+                        reason=data.get('reason', '').strip(),
+                        status='pending'
+                    )
                 
                 # Generate reference number
                 reference_number = f'APT-{appointment.id:06d}'

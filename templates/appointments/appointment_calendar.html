@@ -16,7 +16,7 @@
                 <svg class="-ml-1 mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
                 </svg>
-                New Appointment
+               New Appointment
             </a>
         </div>
     </div>
@@ -27,22 +27,16 @@
             <div class="flex items-center justify-between">
                 <!-- Month Navigation -->
                 <div class="flex items-center space-x-4">
-                    <a href="?month={{ current_month|add:'-1' }}&year={{ current_year }}" 
+                    <a href="?month={{ prev_month }}&year={{ prev_year }}" 
                        class="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
-                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
-                        </svg>
                         Previous
                     </a>
                     <h2 class="text-lg font-semibold text-gray-900">
-                        {{ current_month|date:"F Y" }}
+                        {{ current_month_name }} {{ current_year }}
                     </h2>
-                    <a href="?month={{ current_month|add:'1' }}&year={{ current_year }}" 
+                    <a href="?month={{ next_month }}&year={{ next_year }}" 
                        class="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
                         Next
-                        <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
-                        </svg>
                     </a>
                 </div>
 
@@ -116,9 +110,7 @@
             <div class="flex items-center justify-between mb-4">
                 <h3 class="text-lg font-medium text-gray-900" id="modalTitle">Appointment Details</h3>
                 <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600">
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                    </svg>
+                    ✕
                 </button>
             </div>
             <div id="modalContent">
@@ -134,6 +126,8 @@ const appointmentsByDate = {{ appointments_by_date|safe }};
 const currentMonth = {{ current_month }};
 const currentYear = {{ current_year }};
 const today = "{{ today }}";
+
+console.log('Appointments data:', appointmentsByDate); // Debug log
 
 // Generate calendar
 function generateCalendar() {
@@ -172,10 +166,12 @@ function generateCalendar() {
         
         // Appointments for this day
         const appointments = appointmentsByDate[dateStr] || [];
+        console.log(`Appointments for ${dateStr}:`, appointments); // Debug log
+        
         appointments.forEach((appointment, index) => {
             if (index < 3) { // Show max 3 appointments
                 const appointmentDiv = document.createElement('div');
-                appointmentDiv.className = `text-xs p-1 mb-1 rounded cursor-pointer ${getStatusColor(appointment.status)}`;
+                appointmentDiv.className = `text-xs p-1 mb-1 rounded cursor-pointer border ${getStatusColor(appointment.status)}`;
                 appointmentDiv.textContent = `${appointment.schedule__start_time} - ${appointment.patient__first_name} ${appointment.patient__last_name}`;
                 appointmentDiv.onclick = (e) => {
                     e.stopPropagation();
@@ -226,7 +222,7 @@ function showDayAppointments(dateStr, appointments) {
                 <div class="border border-gray-200 rounded-lg p-3">
                     <div class="flex items-center justify-between mb-2">
                         <span class="font-medium">${appointment.patient__first_name} ${appointment.patient__last_name}</span>
-                        <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(appointment.status)}">${appointment.status}</span>
+                        <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(appointment.status).replace('border-', 'border ')}">${appointment.status}</span>
                     </div>
                     <div class="text-sm text-gray-600">
                         <p><strong>Time:</strong> ${appointment.schedule__start_time} - ${appointment.schedule__end_time}</p>

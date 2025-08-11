@@ -1,6 +1,7 @@
 #appointments/views.py
 # Standard library imports
 import json
+import re
 from datetime import datetime, date, timedelta, time
 
 # Django core imports
@@ -56,21 +57,59 @@ class AppointmentCalendarView(LoginRequiredMixin, TemplateView):
             status__in=['approved', 'pending', 'completed']
         ).select_related('patient', 'dentist', 'service', 'schedule').order_by('schedule__date', 'schedule__start_time')
         
-        # Group appointments by date
+        # Group appointments by date and serialize properly
         appointments_by_date = {}
         for appointment in appointments:
             date_key = appointment.schedule.date.strftime('%Y-%m-%d')
             if date_key not in appointments_by_date:
                 appointments_by_date[date_key] = []
-            appointments_by_date[date_key].append(appointment)
+            
+            # Serialize appointment data properly for JavaScript
+            appointment_data = {
+                'id': appointment.id,
+                'patient__first_name': appointment.patient.first_name,
+                'patient__last_name': appointment.patient.last_name,
+                'dentist__first_name': appointment.dentist.first_name,
+                'dentist__last_name': appointment.dentist.last_name,
+                'service__name': appointment.service.name,
+                'schedule__date': appointment.schedule.date.strftime('%Y-%m-%d'),
+                'schedule__start_time': appointment.schedule.start_time.strftime('%I:%M %p'),
+                'schedule__end_time': appointment.schedule.end_time.strftime('%I:%M %p'),
+                'status': appointment.status,
+                'reason': appointment.reason or '',
+                'patient_type': appointment.patient_type,
+            }
+            appointments_by_date[date_key].append(appointment_data)
         
-        # get pending appointment count for notification badge
+        # Get pending appointment count for notification badge
         pending_count = Appointment.objects.filter(status='pending').count()
+        
+        # Calculate navigation months properly
+        if month == 1:
+            prev_month, prev_year = 12, year - 1
+        else:
+            prev_month, prev_year = month - 1, year
+            
+        if month == 12:
+            next_month, next_year = 1, year + 1
+        else:
+            next_month, next_year = month + 1, year
+        
+        # Get month name
+        month_names = [
+            '', 'January', 'February', 'March', 'April', 'May', 'June',
+            'July', 'August', 'September', 'October', 'November', 'December'
+        ]
 
         context.update({
             'current_month': month,
             'current_year': year,
-            'appointments_by_date': json.dumps(appointments_by_date, default=str),
+            'current_month_name': month_names[month],
+            'prev_month': prev_month,
+            'prev_year': prev_year,
+            'next_month': next_month,
+            'next_year': next_year,
+            'appointments_by_date': json.dumps(appointments_by_date),  # No need for default=str now
             'dentists': User.objects.filter(is_active_dentist=True),
             'today': today.strftime('%Y-%m-%d'),
             'pending_count': pending_count,
@@ -79,7 +118,6 @@ class AppointmentCalendarView(LoginRequiredMixin, TemplateView):
         return context
 
 
-    
 class AppointmentRequestsView(LoginRequiredMixin, ListView):
     """View appointment requests with enhanced filtering and bulk actions"""
     model = Appointment
@@ -548,195 +586,6 @@ def get_available_times(request):
     
     return JsonResponse({'available_times': available_times})
 
-class BookAppointmentView(TemplateView):
-    """Public appointment booking form"""
-    template_name = 'core/book_appointment.html'
-    
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        
-        # Format services data
-        services = []
-        for service in Service.objects.filter(is_archived=False):
-            services.append({
-                'id': service.id,
-                'name': service.name,
-                'duration': f"{service.duration_minutes} minutes",
-                'price_range': f"₱{service.min_price:,.0f} - ₱{service.max_price:,.0f}",
-                'description': service.description or "Professional dental service"
-            })
-        
-        # Format dentists data  
-        dentists = []
-        for dentist in User.objects.filter(is_active_dentist=True):
-            dentists.append({
-                'id': dentist.id,
-                'name': f"Dr. {dentist.first_name} {dentist.last_name}",
-                'initials': f"{dentist.first_name[0]}{dentist.last_name[0]}",
-                'specialization': getattr(dentist, 'specialization', 'General Dentist')
-            })
-        
-        context.update({
-            'services_json': json.dumps(services),
-            'dentists_json': json.dumps(dentists),
-        })
-        
-        return context
-    
-    def post(self, request, *args, **kwargs):
-        """Handle appointment request submission"""
-        try:
-            # Check if request is JSON
-            if request.content_type == 'application/json':
-                data = json.loads(request.body)
-                
-                # Validate required fields
-                required_fields = ['patient_type', 'service', 'dentist', 'selected_date', 'selected_time']
-                for field in required_fields:
-                    if not data.get(field):
-                        return JsonResponse({'success': False, 'error': f'{field} is required'}, status=400)
-                
-                # Handle patient creation/finding
-                if data['patient_type'] == 'new':
-                    # Create new patient
-                    if not all([data.get('first_name'), data.get('last_name'), data.get('contact_number')]):
-                        return JsonResponse({
-                            'success': False, 
-                            'error': 'First name, last name, and contact number are required for new patients'
-                        }, status=400)
-                    
-                    # Check for existing patient
-                    existing = Patient.objects.filter(
-                        Q(email__iexact=data.get('email', '')) | Q(contact_number=data.get('contact_number', '')),
-                        is_active=True
-                    ).first()
-                    
-                    if existing:
-                        return JsonResponse({
-                            'success': False, 
-                            'error': 'A patient with this email or contact number already exists'
-                        }, status=400)
-                    
-                    patient = Patient.objects.create(
-                        first_name=data.get('first_name', ''),
-                        last_name=data.get('last_name', ''),
-                        email=data.get('email', ''),
-                        contact_number=data.get('contact_number', ''),
-                        address=data.get('address', ''),
-                    )
-                    patient_type = 'new'
-                    
-                else:  # existing patient
-                    identifier = data.get('patient_identifier', '')
-                    if not identifier:
-                        return JsonResponse({'success': False, 'error': 'Patient identifier is required'}, status=400)
-                    
-                    patient = Patient.objects.filter(
-                        Q(email__iexact=identifier) | Q(contact_number=identifier),
-                        is_active=True
-                    ).first()
-                    
-                    if not patient:
-                        return JsonResponse({
-                            'success': False, 
-                            'error': 'No patient found with the provided information'
-                        }, status=400)
-                    
-                    patient_type = 'returning'
-                
-                # Get service and dentist
-                try:
-                    service = Service.objects.get(id=data['service'], is_archived=False)
-                    dentist = User.objects.get(id=data['dentist'], is_active_dentist=True)
-                except (Service.DoesNotExist, User.DoesNotExist):
-                    return JsonResponse({'success': False, 'error': 'Invalid service or dentist'}, status=400)
-                
-                # Parse date and time
-                try:
-                    appointment_date = datetime.strptime(data['selected_date'], '%Y-%m-%d').date()
-                    appointment_time = datetime.strptime(data['selected_time'], '%H:%M').time()
-                except ValueError:
-                    return JsonResponse({'success': False, 'error': 'Invalid date or time format'}, status=400)
-                
-                # Validate appointment date
-                if appointment_date <= timezone.now().date():
-                    return JsonResponse({'success': False, 'error': 'Appointment date must be in the future'}, status=400)
-                
-                if appointment_date.weekday() == 6:  # Sunday
-                    return JsonResponse({'success': False, 'error': 'Appointments are not available on Sundays'}, status=400)
-                
-                # Calculate end time based on service duration
-                start_datetime = datetime.combine(appointment_date, appointment_time)
-                end_time = (start_datetime + timedelta(minutes=service.duration_minutes)).time()
-                
-                # Create or get schedule
-                schedule, created = Schedule.objects.get_or_create(
-                    dentist=dentist,
-                    date=appointment_date,
-                    start_time=appointment_time,
-                    defaults={
-                        'end_time': end_time,
-                        'is_available': True,
-                        'notes': 'Auto-created for online appointment request'
-                    }
-                )
-                
-                # Check for conflicts
-                existing_appointment = Appointment.objects.filter(
-                    schedule=schedule,
-                    status__in=['approved', 'pending']
-                ).first()
-                
-                if existing_appointment:
-                    return JsonResponse({'success': False, 'error': 'This time slot is already booked'}, status=400)
-                
-                # Create appointment
-                appointment = Appointment.objects.create(
-                    patient=patient,
-                    dentist=dentist,
-                    service=service,
-                    schedule=schedule,
-                    patient_type=patient_type,
-                    reason=data.get('reason', ''),
-                    status='pending'
-                )
-                
-                # Generate reference number
-                reference_number = f'APT-{appointment.id:06d}'
-                
-                return JsonResponse({
-                    'success': True,
-                    'reference_number': reference_number,
-                    'appointment_id': appointment.id
-                })
-                
-            else:
-                # Handle regular form submission (fallback)
-                form = AppointmentRequestForm(request.POST)
-                if form.is_valid():
-                    appointment = form.save()
-                    messages.success(
-                        request,
-                        'Your appointment request has been submitted successfully! '
-                        'We will contact you soon to confirm your appointment.'
-                    )
-                    return redirect('core:home')
-                else:
-                    context = self.get_context_data(**kwargs)
-                    context['form'] = form
-                    return render(request, self.template_name, context)
-                    
-        except json.JSONDecodeError:
-            return JsonResponse({'success': False, 'error': 'Invalid JSON data'}, status=400)
-        except Exception as e:
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.error(f'Error in BookAppointmentView: {str(e)}', exc_info=True)
-            
-            return JsonResponse({
-                'success': False, 
-                'error': 'An unexpected error occurred. Please try again.'
-            }, status=500)
 
 # API endpoints for AJAX calls
 def get_available_dates_api(request):
@@ -865,16 +714,17 @@ def find_patient_api(request):
         return JsonResponse({'error': 'Identifier is required'}, status=400)
     
     # Search for patient by email or contact number
-    # Fix: Handle cases where fields might be empty
-    query = Q()
+    # Improved search logic - handle empty fields properly
+    query = Q(is_active=True)
     
-    # Only add email filter if patient has an email
-    query |= Q(email__iexact=identifier, email__isnull=False) & ~Q(email='')
+    # Check if identifier looks like an email
+    if '@' in identifier:
+        query &= Q(email__iexact=identifier)
+    else:
+        # Assume it's a contact number
+        query &= Q(contact_number=identifier)
     
-    # Only add contact filter if patient has a contact number  
-    query |= Q(contact_number=identifier, contact_number__isnull=False) & ~Q(contact_number='')
-    
-    patient = Patient.objects.filter(query, is_active=True).first()
+    patient = Patient.objects.filter(query).first()
     
     if patient:
         return JsonResponse({
@@ -882,12 +732,41 @@ def find_patient_api(request):
             'patient': {
                 'id': patient.id,
                 'name': patient.full_name,
-                'email': patient.email,
-                'contact_number': patient.contact_number
+                'email': patient.email or '',
+                'contact_number': patient.contact_number or ''
             }
         })
     else:
         return JsonResponse({'found': False})
+
+
+# Additional helper function for name validation
+def validate_name_field(value, field_name):
+    """Helper function to validate name fields"""
+    if not value or not value.strip():
+        return value
+    
+    # Pattern allows letters, spaces, hyphens, and apostrophes
+    name_pattern = re.compile(r'^[a-zA-Z\s\-\']+$')
+    if not name_pattern.match(value.strip()):
+        raise ValidationError(f'{field_name} should only contain letters, spaces, hyphens, and apostrophes.')
+    
+    return value.strip()
+
+
+def validate_philippine_mobile(value):
+    """Helper function to validate Philippine mobile numbers"""
+    if not value or not value.strip():
+        return value
+    
+    # Philippine mobile number pattern
+    phone_pattern = re.compile(r'^(\+63|0)?[9]\d{9}$')
+    clean_contact = value.replace(' ', '').replace('-', '')
+    
+    if not phone_pattern.match(clean_contact):
+        raise ValidationError('Please enter a valid Philippine mobile number (e.g., +639123456789).')
+    
+    return clean_contact
 
 # Enhanced schedule management
 class ScheduleBulkCreateView(LoginRequiredMixin, TemplateView):
@@ -971,44 +850,3 @@ class ScheduleBulkCreateView(LoginRequiredMixin, TemplateView):
             return self.get(request, *args, **kwargs)
 
 
-# Updated core/views.py - Add this to your existing core views
-class BookAppointmentPublicView(TemplateView):
-    """Public-facing appointment booking page"""
-    template_name = 'core/book_appointment_public.html'
-    
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        
-        # Get active services with pricing info
-        services = []
-        for service in Service.objects.filter(is_archived=False):
-            services.append({
-                'id': service.id,
-                'name': service.name,
-                'duration': f"{service.duration_minutes} minutes",
-                'price_range': f"₱{service.min_price:,.0f} - ₱{service.max_price:,.0f}" if hasattr(service, 'min_price') else "Contact clinic for pricing",
-                'description': service.description or "Professional dental service"
-            })
-        
-        # Get active dentists
-        dentists = []
-        for dentist in User.objects.filter(is_active_dentist=True):
-            dentists.append({
-                'id': dentist.id,
-                'name': f"Dr. {dentist.first_name} {dentist.last_name}",
-                'initials': f"{dentist.first_name[0]}{dentist.last_name[0]}" if dentist.first_name and dentist.last_name else "DR",
-                'specialization': getattr(dentist, 'specialization', 'General Dentist')
-            })
-        
-        context.update({
-            'services_json': json.dumps(services),
-            'dentists_json': json.dumps(dentists),
-            'clinic_info': {
-                'name': 'Dental Clinic',
-                'hours': 'Monday to Saturday, 10:00 AM to 6:00 PM',
-                'phone': '+63 912 345 6789',
-                'email': 'info@dentalclinic.com'
-            }
-        })
-        
-        return context

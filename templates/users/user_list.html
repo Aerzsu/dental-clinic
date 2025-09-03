@@ -2,7 +2,7 @@
 {% extends 'base.html' %}
 {% load user_tags %}
 
-{% block title %}User Management - Dental Clinic Management{% endblock %}
+{% block title %}User Management - KingJoy Appointment System{% endblock %}
 
 {% block content %}
 <div class="space-y-6">
@@ -93,7 +93,7 @@
                         <label for="role_filter" class="block text-sm font-medium text-gray-700">Filter by Role</label>
                         <select id="role_filter" 
                                 name="role_filter" 
-                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
+                                class="mt-1 block w-full rounded-md px-3 py-2 border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
                                 onchange="document.getElementById('filterForm').submit();">
                             <option value="">All Roles</option>
                             {% for role in available_roles %}
@@ -109,8 +109,8 @@
                     <div>
                         <label for="status_filter" class="block text-sm font-medium text-gray-700">Filter by Status</label>
                         <select id="status_filter" 
-                                name="status_filter" 
-                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
+                                name="status_filter"
+                                class="mt-1 block w-full rounded-md px-3 py-2 border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
                                 onchange="document.getElementById('filterForm').submit();">
                             <option value="">All Statuses</option>
                             <option value="active" {% if status_filter == 'active' %}selected{% endif %}>Active Only</option>

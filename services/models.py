@@ -6,9 +6,6 @@ from decimal import Decimal
 class Service(models.Model):
     name = models.CharField(max_length=200)
     description = models.TextField(blank=True)
-    # min_price = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(Decimal('0.01'))])
-    # max_price = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(Decimal('0.01'))])
-    # duration_minutes = models.PositiveIntegerField(default=30)
     duration_minutes = models.PositiveIntegerField(
         default=30,
         help_text="Duration of the service in minutes"
@@ -38,21 +35,6 @@ class Service(models.Model):
         if self.max_price < self.min_price:
             raise ValidationError('Max price cannot be less than min price.')
     
-    # @property
-    # def price_range_display(self):
-    #     if self.min_price == self.max_price:
-    #         return f"₱{self.min_price:,.2f}"
-    #     return f"₱{self.min_price:,.2f} - ₱{self.max_price:,.2f}"
-    
-    # @property
-    # def duration_display(self):
-    #     if self.duration_minutes < 60:
-    #         return f"{self.duration_minutes} minutes"
-    #     hours = self.duration_minutes // 60
-    #     minutes = self.duration_minutes % 60
-    #     if minutes == 0:
-    #         return f"{hours} hour{'s' if hours > 1 else ''}"
-    #     return f"{hours}h {minutes}m"
     @property
     def price_range_display(self):
         if self.min_price == self.max_price:

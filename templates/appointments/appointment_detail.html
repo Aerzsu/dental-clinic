@@ -1,0 +1,553 @@
+<!-- templates/appointments/appointment_detail.html -->
+{% extends 'base.html' %}
+
+{% block title %}Appointment Details - {{ appointment.patient.full_name }} - {{ block.super }}{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto">
+    <!-- Header with Back Navigation -->
+    <div class="mb-6">
+        <div class="flex items-center space-x-2 text-sm text-gray-500 mb-2">
+            <a href="{% url 'appointments:appointment_list' %}" class="hover:text-gray-700 flex items-center">
+                ← Back to Appointments
+            </a>
+            <span>/</span>
+            <span>Appointment Details</span>
+        </div>
+        <div class="flex justify-between items-start">
+            <div>
+                <div class="flex items-center space-x-3">
+                    <h1 class="text-2xl font-bold text-gray-900">{{ appointment.patient.full_name }}</h1>
+                    {% if appointment.status == 'pending' %}
+                        <span class="inline-flex items-center px-3 py-0.5 rounded-full text-sm font-medium bg-yellow-100 text-yellow-800">
+                            ⏳ Pending Approval
+                        </span>
+                    {% elif appointment.status == 'approved' %}
+                        <span class="inline-flex items-center px-3 py-0.5 rounded-full text-sm font-medium bg-green-100 text-green-800">
+                            ✅ Approved
+                        </span>
+                    {% elif appointment.status == 'rejected' %}
+                        <span class="inline-flex items-center px-3 py-0.5 rounded-full text-sm font-medium bg-red-100 text-red-800">
+                            ❌ Rejected
+                        </span>
+                    {% elif appointment.status == 'cancelled' %}
+                        <span class="inline-flex items-center px-3 py-0.5 rounded-full text-sm font-medium bg-gray-100 text-gray-600">
+                            🚫 Cancelled
+                        </span>
+                    {% elif appointment.status == 'completed' %}
+                        <span class="inline-flex items-center px-3 py-0.5 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
+                            ✨ Completed
+                        </span>
+                    {% elif appointment.status == 'did_not_arrive' %}
+                        <span class="inline-flex items-center px-3 py-0.5 rounded-full text-sm font-medium bg-orange-100 text-orange-800">
+                            👻 Did Not Arrive
+                        </span>
+                    {% elif appointment.status == 'reassigned' %}
+                        <span class="inline-flex items-center px-3 py-0.5 rounded-full text-sm font-medium bg-purple-100 text-purple-800">
+                            🔄 Reassigned
+                        </span>
+                    {% endif %}
+                    {% if appointment.patient_type == 'new' %}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
+                            🆕 New Patient
+                        </span>
+                    {% endif %}
+                </div>
+                <p class="text-gray-600 mt-1">
+                    {{ appointment.schedule.date|date:"F j, Y" }} at {{ appointment.schedule.start_time|time:"g:i A" }}
+                </p>
+                <p class="text-gray-700 mt-1">
+                    <strong>Service:</strong> {{ appointment.service.name }}
+                </p>
+            </div>
+            <div class="flex space-x-3">
+                {% if appointment.status == 'pending' %}
+                    <a href="{% url 'appointments:approve_appointment' appointment.pk %}" 
+                       class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
+                       onclick="return confirm('Are you sure you want to approve this appointment?')">
+                        Approve
+                    </a>
+                    <a href="{% url 'appointments:reject_appointment' appointment.pk %}" 
+                       class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
+                       onclick="return confirm('Are you sure you want to reject this appointment?')">
+                        Reject
+                    </a>
+                {% elif appointment.status == 'approved' %}
+                    <a href="{% url 'appointments:complete_appointment' appointment.pk %}" 
+                       class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
+                       onclick="return confirm('Are you sure you want to mark this appointment as completed?')">
+                        Mark Complete
+                    </a>
+                    {% if appointment.can_be_cancelled %}
+                        <a href="{% url 'appointments:cancel_appointment' appointment.pk %}" 
+                           class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
+                           onclick="return confirm('Are you sure you want to cancel this appointment?')">
+                            Cancel
+                        </a>
+                    {% endif %}
+                {% endif %}
+                {% if appointment.status not in 'rejected,cancelled,completed' %}
+                    <a href="{% url 'appointments:appointment_update' appointment.pk %}" 
+                       class="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors">
+                        Edit
+                    </a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Main Appointment Information -->
+        <div class="lg:col-span-2">
+            <div class="bg-white rounded-lg shadow-sm border">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <h2 class="text-lg font-medium text-gray-900">Appointment Information</h2>
+                </div>
+                <div class="p-6 space-y-6">
+                    <!-- Schedule Details -->
+                    <div>
+                        <h3 class="text-sm font-medium text-gray-900 mb-3">Schedule Details</h3>
+                        <dl class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <dt class="text-sm font-medium text-gray-500">Date</dt>
+                                <dd class="mt-1 text-sm text-gray-900">
+                                    {{ appointment.schedule.date|date:"F j, Y (l)" }}
+                                    {% if appointment.is_today %}
+                                        <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 ml-2">
+                                            Today
+                                        </span>
+                                    {% endif %}
+                                </dd>
+                            </div>
+                            <div>
+                                <dt class="text-sm font-medium text-gray-500">Time</dt>
+                                <dd class="mt-1 text-sm text-gray-900">
+                                    {{ appointment.schedule.start_time|time:"g:i A" }} - {{ appointment.schedule.end_time|time:"g:i A" }}
+                                </dd>
+                            </div>
+                            <div>
+                                <dt class="text-sm font-medium text-gray-500">Dentist</dt>
+                                <dd class="mt-1 text-sm text-gray-900">
+                                    Dr. {{ appointment.dentist.get_full_name|default:appointment.dentist.username }}
+                                </dd>
+                            </div>
+                            <div>
+                                <dt class="text-sm font-medium text-gray-500">Status</dt>
+                                <dd class="mt-1 text-sm text-gray-900">{{ appointment.get_status_display }}</dd>
+                            </div>
+                        </dl>
+                    </div>
+
+                    <!-- Patient Information -->
+                    <div class="border-t border-gray-200 pt-6">
+                        <h3 class="text-sm font-medium text-gray-900 mb-3">Patient Information</h3>
+                        <dl class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <dt class="text-sm font-medium text-gray-500">Full Name</dt>
+                                <dd class="mt-1 text-sm text-gray-900">
+                                    <a href="{% url 'patients:patient_detail' appointment.patient.pk %}" 
+                                       class="text-primary-600 hover:text-primary-700 font-medium">
+                                        {{ appointment.patient.full_name }}
+                                    </a>
+                                </dd>
+                            </div>
+                            <div>
+                                <dt class="text-sm font-medium text-gray-500">Patient Type</dt>
+                                <dd class="mt-1 text-sm text-gray-900">{{ appointment.get_patient_type_display }}</dd>
+                            </div>
+                            <div>
+                                <dt class="text-sm font-medium text-gray-500">Email</dt>
+                                <dd class="mt-1 text-sm text-gray-900">
+                                    {{ appointment.patient.email|default:"Not provided" }}
+                                </dd>
+                            </div>
+                            <div>
+                                <dt class="text-sm font-medium text-gray-500">Contact Number</dt>
+                                <dd class="mt-1 text-sm text-gray-900">
+                                    {{ appointment.patient.contact_number|default:"Not provided" }}
+                                </dd>
+                            </div>
+                        </dl>
+                    </div>
+
+                    <!-- Service Information -->
+                    <div class="border-t border-gray-200 pt-6">
+                        <h3 class="text-sm font-medium text-gray-900 mb-3">Service Information</h3>
+                        <dl class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <dt class="text-sm font-medium text-gray-500">Service</dt>
+                                <dd class="mt-1 text-sm text-gray-900">
+                                    {{ appointment.service.name }}
+                                </dd>
+                            </div>
+                            <div>
+                                <dt class="text-sm font-medium text-gray-500">Duration</dt>
+                                <dd class="mt-1 text-sm text-gray-900">{{ appointment.service.duration_minutes }} minutes</dd>
+                            </div>
+                            <div>
+                                <dt class="text-sm font-medium text-gray-500">Base Price</dt>
+                                <dd class="mt-1 text-sm text-gray-900">₱{{ appointment.service.base_price|floatformat:2 }}</dd>
+                            </div>
+                            <div>
+                                <dt class="text-sm font-medium text-gray-500">Category</dt>
+                                <dd class="mt-1 text-sm text-gray-900">{{ appointment.service.get_category_display }}</dd>
+                            </div>
+                            {% if appointment.service.description %}
+                                <div class="md:col-span-2">
+                                    <dt class="text-sm font-medium text-gray-500">Description</dt>
+                                    <dd class="mt-1 text-sm text-gray-900">{{ appointment.service.description }}</dd>
+                                </div>
+                            {% endif %}
+                        </dl>
+                    </div>
+
+                    <!-- Appointment Notes -->
+                    {% if appointment.reason or appointment.staff_notes %}
+                        <div class="border-t border-gray-200 pt-6">
+                            <h3 class="text-sm font-medium text-gray-900 mb-3">Notes</h3>
+                            {% if appointment.reason %}
+                                <div class="mb-4">
+                                    <dt class="text-sm font-medium text-gray-500 mb-1">Patient's Reason</dt>
+                                    <dd class="text-sm text-gray-900 bg-gray-50 p-3 rounded-md">{{ appointment.reason }}</dd>
+                                </div>
+                            {% endif %}
+                            {% if appointment.staff_notes %}
+                                <div>
+                                    <dt class="text-sm font-medium text-gray-500 mb-1">Staff Notes</dt>
+                                    <dd class="text-sm text-gray-900 bg-blue-50 p-3 rounded-md">{{ appointment.staff_notes }}</dd>
+                                </div>
+                            {% endif %}
+                        </div>
+                    {% endif %}
+
+                    <!-- Payment Status (Placeholder) -->
+                    <div class="border-t border-gray-200 pt-6">
+                        <h3 class="text-sm font-medium text-gray-900 mb-3">Payment Status</h3>
+                        <div class="bg-yellow-50 border border-yellow-200 rounded-md p-4">
+                            <div class="flex">
+                                <div class="flex-shrink-0">
+                                    <svg class="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                                        <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                                    </svg>
+                                </div>
+                                <div class="ml-3">
+                                    <p class="text-sm text-yellow-700">
+                                        <strong>Payment tracking coming soon!</strong> 
+                                        Payment status and billing details will be available in the next update.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- System Information -->
+                    <div class="border-t border-gray-200 pt-6">
+                        <h3 class="text-sm font-medium text-gray-900 mb-3">System Information</h3>
+                        <dl class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <dt class="text-sm font-medium text-gray-500">Requested On</dt>
+                                <dd class="mt-1 text-sm text-gray-900">
+                                    {{ appointment.requested_at|date:"M j, Y g:i A" }}
+                                </dd>
+                            </div>
+                            {% if appointment.approved_at %}
+                                <div>
+                                    <dt class="text-sm font-medium text-gray-500">Approved On</dt>
+                                    <dd class="mt-1 text-sm text-gray-900">
+                                        {{ appointment.approved_at|date:"M j, Y g:i A" }}
+                                    </dd>
+                                </div>
+                                {% if appointment.approved_by %}
+                                    <div>
+                                        <dt class="text-sm font-medium text-gray-500">Approved By</dt>
+                                        <dd class="mt-1 text-sm text-gray-900">
+                                            {{ appointment.approved_by.get_full_name|default:appointment.approved_by.username }}
+                                        </dd>
+                                    </div>
+                                {% endif %}
+                            {% endif %}
+                        </dl>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sidebar -->
+        <div class="space-y-6">
+            <!-- Status Timeline -->
+            <div class="bg-white rounded-lg shadow-sm border">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <h2 class="text-lg font-medium text-gray-900">Appointment Timeline</h2>
+                </div>
+                <div class="p-6">
+                    <div class="flow-root">
+                        <ul role="list" class="-mb-8">
+                            <li>
+                                <div class="relative pb-8">
+                                    <div class="relative flex space-x-3">
+                                        <div>
+                                            <span class="h-8 w-8 rounded-full bg-blue-500 flex items-center justify-center ring-8 ring-white">
+                                                <svg class="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                                    <path d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zM4 9h12v7H4V9z"/>
+                                                </svg>
+                                            </span>
+                                        </div>
+                                        <div class="min-w-0 flex-1">
+                                            <div>
+                                                <div class="text-sm">
+                                                    <span class="font-medium text-gray-900">Appointment Requested</span>
+                                                </div>
+                                                <p class="mt-0.5 text-sm text-gray-500">{{ appointment.requested_at|date:"M j, Y g:i A" }}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </li>
+                            
+                            {% if appointment.approved_at %}
+                            <li>
+                                <div class="relative pb-8">
+                                    <div class="absolute top-4 left-4 -ml-px h-full w-0.5 bg-gray-200"></div>
+                                    <div class="relative flex space-x-3">
+                                        <div>
+                                            <span class="h-8 w-8 rounded-full bg-green-500 flex items-center justify-center ring-8 ring-white">
+                                                <span class="text-white text-sm">✓</span>
+                                            </span>
+                                        </div>
+                                        <div class="min-w-0 flex-1">
+                                            <div>
+                                                <div class="text-sm">
+                                                    <span class="font-medium text-gray-900">Appointment Approved</span>
+                                                </div>
+                                                <p class="mt-0.5 text-sm text-gray-500">
+                                                    {{ appointment.approved_at|date:"M j, Y g:i A" }}
+                                                    {% if appointment.approved_by %}
+                                                        by {{ appointment.approved_by.get_full_name|default:appointment.approved_by.username }}
+                                                    {% endif %}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </li>
+                            {% endif %}
+
+                            {% if appointment.status == 'completed' %}
+                            <li>
+                                <div class="relative">
+                                    <div class="absolute top-4 left-4 -ml-px h-full w-0.5 bg-gray-200"></div>
+                                    <div class="relative flex space-x-3">
+                                        <div>
+                                            <span class="h-8 w-8 rounded-full bg-blue-500 flex items-center justify-center ring-8 ring-white">
+                                                <span class="text-white text-sm">✨</span>
+                                            </span>
+                                        </div>
+                                        <div class="min-w-0 flex-1">
+                                            <div>
+                                                <div class="text-sm">
+                                                    <span class="font-medium text-gray-900">Appointment Completed</span>
+                                                </div>
+                                                <p class="mt-0.5 text-sm text-gray-500">Treatment finished successfully</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </li>
+                            {% elif appointment.status == 'cancelled' %}
+                            <li>
+                                <div class="relative">
+                                    <div class="absolute top-4 left-4 -ml-px h-full w-0.5 bg-gray-200"></div>
+                                    <div class="relative flex space-x-3">
+                                        <div>
+                                            <span class="h-8 w-8 rounded-full bg-red-500 flex items-center justify-center ring-8 ring-white">
+                                                <span class="text-white text-sm">✕</span>
+                                            </span>
+                                        </div>
+                                        <div class="min-w-0 flex-1">
+                                            <div>
+                                                <div class="text-sm">
+                                                    <span class="font-medium text-gray-900">Appointment Cancelled</span>
+                                                </div>
+                                                <p class="mt-0.5 text-sm text-gray-500">Appointment was cancelled</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </li>
+                            {% elif appointment.status == 'rejected' %}
+                            <li>
+                                <div class="relative">
+                                    <div class="absolute top-4 left-4 -ml-px h-full w-0.5 bg-gray-200"></div>
+                                    <div class="relative flex space-x-3">
+                                        <div>
+                                            <span class="h-8 w-8 rounded-full bg-red-500 flex items-center justify-center ring-8 ring-white">
+                                                <span class="text-white text-sm">❌</span>
+                                            </span>
+                                        </div>
+                                        <div class="min-w-0 flex-1">
+                                            <div>
+                                                <div class="text-sm">
+                                                    <span class="font-medium text-gray-900">Appointment Rejected</span>
+                                                </div>
+                                                <p class="mt-0.5 text-gray-500">Request was not approved</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </li>
+                            {% elif appointment.status == 'pending' %}
+                            <li>
+                                <div class="relative">
+                                    <div class="absolute top-4 left-4 -ml-px h-full w-0.5 bg-gray-200"></div>
+                                    <div class="relative flex space-x-3">
+                                        <div>
+                                            <span class="h-8 w-8 rounded-full bg-yellow-500 flex items-center justify-center ring-8 ring-white">
+                                                <span class="text-white text-sm">⏳</span>
+                                            </span>
+                                        </div>
+                                        <div class="min-w-0 flex-1">
+                                            <div>
+                                                <div class="text-sm">
+                                                    <span class="font-medium text-gray-900">Awaiting Approval</span>
+                                                </div>
+                                                <p class="mt-0.5 text-sm text-gray-500">Pending staff review</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </li>
+                            {% endif %}
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="bg-white rounded-lg shadow-sm border">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <h3 class="text-lg font-medium text-gray-900">Quick Actions</h3>
+                </div>
+                <div class="p-6 space-y-3">
+                    <a href="{% url 'patients:patient_detail' appointment.patient.pk %}" 
+                       class="block w-full text-center bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors">
+                        View Patient Details
+                    </a>
+                    
+                    <a href="{% url 'appointments:appointment_create' %}?patient={{ appointment.patient.pk }}" 
+                       class="block w-full text-center bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors">
+                        Book Another Appointment
+                    </a>
+                    
+                    <a href="{% url 'appointments:appointment_calendar' %}?month={{ appointment.schedule.date.month }}&year={{ appointment.schedule.date.year }}" 
+                       class="block w-full text-center bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors">
+                        View Calendar
+                    </a>
+                    
+                    <a href="{% url 'appointments:appointment_list' %}" 
+                       class="block w-full text-center bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-md text-sm font-medium transition-colors">
+                        All Appointments
+                    </a>
+
+                    {% if appointment.status == 'pending' %}
+                        <div class="pt-3 border-t border-gray-200">
+                            <div class="flex space-x-2">
+                                <a href="{% url 'appointments:approve_appointment' appointment.pk %}" 
+                                   class="flex-1 text-center bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-md text-sm font-medium transition-colors"
+                                   onclick="return confirm('Are you sure you want to approve this appointment?')">
+                                    ✅ Approve
+                                </a>
+                                <a href="{% url 'appointments:reject_appointment' appointment.pk %}" 
+                                   class="flex-1 text-center bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-md text-sm font-medium transition-colors"
+                                   onclick="return confirm('Are you sure you want to reject this appointment?')">
+                                    ❌ Reject
+                                </a>
+                            </div>
+                        </div>
+                    {% elif appointment.status == 'approved' %}
+                        <div class="pt-3 border-t border-gray-200">
+                            <a href="{% url 'appointments:complete_appointment' appointment.pk %}" 
+                               class="block w-full text-center bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
+                               onclick="return confirm('Are you sure you want to mark this appointment as completed?')">
+                                ✨ Mark as Completed
+                            </a>
+                            {% if appointment.can_be_cancelled %}
+                                <a href="{% url 'appointments:cancel_appointment' appointment.pk %}" 
+                                   class="block w-full text-center border border-red-300 text-red-600 hover:bg-red-50 px-4 py-2 rounded-md text-sm font-medium transition-colors mt-2"
+                                   onclick="return confirm('Are you sure you want to cancel this appointment?')">
+                                    🚫 Cancel Appointment
+                                </a>
+                            {% endif %}
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Related Information -->
+            <div class="bg-white rounded-lg shadow-sm border">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <h3 class="text-lg font-medium text-gray-900">Related Information</h3>
+                </div>
+                <div class="p-6 space-y-4">
+                    <div>
+                        <h4 class="text-sm font-medium text-gray-900 mb-2">Patient History</h4>
+                        <div class="text-sm text-gray-600">
+                            <p>Total appointments: {{ patient_stats.total_appointments }}</p>
+                            <p>Completed: {{ patient_stats.completed_appointments }}</p>
+                            <p>Pending: {{ patient_stats.pending_appointments }}</p>
+                            <p>Member since: {{ appointment.patient.created_at|date:"M Y" }}</p>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <h4 class="text-sm font-medium text-gray-900 mb-2">Service Details</h4>
+                        <div class="text-sm text-gray-600">
+                            <p>Category: {{ appointment.service.get_category_display }}</p>
+                            <p>Duration: {{ appointment.service.duration_minutes }} mins</p>
+                            <p>Base Price: ₱{{ appointment.service.base_price|floatformat:2 }}</p>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <h4 class="text-sm font-medium text-gray-900 mb-2">Dentist Availability</h4>
+                        <div class="text-sm text-gray-600">
+                            <p>Today's schedule: {{ dentist_stats.today_schedules }} slot(s)</p>
+                            <p>This week: {{ dentist_stats.week_schedules }} slot(s)</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Contact Information -->
+            <div class="bg-white rounded-lg shadow-sm border">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <h3 class="text-lg font-medium text-gray-900">Contact Patient</h3>
+                </div>
+                <div class="p-6 space-y-3">
+                    {% if appointment.patient.contact_number %}
+                        <a href="tel:{{ appointment.patient.contact_number }}" 
+                           class="block w-full text-center bg-green-100 hover:bg-green-200 text-green-700 px-4 py-2 rounded-md text-sm font-medium transition-colors">
+                            📞 Call {{ appointment.patient.contact_number }}
+                        </a>
+                    {% endif %}
+                    
+                    {% if appointment.patient.email %}
+                        <a href="mailto:{{ appointment.patient.email }}" 
+                           class="block w-full text-center bg-blue-100 hover:bg-blue-200 text-blue-700 px-4 py-2 rounded-md text-sm font-medium transition-colors">
+                            ✉️ Email {{ appointment.patient.email }}
+                        </a>
+                    {% endif %}
+                    
+                    {% if not appointment.patient.contact_number and not appointment.patient.email %}
+                        <div class="text-center py-4">
+                            <svg class="mx-auto h-8 w-8 text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                            </svg>
+                            <p class="text-sm text-gray-500">No contact information available</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

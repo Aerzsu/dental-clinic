@@ -1,10 +1,17 @@
 {% extends 'base.html' %}
 
 {% block title %}
-    {% if object %}Edit Discount{% else %}Add New Discount{% endif %} - Dental Clinic Management
+    {% if object %}Edit Discount{% else %}Add New Discount{% endif %} - KingJoy Appointment System
 {% endblock %}
 
 {% block content %}
+<style> 
+    input,
+    select,
+    textarea {
+    padding: 0.5rem 0.75rem;
+}
+</style>
 <div class="max-w-2xl mx-auto space-y-6">
     <!-- Header -->
     <div>

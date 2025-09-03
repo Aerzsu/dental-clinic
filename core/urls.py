@@ -13,6 +13,7 @@ urlpatterns = [
     path('dashboard/', views.DashboardView.as_view(), name='dashboard'),
     
     # Maintenance module
+    path('maintenance/', views.MaintenanceHubView.as_view(), name='maintenance_hub'),
     path('holidays/', views.HolidayListView.as_view(), name='holiday_list'),
     path('holidays/create/', views.HolidayCreateView.as_view(), name='holiday_create'),
     path('holidays/<int:pk>/edit/', views.HolidayUpdateView.as_view(), name='holiday_update'),

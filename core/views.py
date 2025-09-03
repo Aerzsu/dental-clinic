@@ -101,7 +101,6 @@ class BookAppointmentView(TemplateView):
                 
                 # Handle patient creation/finding
                 if data['patient_type'] == 'new':
-                    # Create new patient - FIXED: contact_number is now optional
                     required_new_fields = ['first_name', 'last_name', 'email']
                     for field in required_new_fields:
                         if not data.get(field, '').strip():
@@ -490,6 +489,17 @@ class AuditLogListView(LoginRequiredMixin, ListView):
             'date_from': self.request.GET.get('date_from', ''),
             'date_to': self.request.GET.get('date_to', ''),
         }
+        return context
+
+class MaintenanceHubView(TemplateView):
+    template_name = 'core/maintenance_hub.html'
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        # Optional: Add counts for the stats section
+        # context['users_count'] = User.objects.count()
+        # context['services_count'] = Service.objects.count()
+        # etc.
         return context
 
 class SystemSettingsView(LoginRequiredMixin, TemplateView):

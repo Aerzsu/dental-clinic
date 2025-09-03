@@ -309,6 +309,38 @@ class AppointmentDetailView(LoginRequiredMixin, DetailView):
             messages.error(request, 'You do not have permission to access this page.')
             return redirect('core:dashboard')
         return super().dispatch(request, *args, **kwargs)
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        appointment = self.object
+        
+        # Add patient appointment statistics
+        patient_appointments = appointment.patient.appointments.all()
+        context['patient_stats'] = {
+            'total_appointments': patient_appointments.count(),
+            'completed_appointments': patient_appointments.filter(status='completed').count(),
+            'pending_appointments': patient_appointments.filter(status='pending').count(),
+            'cancelled_appointments': patient_appointments.filter(status='cancelled').count(),
+        }
+        
+        # Add today's date for template comparisons
+        context['today'] = timezone.now().date()
+        
+        # Add dentist schedule stats for the sidebar
+        from datetime import timedelta
+        today = timezone.now().date()
+        week_start = today - timedelta(days=today.weekday())
+        week_end = week_start + timedelta(days=6)
+        
+        context['dentist_stats'] = {
+            'today_schedules': appointment.dentist.schedules.filter(date=today).count(),
+            'week_schedules': appointment.dentist.schedules.filter(
+                date__gte=week_start, 
+                date__lte=week_end
+            ).count(),
+        }
+        
+        return context
 
 class AppointmentUpdateView(LoginRequiredMixin, UpdateView):
     """Update appointment"""

@@ -1,0 +1,127 @@
+{% extends 'base.html' %}
+
+{% block title %}Maintenance - KingJoy Appointment System{% endblock %}
+
+{% block content %}
+<!-- Mobile Back Navigation -->
+<div class="md:hidden mb-6">
+    <button onclick="history.back()" class="flex items-center text-gray-600 hover:text-gray-900">
+        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+        </svg>
+        Back
+    </button>
+</div>
+
+<div class="max-w-4xl mx-auto">
+    <!-- Header -->
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold text-gray-900 mb-2">Maintenance</h1>
+        <p class="text-gray-600">Manage system settings, users, and business data</p>
+    </div>
+
+    <!-- Maintenance Modules Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <!-- Users & Roles -->
+        <a href="{% url 'users:user_list' %}" class="group bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md hover:border-primary-300 transition-all duration-150 p-6">
+            <div class="flex items-center mb-4">
+                <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center group-hover:bg-blue-200 transition-colors duration-150">
+                    <span class="text-2xl">👤</span>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-lg font-semibold text-gray-900 group-hover:text-primary-700">Users & Roles</h3>
+                </div>
+            </div>
+            <p class="text-gray-600 text-sm">Manage user accounts, roles, and permissions for the system</p>
+        </a>
+
+        <!-- Services -->
+        <a href="{% url 'services:service_list' %}" class="group bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md hover:border-primary-300 transition-all duration-150 p-6">
+            <div class="flex items-center mb-4">
+                <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center group-hover:bg-green-200 transition-colors duration-150">
+                    <span class="text-2xl">🦷</span>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-lg font-semibold text-gray-900 group-hover:text-primary-700">Services</h3>
+                </div>
+            </div>
+            <p class="text-gray-600 text-sm">Configure dental services, procedures, and pricing</p>
+        </a>
+
+        <!-- Discounts -->
+        <a href="{% url 'services:discount_list' %}" class="group bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md hover:border-primary-300 transition-all duration-150 p-6">
+            <div class="flex items-center mb-4">
+                <div class="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center group-hover:bg-yellow-200 transition-colors duration-150">
+                    <span class="text-2xl">💰</span>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-lg font-semibold text-gray-900 group-hover:text-primary-700">Discounts</h3>
+                </div>
+            </div>
+            <p class="text-gray-600 text-sm">Manage discount codes, promotions, and special offers</p>
+        </a>
+
+        <!-- Holidays -->
+        <a href="{% url 'core:holiday_list' %}" class="group bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md hover:border-primary-300 transition-all duration-150 p-6">
+            <div class="flex items-center mb-4">
+                <div class="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center group-hover:bg-red-200 transition-colors duration-150">
+                    <span class="text-2xl">📅</span>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-lg font-semibold text-gray-900 group-hover:text-primary-700">Holidays</h3>
+                </div>
+            </div>
+            <p class="text-gray-600 text-sm">Set clinic holidays and non-working days for scheduling</p>
+        </a>
+
+        <!-- Audit Logs -->
+        <a href="{% url 'core:audit_logs' %}" class="group bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md hover:border-primary-300 transition-all duration-150 p-6">
+            <div class="flex items-center mb-4">
+                <div class="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center group-hover:bg-purple-200 transition-colors duration-150">
+                    <span class="text-2xl">📋</span>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-lg font-semibold text-gray-900 group-hover:text-primary-700">Audit Logs</h3>
+                </div>
+            </div>
+            <p class="text-gray-600 text-sm">Review system activity and track user actions</p>
+        </a>
+
+        <!-- Settings -->
+        <a href="{% url 'core:system_settings' %}" class="group bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md hover:border-primary-300 transition-all duration-150 p-6">
+            <div class="flex items-center mb-4">
+                <div class="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center group-hover:bg-gray-200 transition-colors duration-150">
+                    <span class="text-2xl">⚙️</span>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-lg font-semibold text-gray-900 group-hover:text-primary-700">Settings</h3>
+                </div>
+            </div>
+            <p class="text-gray-600 text-sm">Configure system-wide settings and preferences</p>
+        </a>
+    </div>
+
+    <!-- Quick Stats (Optional) -->
+    <div class="mt-12 bg-gray-50 rounded-lg p-6">
+        <h2 class="text-lg font-semibold text-gray-900 mb-4">System Overview</h2>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+            <div class="bg-white rounded-lg p-4">
+                <div class="text-2xl font-bold text-gray-900">{{ users_count|default:"-" }}</div>
+                <div class="text-sm text-gray-600">Users</div>
+            </div>
+            <div class="bg-white rounded-lg p-4">
+                <div class="text-2xl font-bold text-gray-900">{{ services_count|default:"-" }}</div>
+                <div class="text-sm text-gray-600">Services</div>
+            </div>
+            <div class="bg-white rounded-lg p-4">
+                <div class="text-2xl font-bold text-gray-900">{{ discounts_count|default:"-" }}</div>
+                <div class="text-sm text-gray-600">Discounts</div>
+            </div>
+            <div class="bg-white rounded-lg p-4">
+                <div class="text-2xl font-bold text-gray-900">{{ holidays_count|default:"-" }}</div>
+                <div class="text-sm text-gray-600">Holidays</div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

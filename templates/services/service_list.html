@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% load user_tags %}
 
-{% block title %}Services - Dental Clinic Management{% endblock %}
+{% block title %}Services - KingJoy Appointment System{% endblock %}
 
 {% block content %}
 <div class="space-y-6">
@@ -84,7 +84,7 @@
                         <label for="price_range" class="block text-sm font-medium text-gray-700">Price Range</label>
                         <select id="price_range" 
                                 name="price_range" 
-                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
+                                class="mt-1 block w-full rounded-md px-3 py-2 border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
                                 onchange="document.getElementById('filterForm').submit();">
                             <option value="">All Prices</option>
                             <option value="0-500" {% if price_range == '0-500' %}selected{% endif %}>Under ₱500</option>
@@ -100,7 +100,7 @@
                         <label for="duration_range" class="block text-sm font-medium text-gray-700">Duration</label>
                         <select id="duration_range" 
                                 name="duration_range" 
-                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
+                                class="mt-1 block w-full rounded-md px-3 py-2 border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
                                 onchange="document.getElementById('filterForm').submit();">
                             <option value="">All Durations</option>
                             <option value="0-30" {% if duration_range == '0-30' %}selected{% endif %}>Under 30 minutes</option>

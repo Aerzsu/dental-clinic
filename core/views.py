@@ -10,6 +10,8 @@ from django.db.models import Q
 from django.http import JsonResponse
 from datetime import datetime, timedelta, date, time
 from django import forms
+from django.db import transaction, IntegrityError
+from django.core.exceptions import ValidationError
 import re
 
 from .models import AuditLog, Holiday, SystemSetting
@@ -18,6 +20,7 @@ from patients.models import Patient
 from services.models import Service
 from users.models import User
 from appointments.forms import AppointmentRequestForm
+from appointments.views import create_appointment_atomic
 
 class HolidayForm(forms.ModelForm):
     """Form for creating and updating holidays"""
@@ -52,7 +55,7 @@ class HomeView(TemplateView):
 
     
 class BookAppointmentView(TemplateView):
-    """Public appointment booking form"""
+    """Public appointment booking form with race condition prevention"""
     template_name = 'core/book_appointment.html'
     
     def get_context_data(self, **kwargs):
@@ -65,6 +68,7 @@ class BookAppointmentView(TemplateView):
                 'id': service.id,
                 'name': service.name,
                 'duration': f"{service.duration_minutes} minutes",
+                'duration_minutes': service.duration_minutes,  # Add this for JS calculations
                 'price_range': f"₱{service.min_price:,.0f} - ₱{service.max_price:,.0f}",
                 'description': service.description or "Professional dental service"
             })
@@ -87,204 +91,16 @@ class BookAppointmentView(TemplateView):
         return context
     
     def post(self, request, *args, **kwargs):
-        """Handle appointment request submission"""
+        """Handle appointment request submission with enhanced validation and race condition prevention"""
         try:
             # Check if request is JSON
             if request.content_type == 'application/json':
                 data = json.loads(request.body)
-                
-                # Validate required fields
-                required_fields = ['patient_type', 'service', 'dentist', 'selected_date', 'selected_time']
-                for field in required_fields:
-                    if not data.get(field):
-                        return JsonResponse({'success': False, 'error': f'{field} is required'}, status=400)
-                
-                # Handle patient creation/finding
-                if data['patient_type'] == 'new':
-                    required_new_fields = ['first_name', 'last_name', 'email']
-                    for field in required_new_fields:
-                        if not data.get(field, '').strip():
-                            field_label = field.replace('_', ' ').title()
-                            return JsonResponse({
-                                'success': False, 
-                                'error': f'{field_label} is required for new patients'
-                            }, status=400)
-                    
-                    # Validate name fields
-                    name_pattern = re.compile(r'^[a-zA-Z\s\-\']+$')
-                    
-                    first_name = data.get('first_name', '').strip()
-                    last_name = data.get('last_name', '').strip()
-                    email = data.get('email', '').strip()
-                    contact_number = data.get('contact_number', '').strip()
-                    
-                    if not name_pattern.match(first_name):
-                        return JsonResponse({
-                            'success': False,
-                            'error': 'First name should only contain letters, spaces, hyphens, and apostrophes'
-                        }, status=400)
-                    
-                    if not name_pattern.match(last_name):
-                        return JsonResponse({
-                            'success': False,
-                            'error': 'Last name should only contain letters, spaces, hyphens, and apostrophes'
-                        }, status=400)
-                    
-                    # Validate email format
-                    from django.core.validators import validate_email
-                    from django.core.exceptions import ValidationError as DjangoValidationError
-                    
-                    try:
-                        validate_email(email)
-                    except DjangoValidationError:
-                        return JsonResponse({
-                            'success': False,
-                            'error': 'Please enter a valid email address'
-                        }, status=400)
-                    
-                    # Validate contact number if provided (optional)
-                    if contact_number:
-                        phone_pattern = re.compile(r'^(\+63|0)?9\d{9}$')
-                        clean_contact = contact_number.replace(' ', '').replace('-', '')
-                        if not phone_pattern.match(clean_contact):
-                            return JsonResponse({
-                                'success': False,
-                                'error': 'Please enter a valid Philippine mobile number (e.g., +639123456789)'
-                            }, status=400)
-                        contact_number = clean_contact  # Use cleaned version
-                    
-                    # Check for existing patient
-                    existing_query = Q()
-                    if email:
-                        existing_query |= Q(email__iexact=email, is_active=True)
-                    if contact_number:
-                        existing_query |= Q(contact_number=contact_number, is_active=True)
-                    
-                    if existing_query:
-                        existing = Patient.objects.filter(existing_query).first()
-                        
-                        if existing:
-                            return JsonResponse({
-                                'success': False, 
-                                'error': 'A patient with this email or contact number already exists'
-                            }, status=400)
-                    
-                    patient = Patient.objects.create(
-                        first_name=first_name,
-                        last_name=last_name,
-                        email=email,
-                        contact_number=contact_number or '',  # Allow empty string
-                        address=data.get('address', '').strip(),
-                    )
-                    patient_type = 'new'
-                    
-                else:  # existing patient
-                    identifier = data.get('patient_identifier', '').strip()
-                    if not identifier:
-                        return JsonResponse({'success': False, 'error': 'Patient identifier is required'}, status=400)
-                    
-                    patient = Patient.objects.filter(
-                        Q(email__iexact=identifier) | Q(contact_number=identifier),
-                        is_active=True
-                    ).first()
-                    
-                    if not patient:
-                        return JsonResponse({
-                            'success': False, 
-                            'error': 'No patient found with the provided information'
-                        }, status=400)
-                    
-                    patient_type = 'returning'
-                
-                # Get service and dentist
-                try:
-                    service = Service.objects.get(id=data['service'], is_archived=False)
-                    dentist = User.objects.get(id=data['dentist'], is_active_dentist=True)
-                except (Service.DoesNotExist, User.DoesNotExist):
-                    return JsonResponse({'success': False, 'error': 'Invalid service or dentist'}, status=400)
-                
-                # Parse date and time
-                try:
-                    appointment_date = datetime.strptime(data['selected_date'], '%Y-%m-%d').date()
-                    appointment_time = datetime.strptime(data['selected_time'], '%H:%M').time()
-                except ValueError:
-                    return JsonResponse({'success': False, 'error': 'Invalid date or time format'}, status=400)
-                
-                # Validate appointment date
-                if appointment_date <= timezone.now().date():
-                    return JsonResponse({'success': False, 'error': 'Appointment date must be in the future'}, status=400)
-                
-                if appointment_date.weekday() == 6:  # Sunday
-                    return JsonResponse({'success': False, 'error': 'Appointments are not available on Sundays'}, status=400)
-                
-                # Check for holidays
-                if Holiday.objects.filter(date=appointment_date, is_active=True).exists():
-                    return JsonResponse({'success': False, 'error': 'Appointments are not available on this date (holiday)'}, status=400)
-                
-                # Calculate end time based on service duration
-                start_datetime = datetime.combine(appointment_date, appointment_time)
-                end_time = (start_datetime + timedelta(minutes=service.duration_minutes)).time()
-                
-                # Create or get schedule
-                schedule, created = Schedule.objects.get_or_create(
-                    dentist=dentist,
-                    date=appointment_date,
-                    start_time=appointment_time,
-                    defaults={
-                        'end_time': end_time,
-                        'is_available': True,
-                        'notes': 'Auto-created for online appointment request'
-                    }
-                )
-                
-                # Check for conflicts
-                existing_appointment = Appointment.objects.filter(
-                    schedule=schedule,
-                    status__in=['approved', 'pending']
-                ).first()
-                
-                if existing_appointment:
-                    return JsonResponse({'success': False, 'error': 'This time slot is already booked'}, status=400)
-                
-                # Create appointment
-                from django.db import transaction
-                
-                with transaction.atomic():
-                    appointment = Appointment.objects.create(
-                        patient=patient,
-                        dentist=dentist,
-                        service=service,
-                        schedule=schedule,
-                        patient_type=patient_type,
-                        reason=data.get('reason', '').strip(),
-                        status='pending'
-                    )
-                
-                # Generate reference number
-                reference_number = f'APT-{appointment.id:06d}'
-                
-                return JsonResponse({
-                    'success': True,
-                    'reference_number': reference_number,
-                    'appointment_id': appointment.id
-                })
-                
+                return self._handle_json_request(data)
             else:
                 # Handle regular form submission (fallback)
-                form = AppointmentRequestForm(request.POST)
-                if form.is_valid():
-                    appointment = form.save()
-                    messages.success(
-                        request,
-                        'Your appointment request has been submitted successfully! '
-                        'We will contact you soon to confirm your appointment.'
-                    )
-                    return redirect('core:home')
-                else:
-                    context = self.get_context_data(**kwargs)
-                    context['form'] = form
-                    return render(request, self.template_name, context)
-                    
+                return self._handle_form_request(request)
+                
         except json.JSONDecodeError:
             return JsonResponse({'success': False, 'error': 'Invalid JSON data'}, status=400)
         except Exception as e:
@@ -296,6 +112,277 @@ class BookAppointmentView(TemplateView):
                 'success': False, 
                 'error': 'An unexpected error occurred. Please try again.'
             }, status=500)
+    
+    def _handle_json_request(self, data):
+        """Handle JSON appointment request with atomic transactions"""
+        # Validate required fields
+        required_fields = ['patient_type', 'service', 'dentist', 'selected_date', 'selected_time']
+        for field in required_fields:
+            if not data.get(field):
+                return JsonResponse({'success': False, 'error': f'{field} is required'}, status=400)
+        
+        # Validate terms agreement
+        if not data.get('agreed_to_terms'):
+            return JsonResponse({'success': False, 'error': 'You must agree to the terms and conditions'}, status=400)
+        
+        try:
+            # Use atomic transaction with database locking to prevent race conditions
+            with transaction.atomic():
+                # Get and validate service and dentist with locking
+                try:
+                    service = Service.objects.select_for_update().get(id=data['service'], is_archived=False)
+                    dentist = User.objects.select_for_update().get(id=data['dentist'], is_active_dentist=True)
+                except (Service.DoesNotExist, User.DoesNotExist):
+                    return JsonResponse({'success': False, 'error': 'Invalid service or dentist'}, status=400)
+                
+                # Parse and validate date/time
+                try:
+                    appointment_date = datetime.strptime(data['selected_date'], '%Y-%m-%d').date()
+                    appointment_time = datetime.strptime(data['selected_time'], '%H:%M').time()
+                except ValueError:
+                    return JsonResponse({'success': False, 'error': 'Invalid date or time format'}, status=400)
+                
+                # Validate appointment date/time constraints
+                validation_error = self._validate_appointment_datetime(appointment_date, appointment_time, service)
+                if validation_error:
+                    return JsonResponse({'success': False, 'error': validation_error}, status=400)
+                
+                # Handle patient creation/finding
+                patient, patient_type = self._handle_patient_data(data)
+                if isinstance(patient, JsonResponse):  # Error response
+                    return patient
+                
+                # Get buffer time
+                buffer_minutes = self._get_buffer_time()
+                
+                # Create appointment atomically with conflict checking
+                try:
+                    appointment = create_appointment_atomic(
+                        patient=patient,
+                        dentist=dentist,
+                        service=service,
+                        appointment_date=appointment_date,
+                        appointment_time=appointment_time,
+                        patient_type=patient_type,
+                        reason=data.get('reason', '').strip(),
+                        buffer_minutes=buffer_minutes
+                    )[0]
+                    
+                    # Generate reference number
+                    reference_number = f'APT-{appointment.id:06d}'
+                    
+                    return JsonResponse({
+                        'success': True,
+                        'reference_number': reference_number,
+                        'appointment_id': appointment.id
+                    })
+                    
+                except ValidationError as e:
+                    return JsonResponse({'success': False, 'error': str(e)}, status=400)
+                except IntegrityError:
+                    return JsonResponse({
+                        'success': False, 
+                        'error': 'This time slot has been booked by another patient. Please select a different time.'
+                    }, status=400)
+                
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f'Error in _handle_json_request: {str(e)}', exc_info=True)
+            
+            return JsonResponse({
+                'success': False, 
+                'error': 'An error occurred while processing your request. Please try again.'
+            }, status=500)
+    
+    def _validate_appointment_datetime(self, appointment_date, appointment_time, service):
+        """Validate appointment date and time constraints"""
+        # Check past dates
+        if appointment_date <= timezone.now().date():
+            return 'Appointment date must be in the future'
+        
+        # Check Sundays
+        if appointment_date.weekday() == 6:  # Sunday
+            return 'Appointments are not available on Sundays'
+        
+        # Check holidays
+        holiday = Holiday.objects.filter(date=appointment_date, is_active=True).first()
+        if holiday:
+            return f'Appointments are not available on this date ({holiday.name})'
+        
+        # Check clinic hours
+        clinic_start = time(10, 0)  # 10:00 AM
+        clinic_end = time(18, 0)    # 6:00 PM
+        lunch_start = time(12, 0)   # 12:00 PM
+        lunch_end = time(13, 0)     # 1:00 PM
+        
+        if appointment_time < clinic_start or appointment_time >= clinic_end:
+            return 'Appointments are available Monday to Saturday, 10:00 AM to 6:00 PM'
+        
+        # Check if appointment would extend past clinic hours or into lunch
+        start_datetime = datetime.combine(appointment_date, appointment_time)
+        service_end = start_datetime + timedelta(minutes=service.duration_minutes)
+        service_end_time = service_end.time()
+        
+        if service_end_time > clinic_end:
+            return f'Selected time is too late. Service duration is {service.duration_minutes} minutes and clinic closes at 6:00 PM'
+        
+        # Check lunch break conflict
+        lunch_start_datetime = datetime.combine(appointment_date, lunch_start)
+        lunch_end_datetime = datetime.combine(appointment_date, lunch_end)
+        
+        if not (service_end <= lunch_start_datetime or start_datetime >= lunch_end_datetime):
+            return 'Appointment cannot be scheduled during lunch break (12:00 PM - 1:00 PM)'
+        
+        return None  # No validation errors
+    
+    def _handle_patient_data(self, data):
+        """Handle patient creation or finding with validation"""
+        patient_type_raw = data['patient_type']
+        
+        if patient_type_raw == 'new':
+            return self._create_new_patient(data)
+        elif patient_type_raw == 'existing':
+            return self._find_existing_patient(data)
+        else:
+            return JsonResponse({'success': False, 'error': 'Invalid patient type'}, status=400), None
+    
+    def _create_new_patient(self, data):
+        """Create new patient with validation"""
+        required_new_fields = ['first_name', 'last_name', 'email']
+        for field in required_new_fields:
+            if not data.get(field, '').strip():
+                field_label = field.replace('_', ' ').title()
+                return JsonResponse({
+                    'success': False, 
+                    'error': f'{field_label} is required for new patients'
+                }, status=400), None
+        
+        # Extract and validate data
+        first_name = data.get('first_name', '').strip()
+        last_name = data.get('last_name', '').strip()
+        email = data.get('email', '').strip()
+        contact_number = data.get('contact_number', '').strip()
+        address = data.get('address', '').strip()
+        
+        # Validate name fields
+        name_pattern = re.compile(r'^[a-zA-Z\s\-\']+$')
+        
+        if not name_pattern.match(first_name):
+            return JsonResponse({
+                'success': False,
+                'error': 'First name should only contain letters, spaces, hyphens, and apostrophes'
+            }, status=400), None
+        
+        if not name_pattern.match(last_name):
+            return JsonResponse({
+                'success': False,
+                'error': 'Last name should only contain letters, spaces, hyphens, and apostrophes'
+            }, status=400), None
+        
+        # Validate email format
+        from django.core.validators import validate_email
+        from django.core.exceptions import ValidationError as DjangoValidationError
+        
+        try:
+            validate_email(email)
+        except DjangoValidationError:
+            return JsonResponse({
+                'success': False,
+                'error': 'Please enter a valid email address'
+            }, status=400), None
+        
+        # Validate contact number if provided (optional)
+        if contact_number:
+            phone_pattern = re.compile(r'^(\+63|0)?9\d{9}$')
+            clean_contact = contact_number.replace(' ', '').replace('-', '')
+            if not phone_pattern.match(clean_contact):
+                return JsonResponse({
+                    'success': False,
+                    'error': 'Please enter a valid Philippine mobile number (e.g., +639123456789)'
+                }, status=400), None
+            contact_number = clean_contact  # Use cleaned version
+        
+        # Check for existing patient - using select_for_update to prevent race conditions
+        existing_query = Q()
+        if email:
+            existing_query |= Q(email__iexact=email, is_active=True)
+        if contact_number:
+            existing_query |= Q(contact_number=contact_number, is_active=True)
+        
+        if existing_query:
+            existing = Patient.objects.select_for_update().filter(existing_query).first()
+            
+            if existing:
+                return JsonResponse({
+                    'success': False, 
+                    'error': 'A patient with this email or contact number already exists. Please use "Existing Patient" option.'
+                }, status=400), None
+        
+        # Create new patient
+        patient = Patient.objects.create(
+            first_name=first_name,
+            last_name=last_name,
+            email=email,
+            contact_number=contact_number or '',  # Allow empty string
+            address=address,
+        )
+        
+        return patient, 'new'
+    
+    def _find_existing_patient(self, data):
+        """Find existing patient with validation"""
+        identifier = data.get('patient_identifier', '').strip()
+        if not identifier:
+            return JsonResponse({'success': False, 'error': 'Patient identifier is required'}, status=400), None
+        
+        # Search with select_for_update to prevent race conditions
+        query = Q(is_active=True)
+        if '@' in identifier:
+            query &= Q(email__iexact=identifier)
+        else:
+            clean_identifier = identifier.replace(' ', '').replace('-', '')
+            query &= (Q(contact_number=identifier) | Q(contact_number=clean_identifier))
+        
+        patient = Patient.objects.select_for_update().filter(query).first()
+        
+        if not patient:
+            return JsonResponse({
+                'success': False, 
+                'error': 'No patient found with the provided information. Please check your details or register as a new patient.'
+            }, status=400), None
+        
+        return patient, 'returning'
+    
+    def _get_buffer_time(self):
+        """Get buffer time from system settings or default"""
+        try:
+            buffer_setting = SystemSetting.objects.get(key='appointment_buffer_minutes')
+            return int(buffer_setting.value)
+        except (SystemSetting.DoesNotExist, ValueError):
+            return 15  # Default 15 minutes
+    
+    def _handle_form_request(self, request):
+        """Handle regular form submission (fallback)"""
+        form = AppointmentRequestForm(request.POST)
+        if form.is_valid():
+            try:
+                with transaction.atomic():
+                    appointment = form.save()
+                    messages.success(
+                        request,
+                        'Your appointment request has been submitted successfully! '
+                        'We will contact you soon to confirm your appointment.'
+                    )
+                    return redirect('core:home')
+            except ValidationError as e:
+                messages.error(request, str(e))
+            except Exception as e:
+                messages.error(request, 'An error occurred while submitting your request. Please try again.')
+        
+        context = self.get_context_data()
+        context['form'] = form
+        return render(request, self.template_name, context)
 
 class DashboardView(LoginRequiredMixin, TemplateView):
     """Main dashboard for authenticated users"""

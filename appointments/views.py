@@ -3,6 +3,7 @@
 import json
 import re
 from datetime import datetime, date, timedelta, time
+from decimal import Decimal
 
 # Django core imports
 from django.shortcuts import render, get_object_or_404, redirect
@@ -10,6 +11,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ValidationError
+from django.db import transaction, IntegrityError
 from django.db.models import Q, Count
 from django.http import JsonResponse
 from django.urls import reverse_lazy
@@ -54,7 +56,7 @@ class AppointmentCalendarView(LoginRequiredMixin, TemplateView):
         appointments = Appointment.objects.filter(
             schedule__date__gte=start_date,
             schedule__date__lt=end_date,
-            status__in=['approved', 'pending', 'completed']
+            status__in=Appointment.BLOCKING_STATUSES  # Use the new constant
         ).select_related('patient', 'dentist', 'service', 'schedule').order_by('schedule__date', 'schedule__start_time')
         
         # Group appointments by date and serialize properly
@@ -64,7 +66,6 @@ class AppointmentCalendarView(LoginRequiredMixin, TemplateView):
             if date_key not in appointments_by_date:
                 appointments_by_date[date_key] = []
             
-            # Serialize appointment data properly for JavaScript
             appointment_data = {
                 'id': appointment.id,
                 'patient__first_name': appointment.patient.first_name,
@@ -109,7 +110,7 @@ class AppointmentCalendarView(LoginRequiredMixin, TemplateView):
             'prev_year': prev_year,
             'next_month': next_month,
             'next_year': next_year,
-            'appointments_by_date': json.dumps(appointments_by_date),  # No need for default=str now
+            'appointments_by_date': json.dumps(appointments_by_date),
             'dentists': User.objects.filter(is_active_dentist=True),
             'today': today.strftime('%Y-%m-%d'),
             'pending_count': pending_count,
@@ -136,17 +137,15 @@ class AppointmentRequestsView(LoginRequiredMixin, ListView):
             status='pending'
         ).select_related('patient', 'dentist', 'service', 'schedule').order_by('-requested_at')
         
-        # Filter by patient type
+        # Filter logic remains the same...
         patient_type = self.request.GET.get('patient_type')
         if patient_type:
             queryset = queryset.filter(patient_type=patient_type)
         
-        # Filter by dentist
         dentist = self.request.GET.get('dentist')
         if dentist:
             queryset = queryset.filter(dentist_id=dentist)
         
-        # Filter by date range
         date_from = self.request.GET.get('date_from')
         if date_from:
             try:
@@ -163,7 +162,6 @@ class AppointmentRequestsView(LoginRequiredMixin, ListView):
             except ValueError:
                 pass
         
-        # Search by patient name
         search = self.request.GET.get('search')
         if search:
             queryset = queryset.filter(
@@ -193,6 +191,287 @@ class AppointmentRequestsView(LoginRequiredMixin, ListView):
             }
         })
         return context
+
+# CRITICAL FIX: Updated time availability API with proper conflict detection
+def get_available_times_api(request):
+    """
+    API endpoint to get available times with proper conflict detection.
+    Now generates time slots dynamically based on clinic hours instead of requiring pre-existing schedules.
+    """
+    if request.method != 'GET':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    
+    dentist_id = request.GET.get('dentist_id')
+    date_str = request.GET.get('date')
+    service_id = request.GET.get('service_id')
+    
+    if not all([dentist_id, date_str, service_id]):
+        return JsonResponse({'error': 'dentist_id, date, and service_id are required'}, status=400)
+    
+    try:
+        dentist = User.objects.get(id=dentist_id, is_active_dentist=True)
+        service = Service.objects.get(id=service_id, is_archived=False)
+        appointment_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+    except (User.DoesNotExist, Service.DoesNotExist, ValueError):
+        return JsonResponse({'error': 'Invalid parameters'}, status=400)
+    
+    # Validate appointment date
+    today = timezone.now().date()
+    if appointment_date <= today:
+        return JsonResponse({'available_times': [], 'error': 'Cannot book for past dates or today'})
+    
+    # Check if it's Sunday
+    if appointment_date.weekday() == 6:  # Sunday = 6
+        return JsonResponse({'available_times': [], 'error': 'No appointments on Sundays'})
+    
+    # Check for holidays
+    if Holiday.objects.filter(date=appointment_date, is_active=True).exists():
+        return JsonResponse({'available_times': [], 'error': 'No appointments on holidays'})
+    
+    # Get system settings for clinic configuration
+    try:
+        clinic_start_setting = SystemSetting.objects.get(key='clinic_start_time')
+        clinic_start = datetime.strptime(clinic_start_setting.value, '%H:%M').time()
+    except (SystemSetting.DoesNotExist, ValueError):
+        clinic_start = time(10, 0)  # Default 10:00 AM
+    
+    try:
+        clinic_end_setting = SystemSetting.objects.get(key='clinic_end_time')
+        clinic_end = datetime.strptime(clinic_end_setting.value, '%H:%M').time()
+    except (SystemSetting.DoesNotExist, ValueError):
+        clinic_end = time(18, 0)  # Default 6:00 PM
+    
+    try:
+        lunch_start_setting = SystemSetting.objects.get(key='lunch_start_time')
+        lunch_start = datetime.strptime(lunch_start_setting.value, '%H:%M').time()
+    except (SystemSetting.DoesNotExist, ValueError):
+        lunch_start = time(12, 0)  # Default 12:00 PM
+    
+    try:
+        lunch_end_setting = SystemSetting.objects.get(key='lunch_end_time')
+        lunch_end = datetime.strptime(lunch_end_setting.value, '%H:%M').time()
+    except (SystemSetting.DoesNotExist, ValueError):
+        lunch_end = time(13, 0)  # Default 1:00 PM
+    
+    try:
+        buffer_setting = SystemSetting.objects.get(key='appointment_buffer_minutes')
+        default_buffer = int(buffer_setting.value)
+    except (SystemSetting.DoesNotExist, ValueError):
+        default_buffer = 15  # Default 15 minutes
+    
+    try:
+        slot_duration_setting = SystemSetting.objects.get(key='appointment_time_slot_minutes')
+        slot_duration_minutes = int(slot_duration_setting.value)
+    except (SystemSetting.DoesNotExist, ValueError):
+        slot_duration_minutes = 30  # Default 30 minutes
+    
+    # Get existing appointments that block time slots
+    existing_appointments = Appointment.objects.filter(
+        dentist=dentist,
+        schedule__date=appointment_date,
+        status__in=['pending', 'approved', 'completed']
+    ).select_related('schedule', 'service')
+    
+    # Generate available time slots
+    available_times = []
+    service_duration = timedelta(minutes=service.duration_minutes)
+    slot_duration = timedelta(minutes=slot_duration_minutes)
+    
+    # Start from clinic opening time
+    current_time = datetime.combine(appointment_date, clinic_start)
+    end_of_day = datetime.combine(appointment_date, clinic_end)
+    lunch_start_dt = datetime.combine(appointment_date, lunch_start)
+    lunch_end_dt = datetime.combine(appointment_date, lunch_end)
+    
+    while current_time + service_duration <= end_of_day:
+        slot_start_time = current_time.time()
+        
+        # Calculate when this service would end (including buffer)
+        service_end_time = current_time + service_duration
+        service_end_with_buffer = service_end_time + timedelta(minutes=default_buffer)
+        
+        # Skip if slot would extend past clinic hours
+        if service_end_with_buffer > end_of_day:
+            current_time += slot_duration
+            continue
+        
+        # Skip lunch break - ensure entire appointment + buffer is outside lunch
+        appointment_overlaps_lunch = not (
+            service_end_with_buffer <= lunch_start_dt or 
+            current_time >= lunch_end_dt
+        )
+        
+        if appointment_overlaps_lunch:
+            current_time += slot_duration
+            continue
+        
+        # Check for conflicts with existing appointments
+        has_conflict = False
+        for appointment in existing_appointments:
+            existing_start = datetime.combine(appointment_date, appointment.schedule.start_time)
+            
+            # Calculate existing appointment end time with buffer
+            existing_service_end = existing_start + timedelta(minutes=appointment.service.duration_minutes)
+            existing_end_with_buffer = existing_service_end + timedelta(minutes=appointment.schedule.buffer_minutes)
+            
+            # Check if proposed appointment overlaps with existing appointment
+            if current_time < existing_end_with_buffer and service_end_with_buffer > existing_start:
+                has_conflict = True
+                break
+        
+        if not has_conflict:
+            available_times.append(slot_start_time.strftime('%H:%M'))
+        
+        current_time += slot_duration
+    
+    return JsonResponse({
+        'available_times': available_times,
+        'service_duration': service.duration_minutes,
+        'buffer_minutes': default_buffer,
+        'clinic_hours': {
+            'start': clinic_start.strftime('%H:%M'),
+            'end': clinic_end.strftime('%H:%M'),
+            'lunch_start': lunch_start.strftime('%H:%M'),
+            'lunch_end': lunch_end.strftime('%H:%M')
+        }
+    })
+
+
+def find_patient_api(request):
+    """API endpoint to find existing patient by identifier"""
+    if request.method != 'GET':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    
+    identifier = request.GET.get('identifier', '').strip()
+    if not identifier:
+        return JsonResponse({'error': 'Identifier is required'}, status=400)
+    
+    # Minimum length check
+    if len(identifier) < 3:
+        return JsonResponse({'found': False})
+    
+    # Search for patient by email or contact number
+    query = Q(is_active=True)
+    
+    # Check if identifier looks like an email
+    if '@' in identifier:
+        query &= Q(email__iexact=identifier)
+    else:
+        # Assume it's a contact number - handle different formats
+        clean_identifier = identifier.replace(' ', '').replace('-', '').replace('+', '')
+        # More flexible contact number matching
+        query &= (
+            Q(contact_number=identifier) | 
+            Q(contact_number=clean_identifier) |
+            Q(contact_number__endswith=clean_identifier[-10:]) if len(clean_identifier) >= 10 else Q()
+        )
+    
+    patient = Patient.objects.filter(query).first()
+    
+    if patient:
+        return JsonResponse({
+            'found': True,
+            'patient': {
+                'id': patient.id,
+                'name': patient.full_name,
+                'email': patient.email or '',
+                'contact_number': patient.contact_number or ''
+            }
+        })
+    else:
+        return JsonResponse({'found': False})
+    
+# CRITICAL FIX: Enhanced appointment creation with atomic transactions
+@transaction.atomic
+def create_appointment_atomic(patient, dentist, service, appointment_date, appointment_time, 
+                            patient_type, reason='', buffer_minutes=15):
+    """
+    Atomically create appointment and schedule with proper conflict checking.
+    
+    Args:
+        patient: Patient instance
+        dentist: User instance (dentist)
+        service: Service instance
+        appointment_date: date object
+        appointment_time: time object
+        patient_type: str ('new' or 'returning')
+        reason: str (optional)
+        buffer_minutes: int (buffer time after appointment)
+    
+    Returns:
+        tuple: (appointment, created) where created is boolean
+    
+    Raises:
+        ValidationError: If there are conflicts or validation errors
+    """
+    # Calculate end time based on service duration
+    start_datetime = datetime.combine(appointment_date, appointment_time)
+    end_datetime = start_datetime + timedelta(minutes=service.duration_minutes)
+    end_time = end_datetime.time()
+    
+    # Calculate end time including buffer
+    end_with_buffer = end_datetime + timedelta(minutes=buffer_minutes)
+    
+    # Use select_for_update to prevent race conditions
+    dentist = User.objects.select_for_update().get(id=dentist.id, is_active_dentist=True)
+    
+    # Check for conflicts using the new method
+    conflicts = Appointment.get_conflicting_appointments(
+        dentist=dentist,
+        start_datetime=start_datetime,
+        end_datetime=end_with_buffer
+    )
+    
+    if conflicts:
+        conflict_times = [
+            f"{c.schedule.start_time.strftime('%I:%M %p')}-{c.schedule.effective_end_time.strftime('%I:%M %p')}"
+            for c in conflicts
+        ]
+        raise ValidationError(
+            f"Time slot conflicts with existing appointments: {', '.join(conflict_times)}"
+        )
+    
+    # Create schedule first
+    try:
+        schedule = Schedule.objects.create(
+            dentist=dentist,
+            date=appointment_date,
+            start_time=appointment_time,
+            end_time=end_time,
+            buffer_minutes=buffer_minutes,
+            is_available=True,
+            notes='Created for appointment booking'
+        )
+    except IntegrityError:
+        # Handle case where schedule already exists
+        schedule = Schedule.objects.get(
+            dentist=dentist,
+            date=appointment_date,
+            start_time=appointment_time,
+            end_time=end_time
+        )
+        
+        # Check if this schedule already has an appointment
+        existing_appointment = Appointment.objects.filter(
+            schedule=schedule,
+            status__in=Appointment.BLOCKING_STATUSES
+        ).first()
+        
+        if existing_appointment:
+            raise ValidationError("This time slot is already booked.")
+    
+    # Create appointment
+    appointment = Appointment.objects.create(
+        patient=patient,
+        dentist=dentist,
+        service=service,
+        schedule=schedule,
+        patient_type=patient_type,
+        reason=reason,
+        status='pending'
+    )
+    
+    return appointment, True
 
 class AppointmentListView(LoginRequiredMixin, ListView):
     """List all appointments with filtering"""
@@ -266,7 +545,7 @@ class AppointmentListView(LoginRequiredMixin, ListView):
         return context
 
 class AppointmentCreateView(LoginRequiredMixin, CreateView):
-    """Create new appointment"""
+    """Create new appointment with enhanced conflict detection"""
     model = Appointment
     form_class = AppointmentForm
     template_name = 'appointments/appointment_form.html'
@@ -283,20 +562,159 @@ class AppointmentCreateView(LoginRequiredMixin, CreateView):
         return kwargs
     
     def form_valid(self, form):
-        # Auto-approve if user has permission and it's a staff booking
-        if self.request.user.has_permission('appointments'):
-            form.instance.status = 'approved'
-            form.instance.approved_at = timezone.now()
-            form.instance.approved_by = self.request.user
-        
-        messages.success(
-            self.request, 
-            f'Appointment for {form.instance.patient.full_name} created successfully.'
-        )
-        return super().form_valid(form)
+        try:
+            with transaction.atomic():
+                # Auto-approve if user has permission and it's a staff booking
+                if self.request.user.has_permission('appointments'):
+                    form.instance.status = 'approved'
+                    form.instance.approved_at = timezone.now()
+                    form.instance.approved_by = self.request.user
+                
+                # Validate no conflicts before saving
+                schedule = form.cleaned_data['schedule']
+                service = form.cleaned_data['service']
+                
+                start_datetime = datetime.combine(schedule.date, schedule.start_time)
+                end_datetime = start_datetime + timedelta(minutes=service.duration_minutes)
+                end_with_buffer = end_datetime + timedelta(minutes=schedule.buffer_minutes)
+                
+                conflicts = Appointment.get_conflicting_appointments(
+                    dentist=schedule.dentist,
+                    start_datetime=start_datetime,
+                    end_datetime=end_with_buffer
+                )
+                
+                if conflicts:
+                    form.add_error(None, 'This time slot conflicts with existing appointments.')
+                    return self.form_invalid(form)
+                
+                messages.success(
+                    self.request, 
+                    f'Appointment for {form.instance.patient.full_name} created successfully.'
+                )
+                return super().form_valid(form)
+                
+        except ValidationError as e:
+            form.add_error(None, str(e))
+            return self.form_invalid(form)
+        except Exception as e:
+            messages.error(self.request, f'Error creating appointment: {str(e)}')
+            return self.form_invalid(form)
     
     def get_success_url(self):
         return reverse_lazy('appointments:appointment_list')
+
+# Action views with enhanced error handling
+@login_required
+def approve_appointment(request, pk):
+    """Approve an appointment request with conflict validation"""
+    if not request.user.has_permission('appointments'):
+        messages.error(request, 'You do not have permission to perform this action.')
+        return redirect('core:dashboard')
+    
+    try:
+        with transaction.atomic():
+            appointment = get_object_or_404(Appointment.objects.select_for_update(), pk=pk)
+            
+            if appointment.status != 'pending':
+                messages.error(request, 'Only pending appointments can be approved.')
+                return redirect('appointments:appointment_detail', pk=pk)
+            
+            # Double-check for conflicts before approving
+            start_datetime = appointment.appointment_datetime
+            end_datetime = appointment.appointment_end_datetime
+            
+            conflicts = Appointment.get_conflicting_appointments(
+                dentist=appointment.dentist,
+                start_datetime=start_datetime,
+                end_datetime=end_datetime,
+                exclude_appointment_id=appointment.id
+            )
+            
+            if conflicts:
+                messages.error(
+                    request, 
+                    'Cannot approve: Time slot conflicts with other approved appointments.'
+                )
+                return redirect('appointments:appointment_detail', pk=pk)
+            
+            appointment.approve(request.user)
+            messages.success(request, f'Appointment for {appointment.patient.full_name} has been approved.')
+            
+    except Exception as e:
+        messages.error(request, f'Error approving appointment: {str(e)}')
+    
+    return redirect('appointments:appointment_detail', pk=pk)
+
+# Other action views remain similar but with transaction.atomic wrapping...
+@login_required  
+def reject_appointment(request, pk):
+    """Reject an appointment request"""
+    if not request.user.has_permission('appointments'):
+        messages.error(request, 'You do not have permission to perform this action.')
+        return redirect('core:dashboard')
+    
+    try:
+        with transaction.atomic():
+            appointment = get_object_or_404(Appointment.objects.select_for_update(), pk=pk)
+            
+            if appointment.status != 'pending':
+                messages.error(request, 'Only pending appointments can be rejected.')
+                return redirect('appointments:appointment_detail', pk=pk)
+            
+            appointment.reject()
+            messages.success(request, f'Appointment for {appointment.patient.full_name} has been rejected.')
+            
+    except Exception as e:
+        messages.error(request, f'Error rejecting appointment: {str(e)}')
+    
+    return redirect('appointments:appointment_requests')
+
+@login_required
+def cancel_appointment(request, pk):
+    """Cancel an appointment"""
+    if not request.user.has_permission('appointments'):
+        messages.error(request, 'You do not have permission to perform this action.')
+        return redirect('core:dashboard')
+    
+    try:
+        with transaction.atomic():
+            appointment = get_object_or_404(Appointment.objects.select_for_update(), pk=pk)
+            
+            if not appointment.can_be_cancelled:
+                messages.error(request, 'This appointment cannot be cancelled.')
+                return redirect('appointments:appointment_detail', pk=pk)
+            
+            appointment.cancel()
+            messages.success(request, f'Appointment for {appointment.patient.full_name} has been cancelled.')
+            
+    except Exception as e:
+        messages.error(request, f'Error cancelling appointment: {str(e)}')
+    
+    return redirect('appointments:appointment_detail', pk=pk)
+
+@login_required
+def complete_appointment(request, pk):
+    """Mark appointment as completed"""
+    if not request.user.has_permission('appointments'):
+        messages.error(request, 'You do not have permission to perform this action.')
+        return redirect('core:dashboard')
+    
+    try:
+        with transaction.atomic():
+            appointment = get_object_or_404(Appointment.objects.select_for_update(), pk=pk)
+            
+            if appointment.status != 'approved':
+                messages.error(request, 'Only approved appointments can be marked as completed.')
+                return redirect('appointments:appointment_detail', pk=pk)
+            
+            appointment.complete()
+            messages.success(request, f'Appointment for {appointment.patient.full_name} has been marked as completed.')
+            
+    except Exception as e:
+        messages.error(request, f'Error completing appointment: {str(e)}')
+    
+    return redirect('appointments:appointment_detail', pk=pk)
 
 class AppointmentDetailView(LoginRequiredMixin, DetailView):
     """View appointment details"""
@@ -673,68 +1091,6 @@ def get_available_dates_api(request):
     
     return JsonResponse({'available_dates': available_dates})
 
-def get_available_times_api(request):
-    """API endpoint to get available times for a specific date and dentist"""
-    if request.method != 'GET':
-        return JsonResponse({'error': 'Method not allowed'}, status=405)
-    
-    dentist_id = request.GET.get('dentist_id')
-    date_str = request.GET.get('date')
-    service_id = request.GET.get('service_id')
-    
-    if not all([dentist_id, date_str, service_id]):
-        return JsonResponse({'error': 'dentist_id, date, and service_id are required'}, status=400)
-    
-    try:
-        dentist = User.objects.get(id=dentist_id, is_active_dentist=True)
-        service = Service.objects.get(id=service_id, is_archived=False)
-        appointment_date = datetime.strptime(date_str, '%Y-%m-%d').date()
-    except (User.DoesNotExist, Service.DoesNotExist, ValueError):
-        return JsonResponse({'error': 'Invalid parameters'}, status=400)
-    
-    # Get clinic operating hours (can be made configurable via SystemSetting)
-    clinic_start = time(10, 0)  # 10:00 AM
-    clinic_end = time(18, 0)    # 6:00 PM
-    lunch_start = time(12, 0)   # 12:00 PM
-    lunch_end = time(13, 0)     # 1:00 PM
-    
-    # Get existing appointments for the date
-    existing_appointments = Appointment.objects.filter(
-        dentist=dentist,
-        schedule__date=appointment_date,
-        status__in=['approved', 'pending']
-    ).select_related('schedule').values('schedule__start_time', 'schedule__end_time')
-    
-    # Generate available time slots
-    available_times = []
-    service_duration = timedelta(minutes=service.duration_minutes)
-    slot_duration = timedelta(minutes=30)  # 30-minute slots
-    
-    # Start from clinic opening time
-    current_time = datetime.combine(appointment_date, clinic_start)
-    end_of_day = datetime.combine(appointment_date, clinic_end)
-    
-    while current_time + service_duration <= end_of_day:
-        slot_start_time = current_time.time()
-        slot_end_time = (current_time + service_duration).time()
-        
-        # Skip lunch break
-        if not (slot_end_time <= lunch_start or slot_start_time >= lunch_end):
-            current_time += slot_duration
-            continue
-        
-        # Check for conflicts with existing appointments
-        conflicts = any(
-            slot_start_time < apt['schedule__end_time'] and slot_end_time > apt['schedule__start_time']
-            for apt in existing_appointments
-        )
-        
-        if not conflicts:
-            available_times.append(slot_start_time.strftime('%H:%M'))
-        
-        current_time += slot_duration
-    
-    return JsonResponse({'available_times': available_times})
 
 def find_patient_api(request):
     """API endpoint to find existing patient by identifier"""

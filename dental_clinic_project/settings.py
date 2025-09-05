@@ -141,3 +141,21 @@ LOGOUT_REDIRECT_URL = '/'
 # Session settings
 SESSION_COOKIE_AGE = 8 * 60 * 60  # 8 hours
 SESSION_EXPIRE_AT_BROWSER_CLOSE = True
+
+LOGGING = {
+    'version': 1,
+    'handlers': {
+        'file': {
+            'level': 'DEBUG',
+            'class': 'logging.FileHandler',
+            'filename': 'appointments.log',
+        },
+    },
+    'loggers': {
+        'appointments.views': {
+            'handlers': ['file'],
+            'level': 'DEBUG',
+            'propagate': True,
+        },
+    },
+}

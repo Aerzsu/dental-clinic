@@ -1,0 +1,144 @@
+<!-- templates/appointments/schedule_overview.html -->
+{% extends 'base.html' %}
+
+{% block title %}Schedule Overview - Dental Clinic{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gray-50 py-6">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        
+        <!-- Header -->
+        <div class="mb-8">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h1 class="text-3xl font-bold text-gray-900">Schedule Overview</h1>
+                    <p class="mt-2 text-gray-600">View all dentists' working schedules</p>
+                </div>
+                <div class="flex space-x-3">
+                    <a href="{% url 'appointments:appointment_calendar' %}" 
+                       class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
+                        Calendar View
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Schedule Grid -->
+        <div class="bg-white shadow-sm rounded-lg overflow-hidden">
+            <div class="px-6 py-4 border-b border-gray-200">
+                <h2 class="text-lg font-medium text-gray-900">Weekly Schedules</h2>
+                <p class="mt-1 text-sm text-gray-500">Overview of all dentists' working hours</p>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Dentist
+                            </th>
+                            <th scope="col" class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Mon
+                            </th>
+                            <th scope="col" class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Tue
+                            </th>
+                            <th scope="col" class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Wed
+                            </th>
+                            <th scope="col" class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Thu
+                            </th>
+                            <th scope="col" class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Fri
+                            </th>
+                            <th scope="col" class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Sat
+                            </th>
+                            <th scope="col" class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Sun
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        {% for dentist_data in dentist_schedules %}
+                        <tr>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <div class="flex items-center">
+                                    <div class="h-10 w-10 flex-shrink-0">
+                                        <div class="h-10 w-10 rounded-full bg-primary-100 flex items-center justify-center">
+                                            <span class="text-primary-800 font-medium text-sm">
+                                                {{ dentist_data.dentist.first_name|slice:":1" }}{{ dentist_data.dentist.last_name|slice:":1" }}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div class="ml-4">
+                                        <div class="text-sm font-medium text-gray-900">
+                                            Dr. {{ dentist_data.dentist.full_name }}
+                                        </div>
+                                        <div class="text-sm text-gray-500">
+                                            {{ dentist_data.dentist.email }}
+                                        </div>
+                                    </div>
+                                </div>
+                            </td>
+                            {% for day_data in dentist_data.weekly_schedule %}
+                            <td class="px-3 py-4 text-center">
+                                {% if day_data.schedule.is_working %}
+                                    <div class="text-xs">
+                                        <div class="text-gray-900 font-medium">
+                                            {{ day_data.schedule.start_time|time:"g:i A" }}
+                                        </div>
+                                        <div class="text-gray-500">
+                                            {{ day_data.schedule.end_time|time:"g:i A" }}
+                                        </div>
+                                        {% if day_data.schedule.has_lunch_break %}
+                                            <div class="text-xs text-orange-600 mt-1">
+                                                L: {{ day_data.schedule.lunch_start|time:"g:i" }}-{{ day_data.schedule.lunch_end|time:"g:i" }}
+                                            </div>
+                                        {% endif %}
+                                    </div>
+                                {% else %}
+                                    <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-500">
+                                        Off
+                                    </span>
+                                {% endif %}
+                            </td>
+                            {% endfor %}
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="8" class="px-6 py-12 text-center text-gray-500">
+                                <div class="text-center">
+                                    <h3 class="mt-2 text-sm font-medium text-gray-900">No dentists found</h3>
+                                    <p class="mt-1 text-sm text-gray-500">No active dentists are currently configured.</p>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Legend -->
+        <div class="mt-6 bg-white rounded-lg shadow-sm p-4">
+            <h3 class="text-sm font-medium text-gray-900 mb-3">Legend</h3>
+            <div class="flex flex-wrap gap-4 text-xs">
+                <div class="flex items-center">
+                    <div class="w-3 h-3 bg-gray-100 rounded mr-2"></div>
+                    <span class="text-gray-600">Not Working</span>
+                </div>
+                <div class="flex items-center">
+                    <div class="w-3 h-3 bg-green-100 rounded mr-2"></div>
+                    <span class="text-gray-600">Working Hours</span>
+                </div>
+                <div class="flex items-center">
+                    <span class="text-orange-600 font-medium mr-2">L:</span>
+                    <span class="text-gray-600">Lunch Break</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

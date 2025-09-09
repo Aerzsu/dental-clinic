@@ -55,6 +55,33 @@
                     class="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
                         List View
                     </a>
+                    
+                    <!-- Schedule Management Links -->
+                    {% comment %} {% if user.has_permission_appointments and user.is_active_dentist %} {% endcomment %}
+                    <a href="{% url 'appointments:dentist_schedule' %}" 
+                    class="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium
+                           {% if request.resolver_match.url_name == 'dentist_schedule' %}
+                           bg-primary-100 text-primary-700 border-primary-300
+                           {% else %}
+                           text-gray-700 bg-white hover:bg-gray-50
+                           {% endif %}">
+                        <span class="mr-2">⏰</span>
+                        My Schedule
+                    </a>
+                    {% comment %} {% endif %} {% endcomment %}
+
+                    {% comment %} {% if user.has_permission_appointments %} {% endcomment %}
+                    <a href="{% url 'appointments:schedule_overview' %}" 
+                    class="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium
+                           {% if request.resolver_match.url_name == 'schedule_overview' %}
+                           bg-primary-100 text-primary-700 border-primary-300
+                           {% else %}
+                           text-gray-700 bg-white hover:bg-gray-50
+                           {% endif %}">
+                        <span class="mr-2">📋</span>
+                        Schedule Overview
+                    </a>
+                    {% comment %} {% endif %} {% endcomment %}
                 </div>
             </div>
         </div>

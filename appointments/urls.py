@@ -1,6 +1,6 @@
 #appointments/urls.py
 from django.urls import path
-from . import views
+from . import views, schedule_views
 
 app_name = 'appointments'
 
@@ -20,13 +20,9 @@ urlpatterns = [
     path('<int:pk>/reject/', views.reject_appointment, name='reject_appointment'),
     path('<int:pk>/cancel/', views.cancel_appointment, name='cancel_appointment'),
     path('<int:pk>/complete/', views.complete_appointment, name='complete_appointment'),
-    
-    # Schedule management
-    path('schedules/', views.ScheduleListView.as_view(), name='schedule_list'),
-    path('schedules/create/', views.ScheduleCreateView.as_view(), name='schedule_create'),
-    path('schedules/bulk-create/', views.ScheduleBulkCreateView.as_view(), name='schedule_bulk_create'),
-    
+
     # API endpoints
+    path('api/dentist-template/', schedule_views.get_dentist_template_api, name='get_dentist_template_api'),
     path('api/available-dates/', views.get_available_dates_api, name='get_available_dates_api'),
     path('api/available-times/', views.get_available_times_api, name='get_available_times_api'),
     path('api/find-patient/', views.find_patient_api, name='find_patient_api'),

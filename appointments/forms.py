@@ -2,9 +2,9 @@
 from django import forms
 from django.core.exceptions import ValidationError
 from django.utils import timezone
-from datetime import datetime, date, time, timedelta
+from datetime import datetime, time, timedelta
 from django.db.models import Q
-from .models import Appointment, Schedule
+from .models import Appointment, Schedule, DentistSchedule
 from patients.models import Patient
 from services.models import Service
 from users.models import User
@@ -125,6 +125,7 @@ class ScheduleForm(forms.ModelForm):
         
         return cleaned_data
 
+# FOR APPOINTMENT BOOKING PAGE
 class AppointmentRequestForm(forms.ModelForm):
     """Form for public appointment requests with enhanced validation"""
     
@@ -406,3 +407,123 @@ class AppointmentRequestForm(forms.ModelForm):
 
 # Import models for the clean method
 from django.db import models
+
+#SCHEDULE MANAGEMENT FOR DENTISTS
+class DentistScheduleForm(forms.ModelForm):
+    """Form for managing dentist weekly schedules"""
+    
+    class Meta:
+        model = DentistSchedule
+        fields = ['is_working', 'start_time', 'end_time', 'has_lunch_break', 'lunch_start', 'lunch_end']
+        widgets = {
+            'is_working': forms.CheckboxInput(attrs={
+                'class': 'rounded border-gray-300 text-primary-600 shadow-sm focus:border-primary-500 focus:ring-primary-500'
+            }),
+            'start_time': forms.TimeInput(attrs={
+                'type': 'time',
+                'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
+                'step': '900'  # 15 minutes
+            }),
+            'end_time': forms.TimeInput(attrs={
+                'type': 'time',
+                'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
+                'step': '900'  # 15 minutes
+            }),
+            'has_lunch_break': forms.CheckboxInput(attrs={
+                'class': 'rounded border-gray-300 text-primary-600 shadow-sm focus:border-primary-500 focus:ring-primary-500'
+            }),
+            'lunch_start': forms.TimeInput(attrs={
+                'type': 'time',
+                'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
+                'step': '900'  # 15 minutes
+            }),
+            'lunch_end': forms.TimeInput(attrs={
+                'type': 'time',
+                'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
+                'step': '900'  # 15 minutes
+            }),
+        }
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        
+        # Set default values if creating new schedule
+        if not self.instance.pk:
+            self.fields['start_time'].initial = time(10, 0)
+            self.fields['end_time'].initial = time(18, 0)
+            self.fields['lunch_start'].initial = time(12, 0)
+            self.fields['lunch_end'].initial = time(13, 0)
+    
+    def clean(self):
+        cleaned_data = super().clean()
+        is_working = cleaned_data.get('is_working')
+        
+        if not is_working:
+            # If not working, clear other fields
+            cleaned_data['has_lunch_break'] = False
+            return cleaned_data
+        
+        start_time = cleaned_data.get('start_time')
+        end_time = cleaned_data.get('end_time')
+        has_lunch_break = cleaned_data.get('has_lunch_break')
+        lunch_start = cleaned_data.get('lunch_start')
+        lunch_end = cleaned_data.get('lunch_end')
+        
+        # Validate working hours
+        if start_time and end_time:
+            if end_time <= start_time:
+                raise ValidationError('End time must be after start time.')
+        
+        # Validate lunch break if enabled
+        if has_lunch_break and lunch_start and lunch_end:
+            if lunch_end <= lunch_start:
+                raise ValidationError('Lunch end time must be after lunch start time.')
+            
+            # Check lunch is within working hours
+            if start_time and end_time:
+                if lunch_start < start_time or lunch_end > end_time:
+                    raise ValidationError('Lunch break must be within working hours.')
+            
+            # Check lunch duration (max 2 hours)
+            lunch_duration = datetime.combine(datetime.today(), lunch_end) - \
+                           datetime.combine(datetime.today(), lunch_start)
+            if lunch_duration.total_seconds() > 7200:  # 2 hours
+                raise ValidationError('Lunch break cannot exceed 2 hours.')
+        
+        return cleaned_data
+
+
+class WeeklyScheduleFormSet(forms.BaseFormSet):
+    """Formset for managing all 7 days of the week"""
+    
+    def __init__(self, *args, **kwargs):
+        self.dentist = kwargs.pop('dentist', None)
+        super().__init__(*args, **kwargs)
+    
+    def get_queryset(self):
+        """Get existing schedules for all weekdays"""
+        if self.dentist:
+            return DentistSchedule.objects.filter(dentist=self.dentist).order_by('weekday')
+        return DentistSchedule.objects.none()
+    
+    def save(self, commit=True):
+        """Save all schedule forms"""
+        schedules = []
+        for form in self.forms:
+            if form.is_valid() and not form.cleaned_data.get('DELETE', False):
+                schedule = form.save(commit=False)
+                if self.dentist:
+                    schedule.dentist = self.dentist
+                if commit:
+                    schedule.save()
+                schedules.append(schedule)
+        return schedules
+
+
+# Create the formset class
+WeeklyScheduleFormSetClass = forms.formset_factory(
+    DentistScheduleForm,
+    formset=WeeklyScheduleFormSet,
+    extra=0,  # We'll create exactly 7 forms
+    can_delete=False
+)

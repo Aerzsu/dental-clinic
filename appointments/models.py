@@ -4,7 +4,6 @@ from django.core.exceptions import ValidationError
 from django.utils import timezone
 from datetime import datetime, time, timedelta
 
-
 class Schedule(models.Model):
     dentist = models.ForeignKey('users.User', on_delete=models.CASCADE, related_name='schedules')
     date = models.DateField()
@@ -17,7 +16,6 @@ class Schedule(models.Model):
     
     class Meta:
         ordering = ['date', 'start_time']
-        # Updated constraint to prevent overlapping schedules
         unique_together = ['dentist', 'date', 'start_time', 'end_time']
         indexes = [
             models.Index(fields=['dentist', 'date']),
@@ -247,6 +245,117 @@ class Payment(models.Model):
     def __str__(self):
         return f"{self.patient.full_name} - ₱{self.amount_paid} ({self.status})"
 
+class DentistSchedule(models.Model):
+    """Weekly working hours pattern for dentists"""
+    
+    WEEKDAY_CHOICES = [
+        (0, 'Monday'),
+        (1, 'Tuesday'), 
+        (2, 'Wednesday'),
+        (3, 'Thursday'),
+        (4, 'Friday'),
+        (5, 'Saturday'),
+        (6, 'Sunday'),
+    ]
+    
+    dentist = models.ForeignKey('users.User', on_delete=models.CASCADE, related_name='working_schedules')
+    weekday = models.IntegerField(choices=WEEKDAY_CHOICES)
+    is_working = models.BooleanField(default=True)
+    start_time = models.TimeField(default=time(10, 0))  # 10:00 AM
+    end_time = models.TimeField(default=time(18, 0))    # 6:00 PM
+    
+    # Lunch break settings
+    lunch_start = models.TimeField(default=time(12, 0))  # 12:00 PM
+    lunch_end = models.TimeField(default=time(13, 0))    # 1:00 PM
+    has_lunch_break = models.BooleanField(default=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        unique_together = ['dentist', 'weekday']
+        ordering = ['dentist', 'weekday']
+        indexes = [
+            models.Index(fields=['dentist', 'weekday']),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(end_time__gt=models.F('start_time')), 
+                name='dentist_schedule_end_after_start'
+            ),
+            models.CheckConstraint(
+                check=models.Q(lunch_end__gt=models.F('lunch_start')), 
+                name='dentist_schedule_lunch_end_after_start'
+            ),
+        ]
+    
+    def __str__(self):
+        weekday_name = self.get_weekday_display()
+        if self.is_working:
+            return f"{self.dentist.full_name} - {weekday_name} ({self.start_time}-{self.end_time})"
+        else:
+            return f"{self.dentist.full_name} - {weekday_name} (Not Working)"
+    
+    def clean(self):
+        if self.is_working:
+            if self.end_time <= self.start_time:
+                raise ValidationError('End time must be after start time.')
+            
+            if self.has_lunch_break:
+                if self.lunch_end <= self.lunch_start:
+                    raise ValidationError('Lunch end time must be after lunch start time.')
+                
+                # Check lunch break is within working hours
+                if self.lunch_start < self.start_time or self.lunch_end > self.end_time:
+                    raise ValidationError('Lunch break must be within working hours.')
+                
+                # Check lunch break duration (max 2 hours)
+                lunch_duration = datetime.combine(datetime.today(), self.lunch_end) - \
+                               datetime.combine(datetime.today(), self.lunch_start)
+                if lunch_duration.total_seconds() > 7200:  # 2 hours in seconds
+                    raise ValidationError('Lunch break cannot exceed 2 hours.')
+    
+    @property
+    def working_hours_display(self):
+        """Display working hours in readable format"""
+        if not self.is_working:
+            return "Not Working"
+        
+        hours = f"{self.start_time.strftime('%I:%M %p')} - {self.end_time.strftime('%I:%M %p')}"
+        if self.has_lunch_break:
+            lunch = f"{self.lunch_start.strftime('%I:%M %p')}-{self.lunch_end.strftime('%I:%M %p')}"
+            hours += f" (Lunch: {lunch})"
+        return hours
+    
+    @classmethod
+    def get_dentist_working_hours(cls, dentist, weekday):
+        """Get working hours for a dentist on a specific weekday"""
+        try:
+            schedule = cls.objects.get(dentist=dentist, weekday=weekday)
+            return schedule if schedule.is_working else None
+        except cls.DoesNotExist:
+            return None
+    
+    @classmethod
+    def create_default_schedule(cls, dentist):
+        """Create default 5-day working schedule for a dentist (Mon-Fri)"""
+        schedules = []
+        for weekday in range(7):  # 0=Monday, 6=Sunday
+            is_working = weekday < 5  # Monday to Friday only
+            schedule = cls.objects.get_or_create(
+                dentist=dentist,
+                weekday=weekday,
+                defaults={
+                    'is_working': is_working,
+                    'start_time': time(10, 0),
+                    'end_time': time(18, 0),
+                    'lunch_start': time(12, 0),
+                    'lunch_end': time(13, 0),
+                    'has_lunch_break': is_working,
+                }
+            )[0]
+            schedules.append(schedule)
+        return schedules
 
 class PaymentItem(models.Model):
     payment = models.ForeignKey(Payment, on_delete=models.CASCADE, related_name='items')

@@ -8,14 +8,14 @@ from django.views.generic import TemplateView, ListView, CreateView, UpdateView,
 from django.utils import timezone
 from django.db.models import Q
 from django.http import JsonResponse
-from datetime import datetime, timedelta, date, time
+from datetime import datetime, timedelta, time
 from django import forms
 from django.db import transaction, IntegrityError
 from django.core.exceptions import ValidationError
 import re
 
 from .models import AuditLog, Holiday, SystemSetting
-from appointments.models import Appointment, Schedule
+from appointments.models import Appointment
 from patients.models import Patient
 from services.models import Service
 from users.models import User

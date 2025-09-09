@@ -1,20 +1,19 @@
 # patients/views.py
-from django.shortcuts import render, get_object_or_404, redirect
+from django.shortcuts import get_object_or_404, redirect
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.urls import reverse_lazy
 from django.views.generic import ListView, DetailView, CreateView, UpdateView
-from django.db.models import Q, Count, Case, When, IntegerField
+from django.db.models import Q, Count, Case, When
 from django.http import JsonResponse, HttpResponse
-from django.utils import timezone
 from datetime import date, timedelta
 import csv
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
 from io import BytesIO
 
-from .models import Patient, TreatmentNote
+from .models import Patient
 from .forms import PatientForm, PatientSearchForm, FindPatientForm
 from appointments.models import Appointment
 

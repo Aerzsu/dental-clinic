@@ -1,12 +1,11 @@
 #users/views.py
-from django.shortcuts import render, get_object_or_404, redirect
+from django.shortcuts import get_object_or_404, redirect
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.urls import reverse_lazy
 from django.views.generic import ListView, DetailView, CreateView, UpdateView
 from django.db.models import Q
-from django.http import JsonResponse
 from .models import User, Role
 from .forms import UserForm, RoleForm  # Import forms from forms.py
 

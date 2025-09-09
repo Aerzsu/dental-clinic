@@ -1,6 +1,5 @@
 # patients/tests.py
 from django.test import TestCase
-from django.core.exceptions import ValidationError
 from datetime import date, timedelta
 from .forms import PatientForm, FindPatientForm
 from .models import Patient

@@ -1,20 +1,11 @@
-# core/models.py
+# core/models.py - Simplified version for small dental clinic
 from django.db import models
 from datetime import datetime
 
 class SystemSetting(models.Model):
-    SETTING_TYPES = [
-        ('string', 'String'),
-        ('integer', 'Integer'),
-        ('boolean', 'Boolean'),
-        ('time', 'Time'),
-        ('date', 'Date'),
-        ('json', 'JSON'),
-    ]
-    
+    """Simplified system settings - just key-value pairs"""
     key = models.CharField(max_length=100, unique=True)
     value = models.TextField()
-    setting_type = models.CharField(max_length=20, choices=SETTING_TYPES, default='string')
     description = models.TextField(blank=True)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -65,20 +56,18 @@ class SystemSetting(models.Model):
             return default
     
     @classmethod
-    def set_setting(cls, key, value, setting_type='string', description=''):
+    def set_setting(cls, key, value, description=''):
         """Set or update a setting"""
         setting, created = cls.objects.get_or_create(
             key=key,
             defaults={
                 'value': str(value),
-                'setting_type': setting_type,
                 'description': description,
                 'is_active': True
             }
         )
         if not created:
             setting.value = str(value)
-            setting.setting_type = setting_type
             setting.description = description
             setting.is_active = True
             setting.save()
@@ -86,11 +75,11 @@ class SystemSetting(models.Model):
 
 
 class Holiday(models.Model):
+    """Simplified holiday model"""
     name = models.CharField(max_length=100)
     date = models.DateField()
     is_active = models.BooleanField(default=True)
     is_recurring = models.BooleanField(default=False, help_text="If true, holiday repeats annually")
-    description = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     
     class Meta:
@@ -118,6 +107,7 @@ class Holiday(models.Model):
 
 
 class AuditLog(models.Model):
+    """Simplified audit logging"""
     ACTION_CHOICES = [
         ('create', 'Create'),
         ('update', 'Update'),
@@ -136,7 +126,6 @@ class AuditLog(models.Model):
     object_repr = models.CharField(max_length=200, blank=True)
     changes = models.JSONField(default=dict, blank=True)
     ip_address = models.GenericIPAddressField(null=True, blank=True)
-    user_agent = models.TextField(blank=True)
     timestamp = models.DateTimeField(auto_now_add=True)
     
     class Meta:
@@ -164,7 +153,6 @@ class AuditLog(models.Model):
         
         if request:
             log_entry.ip_address = cls.get_client_ip(request)
-            log_entry.user_agent = request.META.get('HTTP_USER_AGENT', '')
         
         log_entry.save()
         return log_entry

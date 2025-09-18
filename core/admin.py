@@ -7,7 +7,7 @@ class AuditLogAdmin(admin.ModelAdmin):
     list_display = ['user', 'action', 'model_name', 'object_repr', 'timestamp']
     list_filter = ['action', 'model_name', 'timestamp']
     search_fields = ['user__username', 'object_repr']
-    readonly_fields = ['user', 'action', 'model_name', 'object_id', 'object_repr', 'changes', 'ip_address', 'user_agent', 'timestamp']
+    readonly_fields = ['user', 'action', 'model_name', 'object_id', 'object_repr', 'changes', 'ip_address', 'timestamp']
     date_hierarchy = 'timestamp'
     
     def has_add_permission(self, request):

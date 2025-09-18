@@ -21,7 +21,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.generic import ListView, DetailView, CreateView, UpdateView, TemplateView
 
 # Local app imports
-from .models import Appointment, Schedule
+from .models import Appointment, AppointmentSlot
 from .forms import AppointmentForm
 from patients.models import Patient
 from services.models import Service
@@ -60,17 +60,17 @@ class AppointmentCalendarView(LoginRequiredMixin, TemplateView):
             end_date = date(year, month + 1, 1)
         
         appointments = Appointment.objects.filter(
-            schedule__date__gte=start_date,
-            schedule__date__lt=end_date,
+            appointment_slot__date__gte=start_date,
+            appointment_slot__date__lt=end_date,
             status__in=Appointment.BLOCKING_STATUSES
-        ).select_related('patient', 'dentist', 'service', 'schedule').order_by(
-            'schedule__date', 'schedule__start_time'
+        ).select_related('patient', 'dentist', 'service', 'appointment_slot').order_by(
+            'appointment_slot__date', 'appointment_slot__start_time'
         )
         
         # Group appointments by date and serialize for JSON
         appointments_by_date = {}
         for appointment in appointments:
-            date_key = appointment.schedule.date.strftime('%Y-%m-%d')
+            date_key = appointment.appointment_slot.date.strftime('%Y-%m-%d')
             if date_key not in appointments_by_date:
                 appointments_by_date[date_key] = []
             
@@ -81,9 +81,9 @@ class AppointmentCalendarView(LoginRequiredMixin, TemplateView):
                 'dentist__first_name': appointment.dentist.first_name,
                 'dentist__last_name': appointment.dentist.last_name,
                 'service__name': appointment.service.name,
-                'schedule__date': appointment.schedule.date.strftime('%Y-%m-%d'),
-                'schedule__start_time': appointment.schedule.start_time.strftime('%I:%M %p'),
-                'schedule__end_time': appointment.schedule.end_time.strftime('%I:%M %p'),
+                'appointment_slot__date': appointment.appointment_slot.date.strftime('%Y-%m-%d'),
+                'appointment_slot__start_time': appointment.appointment_slot.start_time.strftime('%I:%M %p'),
+                'appointment_slot__end_time': appointment.appointment_slot.end_time.strftime('%I:%M %p'),
                 'status': appointment.status,
                 'reason': appointment.reason or '',
                 'patient_type': appointment.patient_type,
@@ -143,7 +143,7 @@ class AppointmentRequestsView(LoginRequiredMixin, ListView):
     def get_queryset(self):
         queryset = Appointment.objects.filter(
             status='pending'
-        ).select_related('patient', 'dentist', 'service', 'schedule').order_by('-requested_at')
+        ).select_related('patient', 'dentist', 'service', 'appointment_slot').order_by('-requested_at')
         
         # Apply filters
         patient_type = self.request.GET.get('patient_type')
@@ -159,7 +159,7 @@ class AppointmentRequestsView(LoginRequiredMixin, ListView):
         if date_from:
             try:
                 date_from = datetime.strptime(date_from, '%Y-%m-%d').date()
-                queryset = queryset.filter(schedule__date__gte=date_from)
+                queryset = queryset.filter(appointment_slot__date__gte=date_from)
             except ValueError:
                 pass
         
@@ -167,7 +167,7 @@ class AppointmentRequestsView(LoginRequiredMixin, ListView):
         if date_to:
             try:
                 date_to = datetime.strptime(date_to, '%Y-%m-%d').date()
-                queryset = queryset.filter(schedule__date__lte=date_to)
+                queryset = queryset.filter(appointment_slot__date__lte=date_to)
             except ValueError:
                 pass
         
@@ -218,7 +218,7 @@ class AppointmentListView(LoginRequiredMixin, ListView):
     
     def get_queryset(self):
         queryset = Appointment.objects.select_related(
-            'patient', 'dentist', 'service', 'schedule'
+            'patient', 'dentist', 'service', 'appointment_slot'
         )
         
         # Status filtering
@@ -238,14 +238,14 @@ class AppointmentListView(LoginRequiredMixin, ListView):
         if date_from:
             try:
                 date_from = datetime.strptime(date_from, '%Y-%m-%d').date()
-                queryset = queryset.filter(schedule__date__gte=date_from)
+                queryset = queryset.filter(appointment_slot__date__gte=date_from)
             except ValueError:
                 pass
         
         if date_to:
             try:
                 date_to = datetime.strptime(date_to, '%Y-%m-%d').date()
-                queryset = queryset.filter(schedule__date__lte=date_to)
+                queryset = queryset.filter(appointment_slot__date__lte=date_to)
             except ValueError:
                 pass
         
@@ -257,7 +257,7 @@ class AppointmentListView(LoginRequiredMixin, ListView):
                 Q(patient__last_name__icontains=search)
             )
         
-        return queryset.order_by('-schedule__date', '-schedule__start_time')
+        return queryset.order_by('-appointment_slot__date', '-appointment_slot__start_time')
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -305,15 +305,15 @@ class AppointmentCreateView(LoginRequiredMixin, CreateView):
                     form.instance.approved_by = self.request.user
                 
                 # Validate no conflicts before saving
-                schedule = form.cleaned_data['schedule']
+                appointment_slot = form.cleaned_data['appointment_slot']
                 service = form.cleaned_data['service']
                 
-                start_datetime = datetime.combine(schedule.date, schedule.start_time)
+                start_datetime = datetime.combine(appointment_slot.date, appointment_slot.start_time)
                 end_datetime = start_datetime + timedelta(minutes=service.duration_minutes)
-                end_with_buffer = end_datetime + timedelta(minutes=schedule.buffer_minutes)
+                end_with_buffer = end_datetime + timedelta(minutes=appointment_slot.buffer_minutes)
                 
                 conflicts = Appointment.get_conflicting_appointments(
-                    dentist=schedule.dentist,
+                    dentist=appointment_slot.dentist,
                     start_datetime=start_datetime,
                     end_datetime=end_with_buffer
                 )
@@ -376,8 +376,8 @@ class AppointmentDetailView(LoginRequiredMixin, DetailView):
         week_end = week_start + timedelta(days=6)
         
         context['dentist_stats'] = {
-            'today_schedules': appointment.dentist.schedules.filter(date=today).count(),
-            'week_schedules': appointment.dentist.schedules.filter(
+            'today_schedules': appointment.dentist.appointment_slots.filter(date=today).count(),
+            'week_schedules': appointment.dentist.appointment_slots.filter(
                 date__gte=week_start, 
                 date__lte=week_end
             ).count(),
@@ -440,8 +440,7 @@ class BookAppointmentPublicView(TemplateView):
 def get_available_times_api(request):
     """
     API ENDPOINT: Get available appointment time slots
-    Used by frontend calendar/booking forms to show available times
-    Includes comprehensive conflict detection and business rule validation
+    Fixed version that uses the correct models and logic
     """
     if request.method != 'GET':
         return JsonResponse({'error': 'Method not allowed'}, status=405)
@@ -450,10 +449,16 @@ def get_available_times_api(request):
     date_str = request.GET.get('date')
     service_id = request.GET.get('service_id')
     
+    # Validate required parameters
     if not all([dentist_id, date_str, service_id]):
         return JsonResponse({'error': 'dentist_id, date, and service_id are required'}, status=400)
     
     try:
+        from users.models import User
+        from services.models import Service
+        from core.models import Holiday
+        from .models import Appointment, AppointmentSlot, DentistScheduleSettings, TimeBlock
+        
         dentist = User.objects.get(id=dentist_id, is_active_dentist=True)
         service = Service.objects.get(id=service_id, is_archived=False)
         appointment_date = datetime.strptime(date_str, '%Y-%m-%d').date()
@@ -468,60 +473,92 @@ def get_available_times_api(request):
     if appointment_date.weekday() == 6:  # Sunday
         return JsonResponse({'available_times': [], 'error': 'No appointments on Sundays'})
     
-    if Holiday.objects.filter(date=appointment_date, is_active=True).exists():
-        return JsonResponse({'available_times': [], 'error': 'No appointments on holidays'})
+    # Check holidays
+    try:
+        if Holiday.objects.filter(date=appointment_date, is_active=True).exists():
+            return JsonResponse({'available_times': [], 'error': 'No appointments on holidays'})
+    except:
+        # If Holiday model has issues, just continue
+        pass
     
-    # Get system settings for clinic configuration
-    clinic_start = _get_system_setting_time('clinic_start_time', time(10, 0))
-    clinic_end = _get_system_setting_time('clinic_end_time', time(18, 0))
-    lunch_start = _get_system_setting_time('lunch_start_time', time(12, 0))
-    lunch_end = _get_system_setting_time('lunch_end_time', time(13, 0))
-    default_buffer = _get_system_setting_int('appointment_buffer_minutes', 15)
-    slot_duration_minutes = _get_system_setting_int('appointment_time_slot_minutes', 30)
+    # Get dentist's schedule settings for this day
+    weekday = appointment_date.weekday()
+    try:
+        schedule_settings = DentistScheduleSettings.objects.get(
+            dentist=dentist, 
+            weekday=weekday, 
+            is_working=True
+        )
+    except DentistScheduleSettings.DoesNotExist:
+        return JsonResponse({'available_times': [], 'error': 'Dentist not working on this day'})
+    
+    # Check for time blocks (vacations, meetings, etc.)
+    time_blocks = TimeBlock.objects.filter(dentist=dentist, date=appointment_date)
+    
+    # If there's a full-day block, no times available
+    if time_blocks.filter(start_time__isnull=True, end_time__isnull=True).exists():
+        return JsonResponse({'available_times': [], 'error': 'Dentist not available on this date'})
     
     # Get existing appointments that block time slots
     existing_appointments = Appointment.objects.filter(
         dentist=dentist,
-        schedule__date=appointment_date,
-        status__in=['pending', 'approved', 'completed']
-    ).select_related('schedule', 'service')
+        appointment_slot__date=appointment_date,
+        status__in=Appointment.BLOCKING_STATUSES
+    ).select_related('appointment_slot', 'service')
     
     # Generate available time slots
     available_times = []
     service_duration = timedelta(minutes=service.duration_minutes)
-    slot_duration = timedelta(minutes=slot_duration_minutes)
+    slot_duration = timedelta(minutes=schedule_settings.slot_duration_minutes)
     
-    current_time = datetime.combine(appointment_date, clinic_start)
-    end_of_day = datetime.combine(appointment_date, clinic_end)
-    lunch_start_dt = datetime.combine(appointment_date, lunch_start)
-    lunch_end_dt = datetime.combine(appointment_date, lunch_end)
+    # Working hours from dentist's schedule
+    current_time = datetime.combine(appointment_date, schedule_settings.start_time)
+    end_of_day = datetime.combine(appointment_date, schedule_settings.end_time)
+    
+    # Lunch break times
+    lunch_start_dt = None
+    lunch_end_dt = None
+    if schedule_settings.has_lunch_break:
+        lunch_start_dt = datetime.combine(appointment_date, schedule_settings.lunch_start)
+        lunch_end_dt = datetime.combine(appointment_date, schedule_settings.lunch_end)
     
     while current_time + service_duration <= end_of_day:
         slot_start_time = current_time.time()
         service_end_time = current_time + service_duration
-        service_end_with_buffer = service_end_time + timedelta(minutes=default_buffer)
+        service_end_with_buffer = service_end_time + timedelta(minutes=schedule_settings.default_buffer_minutes)
         
-        # Skip if extends past clinic hours
+        # Skip if extends past working hours
         if service_end_with_buffer > end_of_day:
             current_time += slot_duration
             continue
         
         # Skip lunch break overlap
-        appointment_overlaps_lunch = not (
-            service_end_with_buffer <= lunch_start_dt or 
-            current_time >= lunch_end_dt
-        )
+        if lunch_start_dt and lunch_end_dt:
+            if not (service_end_with_buffer <= lunch_start_dt or current_time >= lunch_end_dt):
+                current_time += slot_duration
+                continue
         
-        if appointment_overlaps_lunch:
+        # Check for conflicts with time blocks
+        blocked_by_time_block = False
+        for time_block in time_blocks:
+            if not time_block.is_full_day:  # Already checked full day blocks above
+                block_start = datetime.combine(appointment_date, time_block.start_time)
+                block_end = datetime.combine(appointment_date, time_block.end_time)
+                
+                if current_time < block_end and service_end_with_buffer > block_start:
+                    blocked_by_time_block = True
+                    break
+        
+        if blocked_by_time_block:
             current_time += slot_duration
             continue
         
         # Check for conflicts with existing appointments
         has_conflict = False
         for appointment in existing_appointments:
-            existing_start = datetime.combine(appointment_date, appointment.schedule.start_time)
+            existing_start = datetime.combine(appointment_date, appointment.appointment_slot.start_time)
             existing_service_end = existing_start + timedelta(minutes=appointment.service.duration_minutes)
-            existing_end_with_buffer = existing_service_end + timedelta(minutes=appointment.schedule.buffer_minutes)
+            existing_end_with_buffer = existing_service_end + timedelta(minutes=appointment.appointment_slot.buffer_minutes)
             
             if current_time < existing_end_with_buffer and service_end_with_buffer > existing_start:
                 has_conflict = True
@@ -535,12 +572,12 @@ def get_available_times_api(request):
     return JsonResponse({
         'available_times': available_times,
         'service_duration': service.duration_minutes,
-        'buffer_minutes': default_buffer,
+        'buffer_minutes': schedule_settings.default_buffer_minutes,
         'clinic_hours': {
-            'start': clinic_start.strftime('%H:%M'),
-            'end': clinic_end.strftime('%H:%M'),
-            'lunch_start': lunch_start.strftime('%H:%M'),
-            'lunch_end': lunch_end.strftime('%H:%M')
+            'start': schedule_settings.start_time.strftime('%H:%M'),
+            'end': schedule_settings.end_time.strftime('%H:%M'),
+            'lunch_start': schedule_settings.lunch_start.strftime('%H:%M') if schedule_settings.has_lunch_break else None,
+            'lunch_end': schedule_settings.lunch_end.strftime('%H:%M') if schedule_settings.has_lunch_break else None,
         }
     })
 
@@ -789,98 +826,6 @@ def _get_system_setting_int(key, default):
         return int(setting.value)
     except (SystemSetting.DoesNotExist, ValueError):
         return default
-
-
-@transaction.atomic
-def create_appointment_atomic(patient, dentist, service, appointment_date, appointment_time, 
-                            patient_type, reason='', buffer_minutes=15):
-    """
-    HELPER: Atomically create appointment and schedule with proper conflict checking
-    
-    Args:
-        patient: Patient instance
-        dentist: User instance (dentist)
-        service: Service instance
-        appointment_date: date object
-        appointment_time: time object
-        patient_type: str ('new' or 'returning')
-        reason: str (optional)
-        buffer_minutes: int (buffer time after appointment)
-    
-    Returns:
-        tuple: (appointment, created) where created is boolean
-    
-    Raises:
-        ValidationError: If there are conflicts or validation errors
-    """
-    # Calculate end time based on service duration
-    start_datetime = datetime.combine(appointment_date, appointment_time)
-    end_datetime = start_datetime + timedelta(minutes=service.duration_minutes)
-    end_time = end_datetime.time()
-    
-    # Calculate end time including buffer
-    end_with_buffer = end_datetime + timedelta(minutes=buffer_minutes)
-    
-    # Use select_for_update to prevent race conditions
-    dentist = User.objects.select_for_update().get(id=dentist.id, is_active_dentist=True)
-    
-    # Check for conflicts using the new method
-    conflicts = Appointment.get_conflicting_appointments(
-        dentist=dentist,
-        start_datetime=start_datetime,
-        end_datetime=end_with_buffer
-    )
-    
-    if conflicts:
-        conflict_times = [
-            f"{c.schedule.start_time.strftime('%I:%M %p')}-{c.schedule.effective_end_time.strftime('%I:%M %p')}"
-            for c in conflicts
-        ]
-        raise ValidationError(
-            f"Time slot conflicts with existing appointments: {', '.join(conflict_times)}"
-        )
-    
-    # Create schedule first
-    try:
-        schedule = Schedule.objects.create(
-            dentist=dentist,
-            date=appointment_date,
-            start_time=appointment_time,
-            end_time=end_time,
-            buffer_minutes=buffer_minutes,
-            is_available=True,
-            notes='Created for appointment booking'
-        )
-    except IntegrityError:
-        # Handle case where schedule already exists
-        schedule = Schedule.objects.get(
-            dentist=dentist,
-            date=appointment_date,
-            start_time=appointment_time,
-            end_time=end_time
-        )
-        
-        # Check if this schedule already has an appointment
-        existing_appointment = Appointment.objects.filter(
-            schedule=schedule,
-            status__in=Appointment.BLOCKING_STATUSES
-        ).first()
-        
-        if existing_appointment:
-            raise ValidationError("This time slot is already booked.")
-    
-    # Create appointment
-    appointment = Appointment.objects.create(
-        patient=patient,
-        dentist=dentist,
-        service=service,
-        schedule=schedule,
-        patient_type=patient_type,
-        reason=reason,
-        status='pending'
-    )
-    
-    return appointment, True
 
 
 def validate_name_field(value, field_name):

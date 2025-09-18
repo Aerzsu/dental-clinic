@@ -523,22 +523,14 @@
             step: 1,
             submitting: false,
             submitted: false,
-            loading: false,
-            loadingTimes: false,  // FIXED: Changed from 'loading' to 'loadingTimes'
+            loadingTimes: false,
             patientFound: false,
             searchingPatient: false,
             referenceNumber: '',
             errorMessage: '',
             
-            // Debouncing variables
-            searchPatientTimeout: null,
-            loadTimesTimeout: null,
-            lastSearchQuery: '',
-            lastTimeLoadParams: '',
-            
-            // Request abortion for race condition prevention
-            currentSearchRequest: null,
-            currentTimeRequest: null,
+            // Simple timeout variables
+            searchTimeout: null,
             
             // Validation errors
             errors: {},
@@ -564,7 +556,7 @@
                 agreed_to_terms: false
             },
             
-            // Calendar - Use current date in Manila timezone
+            // Calendar
             currentMonth: new Date().getMonth(),
             currentYear: new Date().getFullYear(),
             
@@ -574,6 +566,7 @@
             availableTimes: [],
             calendarDays: [],
             
+            // SIMPLIFIED: Init method
             init() {
                 console.log('Initializing appointment booking');
                 console.log('Services:', this.services);
@@ -581,107 +574,32 @@
                 
                 this.generateCalendar();
                 
-                // Watch for patient identifier changes with enhanced debouncing
+                // Simple watchers
                 this.$watch('form.patient_identifier', (value) => {
-                    this.debouncedSearchPatient(value);
+                    if (this.searchTimeout) clearTimeout(this.searchTimeout);
+                    this.searchTimeout = setTimeout(() => {
+                        this.searchPatient();
+                    }, 500);
                 });
                 
-                // Watch for date selection changes with debouncing
                 this.$watch('form.selected_date', (value) => {
                     console.log('Date changed to:', value);
-                    this.form.selected_time = ''; // Reset selected time
-                    this.debouncedLoadAvailableTimes();
+                    this.form.selected_time = '';
+                    this.loadAvailableTimes();
                 });
                 
-                // Watch for service/dentist changes to reload times with debouncing
                 this.$watch('form.dentist', () => {
                     console.log('Dentist changed to:', this.form.dentist);
-                    this.form.selected_time = ''; // Reset selected time
-                    this.debouncedLoadAvailableTimes();
+                    this.form.selected_time = '';
+                    this.loadAvailableTimes();
                 });
                 
                 this.$watch('form.service', () => {
                     console.log('Service changed to:', this.form.service);
                     this.updateServiceInfo();
-                    this.form.selected_time = ''; // Reset selected time
-                    this.debouncedLoadAvailableTimes();
-                });
-            },
-            
-            // Enhanced debouncing for patient search
-            debouncedSearchPatient(value) {
-                // Clear previous timeout
-                if (this.searchPatientTimeout) {
-                    clearTimeout(this.searchPatientTimeout);
-                }
-                
-                // Abort previous request if still pending
-                if (this.currentSearchRequest) {
-                    this.currentSearchRequest.abort();
-                    this.currentSearchRequest = null;
-                }
-                
-                // Reset patient found status immediately if query is too short
-                if (!value || value.length < 3) {
-                    this.patientFound = false;
-                    this.foundPatient = {};
-                    this.searchingPatient = false;
-                    return;
-                }
-                
-                // Skip if same query as last search
-                if (value === this.lastSearchQuery) {
-                    return;
-                }
-                
-                this.lastSearchQuery = value;
-                
-                // Set timeout for debounced search
-                this.searchPatientTimeout = setTimeout(() => {
-                    this.searchPatient();
-                }, 500); // 500ms debounce
-            },
-            
-            // Enhanced debouncing for loading available times
-            debouncedLoadAvailableTimes() {
-                // Clear previous timeout
-                if (this.loadTimesTimeout) {
-                    clearTimeout(this.loadTimesTimeout);
-                }
-                
-                // Abort previous request if still pending
-                if (this.currentTimeRequest) {
-                    this.currentTimeRequest.abort();
-                    this.currentTimeRequest = null;
-                }
-                
-                // Check if we have all required data
-                if (!this.form.selected_date || !this.form.dentist || !this.form.service) {
-                    console.log('Missing required data for time loading:', {
-                        date: this.form.selected_date,
-                        dentist: this.form.dentist,
-                        service: this.form.service
-                    });
-                    this.availableTimes = [];
-                    return;
-                }
-                
-                // Create params string to check if parameters changed
-                const params = `${this.form.dentist}-${this.form.selected_date}-${this.form.service}`;
-                
-                // Skip if same parameters as last request
-                if (params === this.lastTimeLoadParams) {
-                    console.log('Skipping duplicate time load request');
-                    return;
-                }
-                
-                this.lastTimeLoadParams = params;
-                console.log('Scheduling time load for params:', params);
-                
-                // Set timeout for debounced load
-                this.loadTimesTimeout = setTimeout(() => {
+                    this.form.selected_time = '';
                     this.loadAvailableTimes();
-                }, 300); // 300ms debounce for time loading
+                });
             },
             
             get currentMonthName() {
@@ -701,10 +619,9 @@
             validateName(field) {
                 const value = this.form[field];
                 if (!value || !value.trim()) {
-                    return; // Don't validate empty fields on blur
+                    return;
                 }
                 
-                // Check if name contains only letters, spaces, hyphens, and apostrophes
                 const namePattern = /^[a-zA-Z\s\-']+$/;
                 if (!namePattern.test(value)) {
                     this.errors[field] = 'Name should only contain letters, spaces, hyphens, and apostrophes';
@@ -716,7 +633,7 @@
             validateEmail() {
                 const email = this.form.email;
                 if (!email || !email.trim()) {
-                    return; // Don't validate empty fields on blur
+                    return;
                 }
                 
                 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -730,10 +647,9 @@
             validateContactNumber() {
                 const contact = this.form.contact_number;
                 if (!contact || !contact.trim()) {
-                    return; // Contact number is optional
+                    return;
                 }
                 
-                // Basic phone number validation (Philippine format)
                 const phonePattern = /^(\+63|0)?9\d{9}$/;
                 if (!phonePattern.test(contact.replace(/\s/g, ''))) {
                     this.errors.contact_number = 'Please enter a valid Philippine mobile number (e.g., +639123456789)';
@@ -786,7 +702,6 @@
                                 if (this.errors.email) isValid = false;
                             }
                             
-                            // Validate contact number if provided
                             if (this.form.contact_number && this.form.contact_number.trim()) {
                                 this.validateContactNumber();
                                 if (this.errors.contact_number) isValid = false;
@@ -825,7 +740,6 @@
                 }
                 
                 if (!isValid) {
-                    // Scroll to first error
                     this.$nextTick(() => {
                         const firstError = document.querySelector('.text-red-600');
                         if (firstError) {
@@ -842,9 +756,8 @@
                     this.step++;
                     if (this.step === 3) {
                         this.generateCalendar();
-                        this.debouncedLoadAvailableTimes();
+                        this.loadAvailableTimes();
                     }
-                    // Scroll to top of form
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                 }
             },
@@ -855,6 +768,7 @@
                 window.scrollTo({ top: 0, behavior: 'smooth' });
             },
             
+            // SIMPLIFIED: Direct patient search
             async searchPatient() {
                 if (!this.form.patient_identifier || this.form.patient_identifier.length < 3) {
                     this.patientFound = false;
@@ -865,19 +779,7 @@
                 this.clearErrors('patient_identifier');
                 
                 try {
-                    // Create AbortController for request cancellation
-                    const controller = new AbortController();
-                    this.currentSearchRequest = controller;
-                    
-                    const response = await fetch(`{% url "appointments:find_patient_api" %}?identifier=${encodeURIComponent(this.form.patient_identifier)}`, {
-                        signal: controller.signal
-                    });
-                    
-                    // Clear the current request reference if this request completed
-                    if (this.currentSearchRequest === controller) {
-                        this.currentSearchRequest = null;
-                    }
-                    
+                    const response = await fetch(`{% url "appointments:find_patient_api" %}?identifier=${encodeURIComponent(this.form.patient_identifier)}`);
                     const data = await response.json();
                     
                     if (data.found) {
@@ -888,12 +790,9 @@
                         this.foundPatient = {};
                     }
                 } catch (error) {
-                    // Don't show error if request was aborted (normal for debouncing)
-                    if (error.name !== 'AbortError') {
-                        console.error('Error searching patient:', error);
-                        this.patientFound = false;
-                        this.errors.patient_identifier = 'Error searching for patient. Please try again.';
-                    }
+                    console.error('Error searching patient:', error);
+                    this.patientFound = false;
+                    this.errors.patient_identifier = 'Error searching for patient. Please try again.';
                 } finally {
                     this.searchingPatient = false;
                 }
@@ -919,7 +818,7 @@
             generateCalendar() {
                 const firstDay = new Date(this.currentYear, this.currentMonth, 1);
                 const lastDay = new Date(this.currentYear, this.currentMonth + 1, 0);
-                const firstDayOfWeek = (firstDay.getDay() + 6) % 7; // Adjust for Monday start
+                const firstDayOfWeek = (firstDay.getDay() + 6) % 7;
                 const daysInMonth = lastDay.getDate();
                 
                 this.calendarDays = [];
@@ -940,7 +839,6 @@
                 
                 for (let day = 1; day <= daysInMonth; day++) {
                     const date = new Date(this.currentYear, this.currentMonth, day);
-                    // Fix: Use local date string to avoid timezone issues
                     const year = date.getFullYear();
                     const month = String(date.getMonth() + 1).padStart(2, '0');
                     const dayStr = String(date.getDate()).padStart(2, '0');
@@ -1006,11 +904,12 @@
                 this.generateCalendar(); // Refresh to update selected state
                 
                 console.log('Selected appointment date:', day.date);
-                this.debouncedLoadAvailableTimes();
+                this.loadAvailableTimes();
             },
             
-            // CRITICAL FIX: Updated loadAvailableTimes method
+            // SIMPLIFIED: Direct time loading without complex debouncing
             async loadAvailableTimes() {
+                // Check if we have all required data
                 if (!this.form.selected_date || !this.form.dentist || !this.form.service) {
                     console.log('Missing required data for time loading:', {
                         date: this.form.selected_date,
@@ -1021,35 +920,31 @@
                     return;
                 }
                 
-                console.log('Loading available times...');
+                console.log('Loading available times for:', {
+                    dentist: this.form.dentist,
+                    date: this.form.selected_date,
+                    service: this.form.service
+                });
+                
                 this.loadingTimes = true;
                 this.availableTimes = [];
                 
                 try {
-                    // Create AbortController for request cancellation
-                    const controller = new AbortController();
-                    this.currentTimeRequest = controller;
-                    
                     const params = new URLSearchParams({
                         dentist_id: this.form.dentist,
                         date: this.form.selected_date,
                         service_id: this.form.service
                     });
                     
-                    console.log('Making request to:', `{% url "appointments:get_available_times_api" %}?${params}`);
+                    const url = `{% url "appointments:get_available_times_api" %}?${params}`;
+                    console.log('Making request to:', url);
                     
-                    const response = await fetch(`{% url "appointments:get_available_times_api" %}?${params}`, {
-                        signal: controller.signal,
+                    const response = await fetch(url, {
                         method: 'GET',
                         headers: {
                             'X-Requested-With': 'XMLHttpRequest',
                         },
                     });
-                    
-                    // Clear the current request reference if this request completed
-                    if (this.currentTimeRequest === controller) {
-                        this.currentTimeRequest = null;
-                    }
                     
                     console.log('Response status:', response.status);
                     
@@ -1068,12 +963,9 @@
                         this.errorMessage = data.error;
                     }
                 } catch (error) {
-                    // Don't show error if request was aborted (normal for debouncing)
-                    if (error.name !== 'AbortError') {
-                        console.error('Error loading available times:', error);
-                        this.errorMessage = 'Failed to load available times. Please try again.';
-                        this.availableTimes = [];
-                    }
+                    console.error('Error loading available times:', error);
+                    this.errorMessage = 'Failed to load available times. Please try again.';
+                    this.availableTimes = [];
                 } finally {
                     this.loadingTimes = false;
                     console.log('Finished loading times. Available times count:', this.availableTimes.length);
@@ -1091,7 +983,6 @@
             
             formatDate(date) {
                 if (!date) return '';
-                // Fix: Parse date correctly to avoid timezone issues
                 const [year, month, day] = date.split('-');
                 const d = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
                 return d.toLocaleDateString('en-US', { 
@@ -1120,12 +1011,10 @@
             },
             
             async submitForm() {
-                // Prevent double submission
                 if (this.submitting) {
                     return;
                 }
                 
-                // Final validation before submission
                 if (!this.validateStep()) {
                     return;
                 }
@@ -1163,33 +1052,15 @@
             },
             
             resetForm() {
-                // Abort any pending requests
-                if (this.currentSearchRequest) {
-                    this.currentSearchRequest.abort();
-                    this.currentSearchRequest = null;
-                }
-                if (this.currentTimeRequest) {
-                    this.currentTimeRequest.abort();
-                    this.currentTimeRequest = null;
+                if (this.searchTimeout) {
+                    clearTimeout(this.searchTimeout);
+                    this.searchTimeout = null;
                 }
                 
-                // Clear timeouts
-                if (this.searchPatientTimeout) {
-                    clearTimeout(this.searchPatientTimeout);
-                    this.searchPatientTimeout = null;
-                }
-                if (this.loadTimesTimeout) {
-                    clearTimeout(this.loadTimesTimeout);
-                    this.loadTimesTimeout = null;
-                }
-                
-                // Reset state
                 this.step = 1;
                 this.submitted = false;
                 this.patientFound = false;
                 this.clearErrors();
-                this.lastSearchQuery = '';
-                this.lastTimeLoadParams = '';
                 
                 this.form = {
                     patient_type: '',

@@ -2,9 +2,9 @@
 from django import forms
 from django.core.exceptions import ValidationError
 from django.utils import timezone
-from datetime import datetime, time, timedelta
+from datetime import date, datetime, time, timedelta
 from django.db.models import Q
-from .models import Appointment, Schedule, DentistSchedule
+from .models import Appointment, AppointmentSlot, DentistScheduleSettings, TimeBlock
 from patients.models import Patient
 from services.models import Service
 from users.models import User
@@ -13,61 +13,66 @@ import re
 from django.core.validators import validate_email
 
 class AppointmentForm(forms.ModelForm):
-    """Form for creating and updating appointments (staff use)"""
+    """Form for creating/editing appointments"""
     
     class Meta:
         model = Appointment
-        fields = [
-            'patient', 'dentist', 'service', 'schedule', 
-            'reason', 'staff_notes', 'status'
-        ]
+        fields = ['patient', 'dentist', 'service', 'appointment_slot', 'patient_type', 'reason']
         widgets = {
-            'patient': forms.Select(attrs={'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500'}),
-            'dentist': forms.Select(attrs={'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500'}),
-            'service': forms.Select(attrs={'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500'}),
-            'schedule': forms.Select(attrs={'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500'}),
-            'reason': forms.Textarea(attrs={'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500', 'rows': 3}),
-            'staff_notes': forms.Textarea(attrs={'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500', 'rows': 3}),
-            'status': forms.Select(attrs={'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500'}),
+            'patient': forms.Select(attrs={
+                'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
+                'required': True
+            }),
+            'dentist': forms.Select(attrs={
+                'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
+                'required': True
+            }),
+            'service': forms.Select(attrs={
+                'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
+                'required': True
+            }),
+            'appointment_slot': forms.Select(attrs={
+                'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
+                'required': True
+            }),
+            'patient_type': forms.Select(attrs={
+                'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500'
+            }),
+            'reason': forms.Textarea(attrs={
+                'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
+                'rows': 3,
+                'placeholder': 'Optional appointment reason or notes...'
+            })
         }
     
     def __init__(self, *args, **kwargs):
         self.user = kwargs.pop('user', None)
         super().__init__(*args, **kwargs)
         
-        # Filter querysets
-        self.fields['patient'].queryset = Patient.objects.filter(is_active=True).order_by('last_name', 'first_name')
+        # Filter active entities
+        self.fields['patient'].queryset = Patient.objects.filter(is_active=True).order_by('first_name', 'last_name')
         self.fields['dentist'].queryset = User.objects.filter(is_active_dentist=True).order_by('first_name', 'last_name')
         self.fields['service'].queryset = Service.objects.filter(is_archived=False).order_by('name')
         
-        # Filter schedules to only show future available slots
+        # Filter available appointment slots
         today = timezone.now().date()
-        self.fields['schedule'].queryset = Schedule.objects.filter(
+        self.fields['appointment_slot'].queryset = AppointmentSlot.objects.filter(
             date__gte=today,
             is_available=True
         ).select_related('dentist').order_by('date', 'start_time')
-        
-        # Update schedule display
-        self.fields['schedule'].label_from_instance = lambda obj: f"{obj.dentist.full_name} - {obj.date} {obj.start_time.strftime('%I:%M %p')}"
     
     def clean(self):
         cleaned_data = super().clean()
-        schedule = cleaned_data.get('schedule')
-        dentist = cleaned_data.get('dentist')
+        appointment_slot = cleaned_data.get('appointment_slot')
+        service = cleaned_data.get('service')
         
-        if schedule and dentist:
-            # Ensure schedule belongs to selected dentist
-            if schedule.dentist != dentist:
-                raise ValidationError('Selected schedule does not belong to the selected dentist.')
+        if appointment_slot and service:
+            # Check if slot can accommodate service duration
+            slot_duration = datetime.combine(date.today(), appointment_slot.end_time) - \
+                          datetime.combine(date.today(), appointment_slot.start_time)
             
-            # Check for conflicts with existing appointments
-            existing = Appointment.objects.filter(
-                schedule=schedule,
-                status__in=['approved', 'pending']
-            ).exclude(pk=self.instance.pk if self.instance else None)
-            
-            if existing.exists():
-                raise ValidationError('This time slot is already booked.')
+            if slot_duration.total_seconds() < service.duration_minutes * 60:
+                raise ValidationError('Selected time slot is too short for this service.')
         
         return cleaned_data
 
@@ -75,7 +80,7 @@ class ScheduleForm(forms.ModelForm):
     """Form for creating dentist schedules"""
     
     class Meta:
-        model = Schedule
+        model = AppointmentSlot
         fields = ['dentist', 'date', 'start_time', 'end_time', 'notes']
         widgets = {
             'dentist': forms.Select(attrs={'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500'}),
@@ -386,7 +391,7 @@ class AppointmentRequestForm(forms.ModelForm):
         end_time = (start_datetime + timedelta(minutes=service.duration_minutes)).time()
         
         # Try to find existing schedule or create new one
-        schedule, created = Schedule.objects.get_or_create(
+        schedule, created = AppointmentSlot.objects.get_or_create(
             dentist=dentist,
             date=preferred_date,
             start_time=preferred_time,
@@ -409,57 +414,83 @@ class AppointmentRequestForm(forms.ModelForm):
 from django.db import models
 
 #SCHEDULE MANAGEMENT FOR DENTISTS
-class DentistScheduleForm(forms.ModelForm):
-    """Form for managing dentist weekly schedules"""
+class DentistScheduleSettingsForm(forms.ModelForm):
+    """Form for managing individual dentist schedule settings for one weekday"""
     
     class Meta:
-        model = DentistSchedule
-        fields = ['is_working', 'start_time', 'end_time', 'has_lunch_break', 'lunch_start', 'lunch_end']
+        model = DentistScheduleSettings
+        fields = [
+            'is_working', 'start_time', 'end_time', 
+            'has_lunch_break', 'lunch_start', 'lunch_end',
+            'default_buffer_minutes', 'slot_duration_minutes'
+        ]
         widgets = {
             'is_working': forms.CheckboxInput(attrs={
-                'class': 'rounded border-gray-300 text-primary-600 shadow-sm focus:border-primary-500 focus:ring-primary-500'
+                'class': 'rounded border-gray-300 text-primary-600 shadow-sm focus:border-primary-500 focus:ring-primary-500',
+                'x-model': 'isWorking'
             }),
             'start_time': forms.TimeInput(attrs={
                 'type': 'time',
                 'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
-                'step': '900'  # 15 minutes
+                'step': '900',  # 15 minutes
+                'x-show': 'isWorking'
             }),
             'end_time': forms.TimeInput(attrs={
                 'type': 'time',
                 'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
-                'step': '900'  # 15 minutes
+                'step': '900',  # 15 minutes
+                'x-show': 'isWorking'
             }),
             'has_lunch_break': forms.CheckboxInput(attrs={
-                'class': 'rounded border-gray-300 text-primary-600 shadow-sm focus:border-primary-500 focus:ring-primary-500'
+                'class': 'rounded border-gray-300 text-primary-600 shadow-sm focus:border-primary-500 focus:ring-primary-500',
+                'x-model': 'hasLunchBreak',
+                'x-show': 'isWorking'
             }),
             'lunch_start': forms.TimeInput(attrs={
                 'type': 'time',
                 'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
-                'step': '900'  # 15 minutes
+                'step': '900',  # 15 minutes
+                'x-show': 'isWorking && hasLunchBreak'
             }),
             'lunch_end': forms.TimeInput(attrs={
                 'type': 'time',
                 'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
-                'step': '900'  # 15 minutes
+                'step': '900',  # 15 minutes
+                'x-show': 'isWorking && hasLunchBreak'
+            }),
+            'default_buffer_minutes': forms.NumberInput(attrs={
+                'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
+                'min': '0',
+                'max': '60',
+                'x-show': 'isWorking'
+            }),
+            'slot_duration_minutes': forms.NumberInput(attrs={
+                'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
+                'min': '15',
+                'max': '120',
+                'step': '15',
+                'x-show': 'isWorking'
             }),
         }
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         
-        # Set default values if creating new schedule
+        # Set default values for new schedules
         if not self.instance.pk:
             self.fields['start_time'].initial = time(10, 0)
             self.fields['end_time'].initial = time(18, 0)
             self.fields['lunch_start'].initial = time(12, 0)
             self.fields['lunch_end'].initial = time(13, 0)
+            self.fields['default_buffer_minutes'].initial = 15
+            self.fields['slot_duration_minutes'].initial = 30
     
     def clean(self):
         cleaned_data = super().clean()
         is_working = cleaned_data.get('is_working')
         
         if not is_working:
-            # If not working, clear other fields
+            # Clear other fields if not working
             cleaned_data['has_lunch_break'] = False
             return cleaned_data
         
@@ -493,37 +524,266 @@ class DentistScheduleForm(forms.ModelForm):
         return cleaned_data
 
 
-class WeeklyScheduleFormSet(forms.BaseFormSet):
-    """Formset for managing all 7 days of the week"""
+class TimeBlockForm(forms.ModelForm):
+    """Form for creating time blocks (vacations, meetings, etc.)"""
+    
+    date = forms.DateField(
+        widget=forms.DateInput(attrs={
+            'type': 'date',
+            'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
+            'min': timezone.now().date().strftime('%Y-%m-%d')  # Prevent past dates
+        }),
+        help_text="Date to block appointments"
+    )
+    
+    is_full_day = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={
+            'class': 'rounded border-gray-300 text-primary-600 shadow-sm focus:border-primary-500 focus:ring-primary-500',
+            'x-model': 'isFullDay'
+        }),
+        label="Block entire day",
+        help_text="Check to block the entire day, uncheck to block specific times"
+    )
+    
+    class Meta:
+        model = TimeBlock
+        fields = ['dentist', 'date', 'is_full_day', 'start_time', 'end_time', 'block_type', 'reason', 'notes']
+        widgets = {
+            'dentist': forms.Select(attrs={
+                'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
+                'required': True
+            }),
+            'start_time': forms.TimeInput(attrs={
+                'type': 'time',
+                'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
+                'step': '900',  # 15 minutes
+                'x-show': '!isFullDay'
+            }),
+            'end_time': forms.TimeInput(attrs={
+                'type': 'time',
+                'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
+                'step': '900',  # 15 minutes
+                'x-show': '!isFullDay'
+            }),
+            'block_type': forms.Select(attrs={
+                'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500'
+            }),
+            'reason': forms.TextInput(attrs={
+                'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
+                'placeholder': 'Brief reason for blocking this time (e.g., Vacation, Meeting)',
+                'maxlength': 255
+            }),
+            'notes': forms.Textarea(attrs={
+                'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
+                'rows': 3,
+                'placeholder': 'Additional notes or details...'
+            })
+        }
     
     def __init__(self, *args, **kwargs):
-        self.dentist = kwargs.pop('dentist', None)
+        self.user = kwargs.pop('user', None)
         super().__init__(*args, **kwargs)
+        
+        # Filter dentists
+        self.fields['dentist'].queryset = User.objects.filter(is_active_dentist=True).order_by('first_name', 'last_name')
+        
+        # Set current user as default if they're a dentist
+        if self.user and self.user.is_active_dentist and not self.instance.pk:
+            self.fields['dentist'].initial = self.user
     
-    def get_queryset(self):
-        """Get existing schedules for all weekdays"""
-        if self.dentist:
-            return DentistSchedule.objects.filter(dentist=self.dentist).order_by('weekday')
-        return DentistSchedule.objects.none()
+    def clean(self):
+        cleaned_data = super().clean()
+        date = cleaned_data.get('date')
+        is_full_day = cleaned_data.get('is_full_day')
+        start_time = cleaned_data.get('start_time')
+        end_time = cleaned_data.get('end_time')
+        
+        # Validate date is not in the past
+        if date and date < timezone.now().date():
+            raise ValidationError('Cannot create time blocks for past dates.')
+        
+        if is_full_day:
+            # Clear time fields for full day blocks
+            cleaned_data['start_time'] = None
+            cleaned_data['end_time'] = None
+        else:
+            # Validate time fields for partial blocks
+            if not start_time:
+                raise ValidationError('Start time is required for partial day blocks.')
+            if not end_time:
+                raise ValidationError('End time is required for partial day blocks.')
+            
+            if start_time and end_time and end_time <= start_time:
+                raise ValidationError('End time must be after start time.')
+        
+        return cleaned_data
     
     def save(self, commit=True):
-        """Save all schedule forms"""
-        schedules = []
-        for form in self.forms:
-            if form.is_valid() and not form.cleaned_data.get('DELETE', False):
-                schedule = form.save(commit=False)
-                if self.dentist:
-                    schedule.dentist = self.dentist
-                if commit:
-                    schedule.save()
-                schedules.append(schedule)
-        return schedules
+        instance = super().save(commit=False)
+        
+        # Set created_by if user is available
+        if self.user and not instance.created_by_id:
+            instance.created_by = self.user
+        
+        if commit:
+            instance.save()
+        
+        return instance
 
 
-# Create the formset class
-WeeklyScheduleFormSetClass = forms.formset_factory(
-    DentistScheduleForm,
-    formset=WeeklyScheduleFormSet,
-    extra=0,  # We'll create exactly 7 forms
-    can_delete=False
-)
+class BulkTimeBlockForm(forms.Form):
+    """Form for creating multiple time blocks (e.g., vacation period)"""
+    
+    dentist = forms.ModelChoiceField(
+        queryset=User.objects.filter(is_active_dentist=True),
+        widget=forms.Select(attrs={
+            'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
+            'required': True
+        })
+    )
+    
+    start_date = forms.DateField(
+        widget=forms.DateInput(attrs={
+            'type': 'date',
+            'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
+            'min': timezone.now().date().strftime('%Y-%m-%d')
+        })
+    )
+    
+    end_date = forms.DateField(
+        widget=forms.DateInput(attrs={
+            'type': 'date',
+            'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
+            'min': timezone.now().date().strftime('%Y-%m-%d')
+        })
+    )
+    
+    block_type = forms.ChoiceField(
+        choices=TimeBlock.BLOCK_TYPE_CHOICES,
+        widget=forms.Select(attrs={
+            'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500'
+        })
+    )
+    
+    reason = forms.CharField(
+        max_length=255,
+        widget=forms.TextInput(attrs={
+            'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
+            'placeholder': 'Reason for blocking (e.g., Summer Vacation)'
+        })
+    )
+    
+    notes = forms.CharField(
+        required=False,
+        widget=forms.Textarea(attrs={
+            'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
+            'rows': 3,
+            'placeholder': 'Additional notes...'
+        })
+    )
+    
+    include_weekends = forms.BooleanField(
+        required=False,
+        initial=True,
+        widget=forms.CheckboxInput(attrs={
+            'class': 'rounded border-gray-300 text-primary-600 shadow-sm focus:border-primary-500 focus:ring-primary-500'
+        }),
+        help_text="Include Saturdays and Sundays in the date range"
+    )
+    
+    def clean(self):
+        cleaned_data = super().clean()
+        start_date = cleaned_data.get('start_date')
+        end_date = cleaned_data.get('end_date')
+        
+        if start_date and end_date:
+            if end_date < start_date:
+                raise ValidationError('End date must be after start date.')
+            
+            # Check for reasonable date range (max 6 months)
+            date_diff = end_date - start_date
+            if date_diff.days > 180:
+                raise ValidationError('Date range cannot exceed 6 months.')
+        
+        return cleaned_data
+    
+    def create_blocks(self, user):
+        """Create time blocks for each day in the date range"""
+        cleaned_data = self.cleaned_data
+        dentist = cleaned_data['dentist']
+        start_date = cleaned_data['start_date']
+        end_date = cleaned_data['end_date']
+        include_weekends = cleaned_data['include_weekends']
+        
+        blocks_created = []
+        current_date = start_date
+        
+        while current_date <= end_date:
+            # Skip weekends if not included
+            if not include_weekends and current_date.weekday() >= 5:  # Saturday=5, Sunday=6
+                current_date += timedelta(days=1)
+                continue
+            
+            # Check if block already exists
+            existing_block = TimeBlock.objects.filter(
+                dentist=dentist,
+                date=current_date
+            ).first()
+            
+            if not existing_block:
+                block = TimeBlock.objects.create(
+                    dentist=dentist,
+                    date=current_date,
+                    block_type=cleaned_data['block_type'],
+                    reason=cleaned_data['reason'],
+                    notes=cleaned_data['notes'],
+                    created_by=user
+                )
+                blocks_created.append(block)
+            
+            current_date += timedelta(days=1)
+        
+        return blocks_created
+
+
+class QuickTimeBlockForm(forms.Form):
+    """Simplified form for quick time blocking from calendar view"""
+    
+    date = forms.DateField(widget=forms.HiddenInput())
+    start_time = forms.TimeField(widget=forms.HiddenInput())
+    end_time = forms.TimeField(widget=forms.HiddenInput())
+    dentist = forms.ModelChoiceField(
+        queryset=User.objects.filter(is_active_dentist=True),
+        widget=forms.HiddenInput()
+    )
+    
+    reason = forms.CharField(
+        max_length=255,
+        widget=forms.TextInput(attrs={
+            'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
+            'placeholder': 'Quick reason (e.g., Emergency, Meeting)',
+            'autofocus': True
+        })
+    )
+    
+    block_type = forms.ChoiceField(
+        choices=[
+            ('meeting', 'Meeting'),
+            ('personal', 'Personal'),
+            ('other', 'Other')
+        ],
+        initial='other',
+        widget=forms.Select(attrs={
+            'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500'
+        })
+    )
+    
+    def clean(self):
+        cleaned_data = super().clean()
+        date = cleaned_data.get('date')
+        
+        if date and date < timezone.now().date():
+            raise ValidationError('Cannot create blocks for past dates.')
+        
+        return cleaned_data

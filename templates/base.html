@@ -151,7 +151,8 @@
                             </button>
                             <div x-show="open && !collapsed" x-collapse class="ml-6 space-y-1">
                                 <a href="{% url 'appointments:appointment_calendar' %}" class="group flex items-center px-2 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-md">Calendar View</a>
-                                <a href="{% url 'appointments:schedule_list' %}" class="group flex items-center px-2 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-md">Schedules</a>
+                                <a href="{% url 'appointments:schedule_settings' %}" class="group flex items-center px-2 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-md">Schedule</a>
+                                <a href="{% url 'appointments:time_block_list' %}" class="group flex items-center px-2 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-md">Time Block</a>
                             </div>
                         </div>
                         

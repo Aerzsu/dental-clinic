@@ -56,8 +56,9 @@
                         List View
                     </a>
                     
-                    <!-- Schedule Management Links -->
-                    {% comment %} {% if user.has_permission_appointments and user.is_active_dentist %} {% endcomment %}
+                    <!-- Schedule Management Links - Commented out until implemented -->
+                    {% comment %}
+                    {% if user.has_permission_appointments and user.is_active_dentist %}
                     <a href="{% url 'appointments:dentist_schedule' %}" 
                     class="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium
                            {% if request.resolver_match.url_name == 'dentist_schedule' %}
@@ -68,9 +69,9 @@
                         <span class="mr-2">⏰</span>
                         My Schedule
                     </a>
-                    {% comment %} {% endif %} {% endcomment %}
+                    {% endif %}
 
-                    {% comment %} {% if user.has_permission_appointments %} {% endcomment %}
+                    {% if user.has_permission_appointments %}
                     <a href="{% url 'appointments:schedule_overview' %}" 
                     class="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium
                            {% if request.resolver_match.url_name == 'schedule_overview' %}
@@ -81,7 +82,8 @@
                         <span class="mr-2">📋</span>
                         Schedule Overview
                     </a>
-                    {% comment %} {% endif %} {% endcomment %}
+                    {% endif %}
+                    {% endcomment %}
                 </div>
             </div>
         </div>
@@ -199,7 +201,7 @@ function generateCalendar() {
             if (index < 3) { // Show max 3 appointments
                 const appointmentDiv = document.createElement('div');
                 appointmentDiv.className = `text-xs p-1 mb-1 rounded cursor-pointer border ${getStatusColor(appointment.status)}`;
-                appointmentDiv.textContent = `${appointment.schedule__start_time} - ${appointment.patient__first_name} ${appointment.patient__last_name}`;
+                appointmentDiv.textContent = `${appointment.appointment_slot__start_time} - ${appointment.patient__first_name} ${appointment.patient__last_name}`;
                 appointmentDiv.onclick = (e) => {
                     e.stopPropagation();
                     showAppointmentDetails(appointment);
@@ -252,7 +254,7 @@ function showDayAppointments(dateStr, appointments) {
                         <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(appointment.status).replace('border-', 'border ')}">${appointment.status}</span>
                     </div>
                     <div class="text-sm text-gray-600">
-                        <p><strong>Time:</strong> ${appointment.schedule__start_time} - ${appointment.schedule__end_time}</p>
+                        <p><strong>Time:</strong> ${appointment.appointment_slot__start_time} - ${appointment.appointment_slot__end_time}</p>
                         <p><strong>Service:</strong> ${appointment.service__name}</p>
                         <p><strong>Dentist:</strong> Dr. ${appointment.dentist__first_name} ${appointment.dentist__last_name}</p>
                         ${appointment.reason ? `<p><strong>Reason:</strong> ${appointment.reason}</p>` : ''}
@@ -273,7 +275,7 @@ function showDayAppointments(dateStr, appointments) {
 
 function showAppointmentDetails(appointment) {
     // This would show detailed info for a single appointment
-    showDayAppointments(appointment.schedule__date, [appointment]);
+    showDayAppointments(appointment.appointment_slot__date, [appointment]);
 }
 
 function closeModal() {

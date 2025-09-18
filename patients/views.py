@@ -32,7 +32,8 @@ class PatientListView(LoginRequiredMixin, ListView):
         return super().dispatch(request, *args, **kwargs)
     
     def get_queryset(self):
-        queryset = Patient.objects.select_related().prefetch_related('appointments__schedule', 'appointments__service')
+        # Updated to use appointment_slot instead of schedule
+        queryset = Patient.objects.select_related().prefetch_related('appointments__appointment_slot', 'appointments__service')
         
         # Get filter parameters
         search = self.request.GET.get('search', '').strip()
@@ -68,30 +69,30 @@ class PatientListView(LoginRequiredMixin, ListView):
             elif contact == 'none':
                 queryset = queryset.filter(email='', contact_number='')
         
-        # Apply activity filter
+        # Apply activity filter - updated to use appointment_slot
         if activity:
             today = date.today()
             if activity == 'recent':
                 recent_date = today - timedelta(days=30)
                 recent_patient_ids = Appointment.objects.filter(
-                    schedule__date__gte=recent_date,
+                    appointment_slot__date__gte=recent_date,
                     status='completed'
                 ).values_list('patient_id', flat=True).distinct()
                 queryset = queryset.filter(id__in=recent_patient_ids)
             elif activity == 'upcoming':
                 upcoming_patient_ids = Appointment.objects.filter(
-                    schedule__date__gte=today,
+                    appointment_slot__date__gte=today,
                     status__in=['approved', 'pending']
                 ).values_list('patient_id', flat=True).distinct()
                 queryset = queryset.filter(id__in=upcoming_patient_ids)
             elif activity == 'no_recent':
                 old_date = today - timedelta(days=90)
                 recent_patient_ids = Appointment.objects.filter(
-                    schedule__date__gte=old_date
+                    appointment_slot__date__gte=old_date
                 ).values_list('patient_id', flat=True).distinct()
                 queryset = queryset.exclude(id__in=recent_patient_ids)
         
-        # Apply sorting
+        # Apply sorting - updated to use appointment_slot
         if sort_by == 'name_asc':
             queryset = queryset.order_by('last_name', 'first_name')
         elif sort_by == 'name_desc':
@@ -101,19 +102,19 @@ class PatientListView(LoginRequiredMixin, ListView):
         elif sort_by == 'date_added_asc':
             queryset = queryset.order_by('created_at')
         elif sort_by == 'last_visit_desc':
-            # This is complex - we'll add annotation
+            # Updated to use appointment_slot__date
             queryset = queryset.annotate(
                 last_visit_date=Case(
-                    When(appointments__schedule__date__isnull=False, 
-                         then='appointments__schedule__date'),
+                    When(appointments__appointment_slot__date__isnull=False, 
+                         then='appointments__appointment_slot__date'),
                     default=None
                 )
             ).order_by('-last_visit_date')
         elif sort_by == 'last_visit_asc':
             queryset = queryset.annotate(
                 last_visit_date=Case(
-                    When(appointments__schedule__date__isnull=False, 
-                         then='appointments__schedule__date'),
+                    When(appointments__appointment_slot__date__isnull=False, 
+                         then='appointments__appointment_slot__date'),
                     default=None
                 )
             ).order_by('last_visit_date')
@@ -150,11 +151,11 @@ class PatientListView(LoginRequiredMixin, ListView):
         
         context['active_filters'] = active_filters
         
-        # Get insights for dashboard
+        # Get insights for dashboard - updated to use appointment_slot
         total_patients = Patient.objects.filter(is_active=True).count()
         today = date.today()
         upcoming_appointments = Appointment.objects.filter(
-            schedule__date__gte=today,
+            appointment_slot__date__gte=today,
             status__in=['approved', 'pending']
         ).values('patient').distinct().count()
         
@@ -162,7 +163,7 @@ class PatientListView(LoginRequiredMixin, ListView):
         
         old_date = today - timedelta(days=90)
         no_recent_visits = Patient.objects.filter(is_active=True).exclude(
-            appointments__schedule__date__gte=old_date
+            appointments__appointment_slot__date__gte=old_date
         ).count()
         
         context['insights'] = {
@@ -258,16 +259,16 @@ class PatientDetailView(LoginRequiredMixin, DetailView):
         context = super().get_context_data(**kwargs)
         patient = self.object
         
-        # Get all appointments ordered by date (most recent first)
+        # Get all appointments ordered by date (most recent first) - updated to use appointment_slot
         appointments = Appointment.objects.filter(patient=patient).select_related(
-            'schedule', 'service', 'dentist'
-        ).order_by('-schedule__date', '-schedule__start_time')
+            'appointment_slot', 'service', 'dentist'
+        ).order_by('-appointment_slot__date', '-appointment_slot__start_time')
         
-        # Categorize appointments
+        # Categorize appointments - updated to use appointment_slot
         today = date.today()
         completed_appointments = appointments.filter(status='completed')
         upcoming_appointments = appointments.filter(
-            schedule__date__gte=today, 
+            appointment_slot__date__gte=today, 
             status__in=['approved', 'pending']
         )
         cancelled_appointments = appointments.filter(status__in=['cancelled', 'rejected'])
@@ -430,16 +431,16 @@ def patient_quick_info(request, pk):
     try:
         patient = Patient.objects.get(pk=pk)
         
-        # Get recent appointments
+        # Get recent appointments - updated to use appointment_slot
         recent_appointments = patient.appointments.filter(
-            schedule__date__gte=date.today() - timedelta(days=30)
-        ).order_by('-schedule__date')[:3]
+            appointment_slot__date__gte=date.today() - timedelta(days=30)
+        ).order_by('-appointment_slot__date')[:3]
         
         appointments_data = []
         for apt in recent_appointments:
             appointments_data.append({
-                'date': apt.schedule.date.strftime('%Y-%m-%d'),
-                'time': apt.schedule.start_time.strftime('%H:%M'),
+                'date': apt.appointment_slot.date.strftime('%Y-%m-%d'),
+                'time': apt.appointment_slot.start_time.strftime('%H:%M'),
                 'service': apt.service.name,
                 'status': apt.get_status_display(),
             })

@@ -1,6 +1,7 @@
 #core/urls.py
 from django.urls import path
 from . import views
+from appointments import views as appointment_views
 from core.views import BookAppointmentView
 
 app_name = 'core'

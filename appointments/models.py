@@ -49,31 +49,73 @@ class DailySlots(models.Model):
         """Total available slots for the day"""
         return self.am_slots + self.pm_slots
     
-    def get_available_am_slots(self):
-        """Get available AM slots (total - booked)"""
+    def get_available_am_slots(self, include_pending=True):
+        """
+        Get available AM slots with context-aware counting
+        
+        Args:
+            include_pending (bool): Whether to count pending appointments as blocking slots
+                                  - True for public booking (prevent overbooking)
+                                  - False for admin backend (show real availability for decision making)
+        """
+        if include_pending:
+            # For public booking - count pending appointments to prevent overbooking
+            blocking_statuses = ['pending', 'confirmed', 'completed']
+        else:
+            # For admin backend - only count confirmed/completed appointments
+            blocking_statuses = ['confirmed', 'completed']
+        
         booked_am = Appointment.objects.filter(
             appointment_date=self.date,
             period='AM',
-            status__in=Appointment.BLOCKING_STATUSES
+            status__in=blocking_statuses
         ).count()
         return max(0, self.am_slots - booked_am)
     
-    def get_available_pm_slots(self):
-        """Get available PM slots (total - booked)"""
+    def get_available_pm_slots(self, include_pending=True):
+        """
+        Get available PM slots with context-aware counting
+        
+        Args:
+            include_pending (bool): Whether to count pending appointments as blocking slots
+        """
+        if include_pending:
+            # For public booking - count pending appointments to prevent overbooking
+            blocking_statuses = ['pending', 'confirmed', 'completed']
+        else:
+            # For admin backend - only count confirmed/completed appointments
+            blocking_statuses = ['confirmed', 'completed']
+        
         booked_pm = Appointment.objects.filter(
             appointment_date=self.date,
             period='PM',
-            status__in=Appointment.BLOCKING_STATUSES
+            status__in=blocking_statuses
         ).count()
         return max(0, self.pm_slots - booked_pm)
     
-    def has_available_slots(self, period):
+    def has_available_slots(self, period, include_pending=True):
         """Check if period has available slots"""
         if period == 'AM':
-            return self.get_available_am_slots() > 0
+            return self.get_available_am_slots(include_pending=include_pending) > 0
         elif period == 'PM':
-            return self.get_available_pm_slots() > 0
+            return self.get_available_pm_slots(include_pending=include_pending) > 0
         return False
+    
+    def get_pending_counts(self):
+        """Get separate counts of pending appointments for admin display"""
+        pending_am = Appointment.objects.filter(
+            appointment_date=self.date,
+            period='AM',
+            status='pending'
+        ).count()
+        
+        pending_pm = Appointment.objects.filter(
+            appointment_date=self.date,
+            period='PM',
+            status='pending'
+        ).count()
+        
+        return {'am_pending': pending_am, 'pm_pending': pending_pm}
     
     def clean(self):
         # Validate date is not in the past (except for today)
@@ -112,10 +154,9 @@ class DailySlots(models.Model):
             return daily_slots, True
     
     @classmethod
-    def get_availability_for_range(cls, start_date, end_date):
+    def get_availability_for_range(cls, start_date, end_date, include_pending=True):
         """
-        Get availability data for a date range
-        This is the missing method that was causing the API error!
+        Get availability data for a date range with context-aware counting
         """
         availability = {}
         
@@ -135,29 +176,31 @@ class DailySlots(models.Model):
                 if current_date in slots_dict:
                     slot = slots_dict[current_date]
                     availability[current_date] = {
-                        'am_available': slot.get_available_am_slots(),
-                        'pm_available': slot.get_available_pm_slots(),
+                        'am_available': slot.get_available_am_slots(include_pending=include_pending),
+                        'pm_available': slot.get_available_pm_slots(include_pending=include_pending),
                         'am_total': slot.am_slots,
                         'pm_total': slot.pm_slots
                     }
+                    
+                    # For admin backend, also include pending counts
+                    if not include_pending:
+                        pending_counts = slot.get_pending_counts()
+                        availability[current_date].update(pending_counts)
+                        
                 else:
-                    # Default availability for dates without slots (auto-create)
+                    # Default availability for dates without slots
                     daily_slots, created = cls.get_or_create_for_date(current_date)
                     if daily_slots:
                         availability[current_date] = {
-                            'am_available': daily_slots.get_available_am_slots(),
-                            'pm_available': daily_slots.get_available_pm_slots(),
+                            'am_available': daily_slots.get_available_am_slots(include_pending=include_pending),
+                            'pm_available': daily_slots.get_available_pm_slots(include_pending=include_pending),
                             'am_total': daily_slots.am_slots,
                             'pm_total': daily_slots.pm_slots
                         }
-                    else:
-                        # Fallback if creation fails
-                        availability[current_date] = {
-                            'am_available': 0,
-                            'pm_available': 0,
-                            'am_total': 0,
-                            'pm_total': 0
-                        }
+                        
+                        if not include_pending:
+                            pending_counts = daily_slots.get_pending_counts()
+                            availability[current_date].update(pending_counts)
             
             current_date += timedelta(days=1)
         
@@ -231,6 +274,9 @@ class Appointment(models.Model):
 
     # Notes
     staff_notes = models.TextField(blank=True)
+
+    # Audit
+    updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
         ordering = ['-requested_at']
@@ -499,35 +545,43 @@ class Appointment(models.Model):
         return conflicts
     
     @classmethod
-    def can_book_appointment(cls, appointment_date, period, exclude_appointment_id=None):
-        """Check if an appointment can be booked for the given date/period"""
+    def can_book_appointment(cls, appointment_date, period, exclude_appointment_id=None, include_pending=True):
+        """
+        Check if an appointment can be booked with context-aware slot checking
+        
+        Args:
+            include_pending (bool): Whether to count pending appointments as blocking
+                                  - True for public booking validation
+                                  - False for admin operations
+        """
         # Get or create daily slots
         daily_slots, created = DailySlots.get_or_create_for_date(appointment_date)
         
         if not daily_slots:
             return False, "Date not available for booking (Sundays not allowed)"
         
-        # Check availability
+        # Check availability with context-aware counting
         if period == 'AM':
-            available_slots = daily_slots.get_available_am_slots()
+            available_slots = daily_slots.get_available_am_slots(include_pending=include_pending)
             if exclude_appointment_id:
+                # Check if the excluded appointment is currently blocking a slot
                 existing = cls.objects.filter(
                     id=exclude_appointment_id,
                     appointment_date=appointment_date,
                     period='AM',
-                    status__in=cls.BLOCKING_STATUSES
+                    status__in=(['pending', 'confirmed', 'completed'] if include_pending else ['confirmed', 'completed'])
                 ).exists()
                 if existing:
                     available_slots += 1
                     
         elif period == 'PM':
-            available_slots = daily_slots.get_available_pm_slots()
+            available_slots = daily_slots.get_available_pm_slots(include_pending=include_pending)
             if exclude_appointment_id:
                 existing = cls.objects.filter(
                     id=exclude_appointment_id,
                     appointment_date=appointment_date,
                     period='PM',
-                    status__in=cls.BLOCKING_STATUSES
+                    status__in=(['pending', 'confirmed', 'completed'] if include_pending else ['confirmed', 'completed'])
                 ).exists()
                 if existing:
                     available_slots += 1

@@ -123,11 +123,14 @@ class AppointmentCalendarView(LoginRequiredMixin, TemplateView):
         slots_by_date = {}
         for slot in daily_slots:
             date_key = slot.date.strftime('%Y-%m-%d')
+            pending_counts = slot.get_pending_counts()
             slots_by_date[date_key] = {
-                'am_available': max(0, slot.get_available_am_slots()),  # Ensure non-negative
-                'pm_available': max(0, slot.get_available_pm_slots()),
+                'am_available': max(0, slot.get_available_am_slots(include_pending=False)),  # Backend view
+                'pm_available': max(0, slot.get_available_pm_slots(include_pending=False)),  # Backend view
                 'am_total': max(0, slot.am_slots),
-                'pm_total': max(0, slot.pm_slots)
+                'pm_total': max(0, slot.pm_slots),
+                'am_pending': pending_counts['am_pending'],  # Show pending separately
+                'pm_pending': pending_counts['pm_pending']   # Show pending separately
             }
         
         # Calculate navigation months with validation
@@ -596,12 +599,26 @@ class DailySlotsManagementView(LoginRequiredMixin, ListView):
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context.update({
-            'filters': {
-                'date_from': self.request.GET.get('date_from', ''),
-                'date_to': self.request.GET.get('date_to', ''),
-            }
-        })
+        
+        # FIXED: Add admin context slot data for each daily_slot
+        enhanced_slots = []
+        for slot in context['daily_slots']:
+            # Calculate admin context availability (exclude pending)
+            slot.admin_am_available = slot.get_available_am_slots(include_pending=False)
+            slot.admin_pm_available = slot.get_available_pm_slots(include_pending=False)
+            
+            # Get pending counts
+            pending_counts = slot.get_pending_counts()
+            slot.am_pending = pending_counts['am_pending']
+            slot.pm_pending = pending_counts['pm_pending']
+            
+            enhanced_slots.append(slot)
+        
+        context['daily_slots'] = enhanced_slots
+        context['filters'] = {
+            'date_from': self.request.GET.get('date_from', ''),
+            'date_to': self.request.GET.get('date_to', ''),
+        }
         return context
 
 

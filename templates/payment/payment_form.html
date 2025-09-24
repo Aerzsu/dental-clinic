@@ -46,6 +46,7 @@
                     <div class="px-6 py-4 border-b border-gray-200">
                         <h3 class="text-lg font-medium text-gray-900">Payment Configuration</h3>
                         <p class="mt-1 text-sm text-gray-500">Set up the payment plan for this appointment</p>
+                        <p class="mt-1 text-sm text-gray-500">TODO: able to add/remove more services and set prices manually for each service + add discount option + auto compute balance</p>
                     </div>
                     <div class="px-6 py-4">
                         <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
@@ -221,60 +222,6 @@
                 </div>
             </div>
 
-            <!-- Payment Type Information -->
-            <div class="bg-white shadow rounded-lg">
-                <div class="px-6 py-4 border-b border-gray-200">
-                    <h3 class="text-lg font-medium text-gray-900">Payment Options</h3>
-                </div>
-                <div class="px-6 py-4">
-                    <div class="space-y-4">
-                        <div class="border-l-4 border-green-400 bg-green-50 p-4">
-                            <div class="flex">
-                                <div class="flex-shrink-0">
-                                    <div class="text-lg">💰</div>
-                                </div>
-                                <div class="ml-3">
-                                    <h3 class="text-sm font-medium text-green-800">Full Payment</h3>
-                                    <p class="mt-2 text-sm text-green-700">
-                                        Patient pays the entire amount at once. Marks payment as completed immediately upon payment.
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="border-l-4 border-blue-400 bg-blue-50 p-4">
-                            <div class="flex">
-                                <div class="flex-shrink-0">
-                                    <div class="text-lg">📅</div>
-                                </div>
-                                <div class="ml-3">
-                                    <h3 class="text-sm font-medium text-blue-800">Installment Plan</h3>
-                                    <p class="mt-2 text-sm text-blue-700">
-                                        Split payment over multiple months. System tracks due dates and remaining balance automatically.
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Cash Payment Notice -->
-            <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4">
-                <div class="flex">
-                    <div class="flex-shrink-0">
-                        <svg class="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
-                            <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
-                        </svg>
-                    </div>
-                    <div class="ml-3">
-                        <h3 class="text-sm font-medium text-yellow-800">Cash Only Policy</h3>
-                        <p class="mt-2 text-sm text-yellow-700">
-                            This clinic accepts <strong>cash payments only</strong>. All payment records will be marked as cash transactions.
-                        </p>
-                    </div>
-                </div>
-            </div>
         </div>
     </div>
 </div>

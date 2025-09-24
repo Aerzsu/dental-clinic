@@ -205,4 +205,92 @@
         </div>
     </div>
 </div>
+<script>
+// Simple CSRF token function
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const csrfToken = getCookie('csrftoken');
+    
+    // Handle save buttons
+    document.addEventListener('click', function(e) {
+        if (e.target.classList.contains('clinical-note-save')) {
+            e.preventDefault();
+            
+            const field = e.target.closest('.clinical-note-field');
+            const appointmentId = field.getAttribute('data-appointment-id');
+            const fieldName = field.getAttribute('data-field');
+            const textarea = field.querySelector('.clinical-note-textarea');
+            const fieldValue = textarea.value.trim();
+            
+            // Simple fetch request
+            fetch(`/appointments/notes/${appointmentId}/update/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
+                },
+                body: JSON.stringify({
+                    field_name: fieldName,
+                    field_value: fieldValue
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Hide edit mode, show display
+                    field.querySelector('.clinical-note-edit').classList.add('hidden');
+                    field.querySelector('.clinical-note-display').classList.remove('hidden');
+                    
+                    // Update display text
+                    const displaySpan = field.querySelector('.clinical-note-display span:first-child');
+                    if (fieldValue) {
+                        displaySpan.textContent = fieldValue;
+                        displaySpan.className = 'text-sm text-gray-900';
+                    } else {
+                        displaySpan.textContent = `Click to add ${fieldName}...`;
+                        displaySpan.className = 'text-gray-400 italic text-sm';
+                    }
+                } else {
+                    alert('Error saving: ' + (data.error || 'Unknown error'));
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Failed to save clinical note');
+            });
+        }
+        
+        // Handle cancel buttons
+        if (e.target.classList.contains('clinical-note-cancel')) {
+            e.preventDefault();
+            const field = e.target.closest('.clinical-note-field');
+            field.querySelector('.clinical-note-edit').classList.add('hidden');
+            field.querySelector('.clinical-note-display').classList.remove('hidden');
+        }
+        
+        // Handle display clicks (to edit)
+        if (e.target.closest('.clinical-note-display')) {
+            e.preventDefault();
+            const field = e.target.closest('.clinical-note-field');
+            field.querySelector('.clinical-note-display').classList.add('hidden');
+            field.querySelector('.clinical-note-edit').classList.remove('hidden');
+            field.querySelector('.clinical-note-textarea').focus();
+        }
+    });
+});
+</script>
 {% endblock %}

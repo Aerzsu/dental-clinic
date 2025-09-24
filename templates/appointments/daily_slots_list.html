@@ -100,22 +100,57 @@
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                                 <div class="flex items-center">
                                     <span class="font-medium">{{ slot.am_slots }}</span>
-                                    {% with available_am=slot.get_available_am_slots %}
-                                        <span class="ml-2 text-xs {% if available_am > 0 %}text-green-600{% else %}text-red-600{% endif %}">
-                                            ({{ available_am }} available)
+                                    <span class="ml-2 text-xs {% if slot.admin_am_available > 0 %}text-green-600{% else %}text-red-600{% endif %}">
+                                        ({{ slot.admin_am_available }} available slots)
+                                    </span>
+                                    {% if slot.am_pending > 0 %}
+                                        <span class="ml-1 text-xs text-yellow-600">
+                                            with {{ slot.am_pending }} pending
                                         </span>
-                                    {% endwith %}
+                                    {% endif %}
                                 </div>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                                 <div class="flex items-center">
                                     <span class="font-medium">{{ slot.pm_slots }}</span>
-                                    {% with available_pm=slot.get_available_pm_slots %}
-                                        <span class="ml-2 text-xs {% if available_pm > 0 %}text-green-600{% else %}text-red-600{% endif %}">
-                                            ({{ available_pm }} available)
+                                    <span class="ml-2 text-xs {% if slot.admin_pm_available > 0 %}text-green-600{% else %}text-red-600{% endif %}">
+                                        ({{ slot.admin_pm_available }} confirmed available)
+                                    </span>
+                                    {% if slot.pm_pending > 0 %}
+                                        <span class="ml-1 text-xs text-yellow-600">
+                                            with {{ slot.pm_pending }} pending
                                         </span>
-                                    {% endwith %}
+                                    {% endif %}
                                 </div>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                {{ slot.total_slots }}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                {% with total_confirmed_available=slot.admin_am_available|add:slot.admin_pm_available %}
+                                    {% with confirmed_used=slot.total_slots|add:total_confirmed_available|add:'-'|add:total_confirmed_available %}
+                                        <div class="flex items-center">
+                                            <div class="w-16 bg-gray-200 rounded-full h-2 mr-2">
+                                                {% if slot.total_slots > 0 %}
+                                                    {% widthratio confirmed_used slot.total_slots 100 as usage_percent %}
+                                                    <div class="bg-primary-600 h-2 rounded-full" style="width: {{ usage_percent }}%"></div>
+                                                {% else %}
+                                                    <div class="bg-primary-600 h-2 rounded-full" style="width: 0%"></div>
+                                                {% endif %}
+                                            </div>
+                                            <span class="text-xs text-gray-500">
+                                                {{ confirmed_used }}/{{ slot.total_slots }} confirmed
+                                            </span>
+                                            {% with total_pending=slot.am_pending|add:slot.pm_pending %}
+                                                {% if total_pending > 0 %}
+                                                    <span class="text-xs text-yellow-600 ml-1">
+                                                        (with {{ total_pending }} pending)
+                                                    </span>
+                                                {% endif %}
+                                            {% endwith %}
+                                        </div>
+                                    {% endwith %}
+                                {% endwith %}
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                                 {{ slot.total_slots }}

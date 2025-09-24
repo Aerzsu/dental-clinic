@@ -1,145 +1,193 @@
-#appointments/forms.py
+# appointments/forms.py - Cleaned for AM/PM slot system
 from django import forms
+from django.forms import modelformset_factory, inlineformset_factory
 from django.core.exceptions import ValidationError
 from django.utils import timezone
-from datetime import date, datetime, time, timedelta
+from datetime import date, timedelta
 from django.db.models import Q
-from .models import Appointment, AppointmentSlot, DentistScheduleSettings, TimeBlock
+from .models import Appointment, DailySlots, Payment, PaymentItem, PaymentTransaction
 from patients.models import Patient
-from services.models import Service
+from services.models import Service, Discount
 from users.models import User
-from core.models import Holiday
 import re
 from django.core.validators import validate_email
 
 class AppointmentForm(forms.ModelForm):
-    """Form for creating/editing appointments"""
+    """Form for creating/editing appointments in AM/PM system"""
     
     class Meta:
         model = Appointment
-        fields = ['patient', 'dentist', 'service', 'appointment_slot', 'patient_type', 'reason']
+        fields = [
+            'patient', 'service', 'appointment_date', 'period', 
+            'patient_type', 'reason', 'staff_notes', 'status', 'assigned_dentist'
+        ]
         widgets = {
-            'patient': forms.Select(attrs={
+            'appointment_date': forms.DateInput(attrs={
+                'type': 'date',
                 'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
-                'required': True
+                'min': timezone.now().date().isoformat()
             }),
-            'dentist': forms.Select(attrs={
-                'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
-                'required': True
+            'period': forms.Select(attrs={
+                'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500'
+            }),
+            'patient': forms.Select(attrs={
+                'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500'
             }),
             'service': forms.Select(attrs={
-                'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
-                'required': True
-            }),
-            'appointment_slot': forms.Select(attrs={
-                'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
-                'required': True
+                'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500'
             }),
             'patient_type': forms.Select(attrs={
                 'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500'
             }),
             'reason': forms.Textarea(attrs={
-                'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
                 'rows': 3,
-                'placeholder': 'Optional appointment reason or notes...'
-            })
+                'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
+                'placeholder': 'Optional: Patient\'s reason for visit'
+            }),
+            'staff_notes': forms.Textarea(attrs={
+                'rows': 3,
+                'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
+                'placeholder': 'Internal staff notes (not visible to patient)'
+            }),
+            'status': forms.Select(attrs={
+                'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500'
+            }),
+            'assigned_dentist': forms.Select(attrs={
+                'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500'
+            }),
         }
     
     def __init__(self, *args, **kwargs):
         self.user = kwargs.pop('user', None)
         super().__init__(*args, **kwargs)
         
-        # Filter active entities
-        self.fields['patient'].queryset = Patient.objects.filter(is_active=True).order_by('first_name', 'last_name')
-        self.fields['dentist'].queryset = User.objects.filter(is_active_dentist=True).order_by('first_name', 'last_name')
+        # Filter active patients
+        self.fields['patient'].queryset = Patient.objects.filter(is_active=True).order_by('last_name', 'first_name')
+        
+        # Filter active services
         self.fields['service'].queryset = Service.objects.filter(is_archived=False).order_by('name')
         
-        # Filter available appointment slots
-        today = timezone.now().date()
-        self.fields['appointment_slot'].queryset = AppointmentSlot.objects.filter(
-            date__gte=today,
-            is_available=True
-        ).select_related('dentist').order_by('date', 'start_time')
+        # Filter active dentists
+        self.fields['assigned_dentist'].queryset = User.objects.filter(is_active_dentist=True).order_by('first_name', 'last_name')
+        self.fields['assigned_dentist'].required = False  # Can be assigned later
+        
+        # Add empty labels
+        self.fields['patient'].empty_label = "Select a patient..."
+        self.fields['service'].empty_label = "Select a service..."
+        self.fields['assigned_dentist'].empty_label = "Select a dentist (optional)..."
+        
+        # Adjust field requirements based on user permissions
+        if not self.user or not self.user.has_permission('appointments'):
+            # Hide staff-only fields for non-staff users
+            del self.fields['staff_notes']
+            del self.fields['status']
+            del self.fields['assigned_dentist']
+    
+    def clean_appointment_date(self):
+        appointment_date = self.cleaned_data.get('appointment_date')
+        
+        if not appointment_date:
+            raise ValidationError('Appointment date is required.')
+        
+        # Check if date is in the future
+        if appointment_date <= timezone.now().date():
+            raise ValidationError('Appointment date must be in the future.')
+        
+        # Check if it's not a Sunday
+        if appointment_date.weekday() == 6:
+            raise ValidationError('Appointments are not available on Sundays.')
+        
+        return appointment_date
     
     def clean(self):
         cleaned_data = super().clean()
-        appointment_slot = cleaned_data.get('appointment_slot')
-        service = cleaned_data.get('service')
+        appointment_date = cleaned_data.get('appointment_date')
+        period = cleaned_data.get('period')
         
-        if appointment_slot and service:
-            # Check if slot can accommodate service duration
-            slot_duration = datetime.combine(date.today(), appointment_slot.end_time) - \
-                          datetime.combine(date.today(), appointment_slot.start_time)
+        if appointment_date and period:
+            # Check slot availability (excluding current appointment if updating)
+            exclude_id = self.instance.id if self.instance.id else None
             
-            if slot_duration.total_seconds() < service.duration_minutes * 60:
-                raise ValidationError('Selected time slot is too short for this service.')
+            can_book, message = Appointment.can_book_appointment(
+                appointment_date=appointment_date,
+                period=period,
+                exclude_appointment_id=exclude_id
+            )
+            
+            if not can_book:
+                raise ValidationError(f'Cannot book appointment: {message}')
         
         return cleaned_data
 
-class ScheduleForm(forms.ModelForm):
-    """Form for creating dentist schedules"""
+
+class DailySlotsForm(forms.ModelForm):
+    """Form for managing daily AM/PM slot allocations"""
     
     class Meta:
-        model = AppointmentSlot
-        fields = ['dentist', 'date', 'start_time', 'end_time', 'notes']
+        model = DailySlots
+        fields = ['date', 'am_slots', 'pm_slots', 'notes']
         widgets = {
-            'dentist': forms.Select(attrs={'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500'}),
-            'date': forms.DateInput(attrs={'type': 'date', 'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500'}),
-            'start_time': forms.TimeInput(attrs={'type': 'time', 'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500'}),
-            'end_time': forms.TimeInput(attrs={'type': 'time', 'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500'}),
-            'notes': forms.Textarea(attrs={'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500', 'rows': 3}),
+            'date': forms.DateInput(attrs={
+                'type': 'date',
+                'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500'
+            }),
+            'am_slots': forms.NumberInput(attrs={
+                'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
+                'min': '0',
+                'max': '20'
+            }),
+            'pm_slots': forms.NumberInput(attrs={
+                'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
+                'min': '0',
+                'max': '20'
+            }),
+            'notes': forms.Textarea(attrs={
+                'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
+                'rows': 2,
+                'placeholder': 'Optional notes for this date...'
+            })
         }
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields['dentist'].queryset = User.objects.filter(is_active_dentist=True).order_by('first_name', 'last_name')
         
         # Set minimum date to today
-        self.fields['date'].widget.attrs['min'] = timezone.now().date().strftime('%Y-%m-%d')
+        today = timezone.now().date()
+        self.fields['date'].widget.attrs['min'] = today.strftime('%Y-%m-%d')
     
-    def clean(self):
-        cleaned_data = super().clean()
-        date = cleaned_data.get('date')
-        start_time = cleaned_data.get('start_time')
-        end_time = cleaned_data.get('end_time')
+    def clean_date(self):
+        date_value = self.cleaned_data.get('date')
         
-        if date:
-            # Don't allow past dates
-            if date < timezone.now().date():
-                raise ValidationError('Schedule date cannot be in the past.')
-            
-            # Don't allow Sundays
-            if date.weekday() == 6:
-                raise ValidationError('Appointments are not available on Sundays.')
-            
-            # Check for holidays
-            if Holiday.objects.filter(date=date, is_active=True).exists():
-                holiday = Holiday.objects.filter(date=date, is_active=True).first()
-                raise ValidationError(f'Cannot schedule appointments on {holiday.name}.')
+        if not date_value:
+            return date_value
         
-        if start_time and end_time:
-            if end_time <= start_time:
-                raise ValidationError('End time must be after start time.')
-            
-            # Validate clinic hours (10 AM to 6 PM)
-            clinic_start = time(10, 0)  # 10:00 AM
-            clinic_end = time(18, 0)    # 6:00 PM
-            
-            if start_time < clinic_start or end_time > clinic_end:
-                raise ValidationError('Appointments are available Monday to Saturday 10:00 AM to 6:00 PM.')
+        # Don't allow Sundays unless explicitly setting to 0 slots
+        if date_value.weekday() == 6:  # Sunday
+            am_slots = self.cleaned_data.get('am_slots', 0)
+            pm_slots = self.cleaned_data.get('pm_slots', 0)
+            if am_slots > 0 or pm_slots > 0:
+                raise ValidationError('Cannot set slots for Sundays. Use 0 for both AM and PM slots.')
         
-        return cleaned_data
+        return date_value
 
-# FOR APPOINTMENT BOOKING PAGE
-class AppointmentRequestForm(forms.ModelForm):
-    """Form for public appointment requests with enhanced validation"""
+
+class PublicBookingForm(forms.Form):
+    """Public booking form for AM/PM slot system"""
     
+    PATIENT_TYPE_CHOICES = [
+        ('new', 'New Patient'),
+        ('existing', 'Existing Patient')
+    ]
+    
+    # Patient type selection
     patient_type = forms.ChoiceField(
-        choices=[('new', 'New Patient'), ('existing', 'Existing Patient')],
-        widget=forms.RadioSelect(attrs={'class': 'focus:ring-primary-500 h-4 w-4 text-primary-600 border-gray-300'})
+        choices=PATIENT_TYPE_CHOICES,
+        widget=forms.RadioSelect(attrs={
+            'class': 'focus:ring-primary-500 h-4 w-4 text-primary-600 border-gray-300'
+        })
     )
     
-    # Patient identification fields (for existing patients)
+    # Existing patient identification
     patient_identifier = forms.CharField(
         max_length=200,
         required=False,
@@ -151,24 +199,30 @@ class AppointmentRequestForm(forms.ModelForm):
         })
     )
     
-    # New patient fields - Email required, contact optional
+    # New patient fields
     first_name = forms.CharField(
         max_length=100,
         required=False,
-        widget=forms.TextInput(attrs={'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500'})
+        widget=forms.TextInput(attrs={
+            'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500'
+        })
     )
     last_name = forms.CharField(
         max_length=100,
         required=False,
-        widget=forms.TextInput(attrs={'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500'})
+        widget=forms.TextInput(attrs={
+            'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500'
+        })
     )
     email = forms.EmailField(
-        required=False,  # Will be conditionally required in clean()
-        widget=forms.EmailInput(attrs={'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500'})
+        required=False,
+        widget=forms.EmailInput(attrs={
+            'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500'
+        })
     )
     contact_number = forms.CharField(
         max_length=20,
-        required=False,  # Optional for new patients
+        required=False,
         widget=forms.TextInput(attrs={
             'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
             'placeholder': '+639123456789'
@@ -183,66 +237,73 @@ class AppointmentRequestForm(forms.ModelForm):
     )
     
     # Appointment fields
-    preferred_date = forms.DateField(
+    service = forms.ModelChoiceField(
+        queryset=Service.objects.none(),  # Will be set in __init__
+        widget=forms.Select(attrs={
+            'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500'
+        })
+    )
+    
+    appointment_date = forms.DateField(
         widget=forms.DateInput(attrs={
             'type': 'date',
             'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500'
         })
     )
-    preferred_time = forms.TimeField(
-        widget=forms.TimeInput(attrs={
-            'type': 'time',
-            'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500'
+    
+    period = forms.ChoiceField(
+        choices=Appointment.PERIOD_CHOICES,
+        widget=forms.RadioSelect(attrs={
+            'class': 'focus:ring-primary-500 h-4 w-4 text-primary-600 border-gray-300'
+        }),
+        help_text='Morning (AM): 8:00 AM - 12:00 PM | Afternoon (PM): 1:00 PM - 6:00 PM'
+    )
+    
+    reason = forms.CharField(
+        required=False,
+        widget=forms.Textarea(attrs={
+            'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
+            'rows': 3,
+            'placeholder': 'Optional: Please describe your symptoms or reason for visit'
         })
     )
     
-    class Meta:
-        model = Appointment
-        fields = ['service', 'dentist', 'reason']
-        widgets = {
-            'service': forms.Select(attrs={'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500'}),
-            'dentist': forms.Select(attrs={'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500'}),
-            'reason': forms.Textarea(attrs={
-                'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
-                'rows': 3,
-                'placeholder': 'Optional: Please describe your symptoms or reason for visit'
-            }),
-        }
+    # Terms agreement
+    agreed_to_terms = forms.BooleanField(
+        required=True,
+        widget=forms.CheckboxInput(attrs={
+            'class': 'focus:ring-primary-500 h-4 w-4 text-primary-600 border-gray-300 rounded'
+        }),
+        label='I agree to the terms and conditions'
+    )
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         
-        # Filter querysets for active items only
+        # Set active service queryset
         self.fields['service'].queryset = Service.objects.filter(is_archived=False).order_by('name')
-        self.fields['dentist'].queryset = User.objects.filter(is_active_dentist=True).order_by('first_name', 'last_name')
         
         # Set minimum date to tomorrow
         tomorrow = (timezone.now() + timedelta(days=1)).date()
-        self.fields['preferred_date'].widget.attrs['min'] = tomorrow.strftime('%Y-%m-%d')
-        
-        # Make reason optional
-        self.fields['reason'].required = False
+        self.fields['appointment_date'].widget.attrs['min'] = tomorrow.strftime('%Y-%m-%d')
     
     def clean_first_name(self):
-        """Validate first name contains only valid characters"""
         first_name = self.cleaned_data.get('first_name', '').strip()
         if first_name:
-            name_pattern = re.compile(r'^[a-zA-Z\s\-\']+$')
+            name_pattern = re.compile(r"^[a-zA-Z\s\-\']+$")
             if not name_pattern.match(first_name):
                 raise ValidationError('First name should only contain letters, spaces, hyphens, and apostrophes.')
         return first_name
     
     def clean_last_name(self):
-        """Validate last name contains only valid characters"""
         last_name = self.cleaned_data.get('last_name', '').strip()
         if last_name:
-            name_pattern = re.compile(r'^[a-zA-Z\s\-\']+$')
+            name_pattern = re.compile(r"^[a-zA-Z\s\-\']+$")
             if not name_pattern.match(last_name):
                 raise ValidationError('Last name should only contain letters, spaces, hyphens, and apostrophes.')
         return last_name
     
     def clean_email(self):
-        """Validate email format"""
         email = self.cleaned_data.get('email', '').strip()
         if email:
             try:
@@ -252,42 +313,53 @@ class AppointmentRequestForm(forms.ModelForm):
         return email
     
     def clean_contact_number(self):
-        """Validate contact number format if provided"""
         contact_number = self.cleaned_data.get('contact_number', '').strip()
         if not contact_number:
-            return None
+            return ''
         
         # Philippine mobile number pattern
-        phone_pattern = re.compile(r'^(\+63|0)?[9]\d{9}$')
-        clean_contact = contact_number.replace(' ', '')
+        phone_pattern = re.compile(r'^(\+63|0)?9\d{9}$')
+        clean_contact = contact_number.replace(' ', '').replace('-', '')
         if not phone_pattern.match(clean_contact):
             raise ValidationError('Please enter a valid Philippine mobile number (e.g., +639123456789).')
         
-        return contact_number
+        return clean_contact
+    
+    def clean_appointment_date(self):
+        appointment_date = self.cleaned_data.get('appointment_date')
+        
+        if not appointment_date:
+            return appointment_date
+        
+        # Don't allow past dates
+        if appointment_date <= timezone.now().date():
+            raise ValidationError('Appointment date must be in the future.')
+        
+        # Don't allow Sundays
+        if appointment_date.weekday() == 6:
+            raise ValidationError('Appointments are not available on Sundays.')
+        
+        return appointment_date
     
     def clean(self):
         cleaned_data = super().clean()
         patient_type = cleaned_data.get('patient_type')
         
+        # Validate patient data based on type
         if patient_type == 'existing':
-            # Validate existing patient identification
             patient_identifier = cleaned_data.get('patient_identifier', '').strip()
             if not patient_identifier:
                 raise ValidationError('Please provide your email or phone number to find your record.')
             
             # Try to find the patient
-            patient = Patient.objects.filter(
-                Q(email__iexact=patient_identifier) | Q(contact_number=patient_identifier),
-                is_active=True
-            ).first()
-            
+            patient = self._find_existing_patient(patient_identifier)
             if not patient:
                 raise ValidationError(f'No patient record found with "{patient_identifier}". Please check your information or register as a new patient.')
             
             cleaned_data['patient'] = patient
         
         elif patient_type == 'new':
-            # Validate new patient fields - email is required, contact is optional
+            # Validate new patient fields - email is required
             required_fields = ['first_name', 'last_name', 'email']
             for field in required_fields:
                 value = cleaned_data.get(field, '').strip() if cleaned_data.get(field) else ''
@@ -299,491 +371,423 @@ class AppointmentRequestForm(forms.ModelForm):
             email = cleaned_data.get('email', '').strip()
             contact_number = cleaned_data.get('contact_number', '').strip()
             
-            # Build query for existing patient check - ONLY include non-empty values
             existing_query = Q()
-            
-            # Always check email if provided (email is required for new patients)
             if email:
                 existing_query |= Q(email__iexact=email, is_active=True)
-            
-            # Only check contact number if it's not empty
             if contact_number:
                 existing_query |= Q(contact_number=contact_number, is_active=True)
             
-            # Only run the query if we have something to search for
             if existing_query:
                 existing_patient = Patient.objects.filter(existing_query).first()
-                
                 if existing_patient:
-                    # Check which field matched
                     if existing_patient.email and email and existing_patient.email.lower() == email.lower():
                         raise ValidationError(f'A patient with email "{email}" already exists. Please use "Existing Patient" option.')
                     elif existing_patient.contact_number and contact_number and existing_patient.contact_number == contact_number:
                         raise ValidationError(f'A patient with contact number "{contact_number}" already exists. Please use "Existing Patient" option.')
         
-        # Validate appointment date and time
-        preferred_date = cleaned_data.get('preferred_date')
-        preferred_time = cleaned_data.get('preferred_time')
+        # Validate appointment availability
+        appointment_date = cleaned_data.get('appointment_date')
+        period = cleaned_data.get('period')
         
-        if preferred_date:
-            # Don't allow past dates
-            if preferred_date <= timezone.now().date():
-                raise ValidationError('Appointment date must be in the future.')
-            
-            # Don't allow Sundays
-            if preferred_date.weekday() == 6:
-                raise ValidationError('Appointments are not available on Sundays.')
-            
-            # Check for holidays
-            holiday = Holiday.objects.filter(date=preferred_date, is_active=True).first()
-            if holiday:
-                raise ValidationError(f'Appointments are not available on {holiday.name}.')
-        
-        if preferred_time:
-            # Validate clinic hours
-            clinic_start = time(10, 0)  # 10:00 AM
-            clinic_end = time(18, 0)    # 6:00 PM
-            
-            if preferred_time < clinic_start or preferred_time >= clinic_end:
-                raise ValidationError('Appointments are available Monday to Saturday, 10:00 AM to 6:00 PM.')
-        
-        # Validate service duration doesn't extend beyond clinic hours
-        if preferred_date and preferred_time and cleaned_data.get('service'):
-            service = cleaned_data['service']
-            start_datetime = datetime.combine(preferred_date, preferred_time)
-            end_time = (start_datetime + timedelta(minutes=service.duration_minutes)).time()
-            
-            if end_time > time(18, 0):  # 6:00 PM
-                raise ValidationError(f'Selected time is too late. Service duration is {service.duration_minutes} minutes and clinic closes at 6:00 PM.')
+        if appointment_date and period:
+            can_book, message = Appointment.can_book_appointment(appointment_date, period)
+            if not can_book:
+                raise ValidationError(f'Cannot book appointment: {message}')
         
         return cleaned_data
     
-    def save(self, commit=True):
-        appointment = super().save(commit=False)
+    def _find_existing_patient(self, identifier):
+        """Find existing patient by email or contact number"""
+        query = Q(is_active=True)
+        
+        if '@' in identifier:
+            query &= Q(email__iexact=identifier)
+        else:
+            clean_identifier = identifier.replace(' ', '').replace('-', '').replace('+', '')
+            query &= (
+                Q(contact_number=identifier) | 
+                Q(contact_number=clean_identifier) |
+                (Q(contact_number__endswith=clean_identifier[-10:]) if len(clean_identifier) >= 10 else Q())
+            )
+        
+        return Patient.objects.filter(query).first()
+    
+    def save(self):
+        """Create appointment from form data"""
+        cleaned_data = self.cleaned_data
+        patient_type = cleaned_data['patient_type']
         
         # Handle patient creation/assignment
-        patient_type = self.cleaned_data['patient_type']
-        
         if patient_type == 'new':
-            # Create new patient
             patient = Patient.objects.create(
-                first_name=self.cleaned_data['first_name'].strip(),
-                last_name=self.cleaned_data['last_name'].strip(),
-                email=self.cleaned_data.get('email', '').strip(),
-                contact_number=self.cleaned_data.get('contact_number', '').strip(),
-                address=self.cleaned_data.get('address', '').strip(),
+                first_name=cleaned_data['first_name'].strip(),
+                last_name=cleaned_data['last_name'].strip(),
+                email=cleaned_data.get('email', '').strip(),
+                contact_number=cleaned_data.get('contact_number', '').strip(),
+                address=cleaned_data.get('address', '').strip(),
             )
-            appointment.patient = patient
-            appointment.patient_type = 'new'
+            appointment_patient_type = 'new'
         else:
-            # Use existing patient
-            appointment.patient = self.cleaned_data['patient']
-            appointment.patient_type = 'returning'
+            patient = cleaned_data['patient']
+            appointment_patient_type = 'returning'
         
-        # Create or find appropriate schedule
-        preferred_date = self.cleaned_data['preferred_date']
-        preferred_time = self.cleaned_data['preferred_time']
-        dentist = self.cleaned_data['dentist']
-        service = self.cleaned_data['service']
-        
-        # Calculate end time based on service duration
-        start_datetime = datetime.combine(preferred_date, preferred_time)
-        end_time = (start_datetime + timedelta(minutes=service.duration_minutes)).time()
-        
-        # Try to find existing schedule or create new one
-        schedule, created = AppointmentSlot.objects.get_or_create(
-            dentist=dentist,
-            date=preferred_date,
-            start_time=preferred_time,
-            defaults={
-                'end_time': end_time,
-                'is_available': True,
-                'notes': f'Auto-created for appointment request'
-            }
+        # Create appointment
+        appointment = Appointment.objects.create(
+            patient=patient,
+            service=cleaned_data['service'],
+            appointment_date=cleaned_data['appointment_date'],
+            period=cleaned_data['period'],
+            patient_type=appointment_patient_type,
+            reason=cleaned_data.get('reason', '').strip(),
+            status='pending'
         )
-        
-        appointment.schedule = schedule
-        appointment.status = 'pending'  # All public requests start as pending
-        
-        if commit:
-            appointment.save()
         
         return appointment
 
-# Import models for the clean method
-from django.db import models
+class AppointmentNotesForm(forms.ModelForm):
+    """Form for editing clinical notes of an appointment"""
 
-#SCHEDULE MANAGEMENT FOR DENTISTS
-class DentistScheduleSettingsForm(forms.ModelForm):
-    """Form for managing individual dentist schedule settings for one weekday"""
-    
     class Meta:
-        model = DentistScheduleSettings
-        fields = [
-            'is_working', 'start_time', 'end_time', 
-            'has_lunch_break', 'lunch_start', 'lunch_end',
-            'default_buffer_minutes', 'slot_duration_minutes'
-        ]
+        model = Appointment
+        fields = ['symptoms', 'procedures', 'diagnosis']
         widgets = {
-            'is_working': forms.CheckboxInput(attrs={
-                'class': 'rounded border-gray-300 text-primary-600 shadow-sm focus:border-primary-500 focus:ring-primary-500',
-                'x-model': 'isWorking'
+            'symptoms': forms.Textarea(attrs={
+                'class': 'w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent',
+                'rows': 3,
+                'placeholder': 'Enter patient symptoms and complaints...'
             }),
-            'start_time': forms.TimeInput(attrs={
-                'type': 'time',
-                'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
-                'step': '900',  # 15 minutes
-                'x-show': 'isWorking'
+            'procedures': forms.Textarea(attrs={
+                'class': 'w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent',
+                'rows': 3,
+                'placeholder': 'Enter procedures performed...'
             }),
-            'end_time': forms.TimeInput(attrs={
-                'type': 'time',
-                'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
-                'step': '900',  # 15 minutes
-                'x-show': 'isWorking'
-            }),
-            'has_lunch_break': forms.CheckboxInput(attrs={
-                'class': 'rounded border-gray-300 text-primary-600 shadow-sm focus:border-primary-500 focus:ring-primary-500',
-                'x-model': 'hasLunchBreak',
-                'x-show': 'isWorking'
-            }),
-            'lunch_start': forms.TimeInput(attrs={
-                'type': 'time',
-                'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
-                'step': '900',  # 15 minutes
-                'x-show': 'isWorking && hasLunchBreak'
-            }),
-            'lunch_end': forms.TimeInput(attrs={
-                'type': 'time',
-                'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
-                'step': '900',  # 15 minutes
-                'x-show': 'isWorking && hasLunchBreak'
-            }),
-            'default_buffer_minutes': forms.NumberInput(attrs={
-                'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
-                'min': '0',
-                'max': '60',
-                'x-show': 'isWorking'
-            }),
-            'slot_duration_minutes': forms.NumberInput(attrs={
-                'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
-                'min': '15',
-                'max': '120',
-                'step': '15',
-                'x-show': 'isWorking'
+            'diagnosis': forms.Textarea(attrs={
+                'class': 'w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent',
+                'rows': 3,
+                'placeholder': 'Enter diagnosis and treatment notes...'
             }),
         }
-    
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        
-        # Set default values for new schedules
-        if not self.instance.pk:
-            self.fields['start_time'].initial = time(10, 0)
-            self.fields['end_time'].initial = time(18, 0)
-            self.fields['lunch_start'].initial = time(12, 0)
-            self.fields['lunch_end'].initial = time(13, 0)
-            self.fields['default_buffer_minutes'].initial = 15
-            self.fields['slot_duration_minutes'].initial = 30
-    
-    def clean(self):
-        cleaned_data = super().clean()
-        is_working = cleaned_data.get('is_working')
-        
-        if not is_working:
-            # Clear other fields if not working
-            cleaned_data['has_lunch_break'] = False
-            return cleaned_data
-        
-        start_time = cleaned_data.get('start_time')
-        end_time = cleaned_data.get('end_time')
-        has_lunch_break = cleaned_data.get('has_lunch_break')
-        lunch_start = cleaned_data.get('lunch_start')
-        lunch_end = cleaned_data.get('lunch_end')
-        
-        # Validate working hours
-        if start_time and end_time:
-            if end_time <= start_time:
-                raise ValidationError('End time must be after start time.')
-        
-        # Validate lunch break if enabled
-        if has_lunch_break and lunch_start and lunch_end:
-            if lunch_end <= lunch_start:
-                raise ValidationError('Lunch end time must be after lunch start time.')
-            
-            # Check lunch is within working hours
-            if start_time and end_time:
-                if lunch_start < start_time or lunch_end > end_time:
-                    raise ValidationError('Lunch break must be within working hours.')
-            
-            # Check lunch duration (max 2 hours)
-            lunch_duration = datetime.combine(datetime.today(), lunch_end) - \
-                           datetime.combine(datetime.today(), lunch_start)
-            if lunch_duration.total_seconds() > 7200:  # 2 hours
-                raise ValidationError('Lunch break cannot exceed 2 hours.')
-        
-        return cleaned_data
+        labels = {
+            'symptoms': 'Symptoms & Complaints',
+            'procedures': 'Procedures Performed',
+            'diagnosis': 'Diagnosis & Treatment Notes',
+        }
+
+class AppointmentNoteFieldForm(forms.Form):
+    """Form for editing individual clinical note fields via AJAX"""
+    field_name = forms.ChoiceField(choices=[
+        ('symptoms', 'Symptoms'),
+        ('procedures', 'Procedures'),
+        ('diagnosis', 'Diagnosis'),
+    ])
+    field_value = forms.CharField(widget=forms.Textarea(attrs={
+        'rows': 3,
+        'class': 'w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent'
+    }), required=False)
 
 
-class TimeBlockForm(forms.ModelForm):
-    """Form for creating time blocks (vacations, meetings, etc.)"""
-    
-    date = forms.DateField(
-        widget=forms.DateInput(attrs={
-            'type': 'date',
-            'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
-            'min': timezone.now().date().strftime('%Y-%m-%d')  # Prevent past dates
-        }),
-        help_text="Date to block appointments"
-    )
-    
-    is_full_day = forms.BooleanField(
-        required=False,
-        widget=forms.CheckboxInput(attrs={
-            'class': 'rounded border-gray-300 text-primary-600 shadow-sm focus:border-primary-500 focus:ring-primary-500',
-            'x-model': 'isFullDay'
-        }),
-        label="Block entire day",
-        help_text="Check to block the entire day, uncheck to block specific times"
-    )
+# PAYMENT FORMS
+class PaymentForm(forms.ModelForm):
+    """Form for creating/editing payments"""
     
     class Meta:
-        model = TimeBlock
-        fields = ['dentist', 'date', 'is_full_day', 'start_time', 'end_time', 'block_type', 'reason', 'notes']
+        model = Payment
+        fields = ['payment_type', 'installment_months', 'next_due_date', 'notes']
         widgets = {
-            'dentist': forms.Select(attrs={
-                'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
-                'required': True
-            }),
-            'start_time': forms.TimeInput(attrs={
-                'type': 'time',
-                'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
-                'step': '900',  # 15 minutes
-                'x-show': '!isFullDay'
-            }),
-            'end_time': forms.TimeInput(attrs={
-                'type': 'time',
-                'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
-                'step': '900',  # 15 minutes
-                'x-show': '!isFullDay'
-            }),
-            'block_type': forms.Select(attrs={
+            'payment_type': forms.Select(attrs={
                 'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500'
             }),
-            'reason': forms.TextInput(attrs={
+            'installment_months': forms.NumberInput(attrs={
                 'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
-                'placeholder': 'Brief reason for blocking this time (e.g., Vacation, Meeting)',
-                'maxlength': 255
+                'min': 1,
+                'max': 24
+            }),
+            'next_due_date': forms.DateInput(attrs={
+                'type': 'date',
+                'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500'
             }),
             'notes': forms.Textarea(attrs={
                 'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
-                'rows': 3,
-                'placeholder': 'Additional notes or details...'
-            })
+                'rows': 3
+            }),
         }
     
     def __init__(self, *args, **kwargs):
-        self.user = kwargs.pop('user', None)
+        self.appointment = kwargs.pop('appointment', None)
         super().__init__(*args, **kwargs)
         
-        # Filter dentists
-        self.fields['dentist'].queryset = User.objects.filter(is_active_dentist=True).order_by('first_name', 'last_name')
-        
-        # Set current user as default if they're a dentist
-        if self.user and self.user.is_active_dentist and not self.instance.pk:
-            self.fields['dentist'].initial = self.user
+        # Set default next due date to 30 days from now
+        if not self.instance.pk:
+            self.fields['next_due_date'].initial = date.today() + timedelta(days=30)
+    
+    def clean_next_due_date(self):
+        next_due_date = self.cleaned_data.get('next_due_date')
+        if next_due_date and next_due_date <= date.today():
+            raise ValidationError('Next due date must be in the future.')
+        return next_due_date
     
     def clean(self):
         cleaned_data = super().clean()
-        date = cleaned_data.get('date')
-        is_full_day = cleaned_data.get('is_full_day')
-        start_time = cleaned_data.get('start_time')
-        end_time = cleaned_data.get('end_time')
+        payment_type = cleaned_data.get('payment_type')
+        installment_months = cleaned_data.get('installment_months')
         
-        # Validate date is not in the past
-        if date and date < timezone.now().date():
-            raise ValidationError('Cannot create time blocks for past dates.')
-        
-        if is_full_day:
-            # Clear time fields for full day blocks
-            cleaned_data['start_time'] = None
-            cleaned_data['end_time'] = None
-        else:
-            # Validate time fields for partial blocks
-            if not start_time:
-                raise ValidationError('Start time is required for partial day blocks.')
-            if not end_time:
-                raise ValidationError('End time is required for partial day blocks.')
-            
-            if start_time and end_time and end_time <= start_time:
-                raise ValidationError('End time must be after start time.')
+        # Validate installment settings
+        if payment_type == 'installment':
+            if not installment_months or installment_months <= 0:
+                raise ValidationError('Please specify the number of installment months.')
+            if installment_months > 24:
+                raise ValidationError('Maximum installment period is 24 months.')
         
         return cleaned_data
-    
-    def save(self, commit=True):
-        instance = super().save(commit=False)
-        
-        # Set created_by if user is available
-        if self.user and not instance.created_by_id:
-            instance.created_by = self.user
-        
-        if commit:
-            instance.save()
-        
-        return instance
 
 
-class BulkTimeBlockForm(forms.Form):
-    """Form for creating multiple time blocks (e.g., vacation period)"""
+class PaymentItemForm(forms.ModelForm):
+    """Form for payment items"""
     
-    dentist = forms.ModelChoiceField(
-        queryset=User.objects.filter(is_active_dentist=True),
-        widget=forms.Select(attrs={
-            'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
-            'required': True
-        })
-    )
+    class Meta:
+        model = PaymentItem
+        fields = ['service', 'quantity', 'unit_price', 'discount', 'notes']
+        widgets = {
+            'service': forms.Select(attrs={
+                'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
+                'onchange': 'updateServicePrice(this)'
+            }),
+            'quantity': forms.NumberInput(attrs={
+                'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
+                'min': 1
+            }),
+            'unit_price': forms.NumberInput(attrs={
+                'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
+                'step': '0.01',
+                'min': '0.01'
+            }),
+            'discount': forms.Select(attrs={
+                'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500'
+            }),
+            'notes': forms.TextInput(attrs={
+                'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500'
+            }),
+        }
     
-    start_date = forms.DateField(
-        widget=forms.DateInput(attrs={
-            'type': 'date',
-            'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
-            'min': timezone.now().date().strftime('%Y-%m-%d')
-        })
-    )
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        
+        # Filter active services and discounts
+        self.fields['service'].queryset = Service.objects.filter(is_archived=False).order_by('name')
+        self.fields['discount'].queryset = Discount.objects.filter(is_active=True).order_by('name')
+        self.fields['discount'].empty_label = 'No discount'
     
-    end_date = forms.DateField(
-        widget=forms.DateInput(attrs={
-            'type': 'date',
-            'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
-            'min': timezone.now().date().strftime('%Y-%m-%d')
-        })
-    )
+    def clean_unit_price(self):
+        unit_price = self.cleaned_data.get('unit_price')
+        service = self.cleaned_data.get('service')
+        
+        if service and unit_price:
+            # Check against service price range if available
+            if hasattr(service, 'min_price') and service.min_price:
+                if unit_price < service.min_price:
+                    raise ValidationError(
+                        f'Price cannot be below ₱{service.min_price} for {service.name}'
+                    )
+            
+            if hasattr(service, 'max_price') and service.max_price:
+                if unit_price > service.max_price:
+                    raise ValidationError(
+                        f'Price cannot exceed ₱{service.max_price} for {service.name}'
+                    )
+        
+        return unit_price
+
+
+# Create formset for payment items
+PaymentItemFormSet = inlineformset_factory(
+    Payment,
+    PaymentItem,
+    form=PaymentItemForm,
+    extra=1,
+    can_delete=True,
+    min_num=1,
+    validate_min=True
+)
+
+
+class PaymentTransactionForm(forms.ModelForm):
+    """Form for adding payment transactions"""
     
-    block_type = forms.ChoiceField(
-        choices=TimeBlock.BLOCK_TYPE_CHOICES,
-        widget=forms.Select(attrs={
-            'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500'
-        })
-    )
-    
-    reason = forms.CharField(
-        max_length=255,
-        widget=forms.TextInput(attrs={
-            'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
-            'placeholder': 'Reason for blocking (e.g., Summer Vacation)'
-        })
-    )
-    
-    notes = forms.CharField(
-        required=False,
-        widget=forms.Textarea(attrs={
-            'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
-            'rows': 3,
-            'placeholder': 'Additional notes...'
-        })
-    )
-    
-    include_weekends = forms.BooleanField(
-        required=False,
-        initial=True,
-        widget=forms.CheckboxInput(attrs={
-            'class': 'rounded border-gray-300 text-primary-600 shadow-sm focus:border-primary-500 focus:ring-primary-500'
+    payment_type_choice = forms.ChoiceField(
+        choices=[('full', 'Full Payment'), ('partial', 'Partial Payment')],
+        widget=forms.RadioSelect(attrs={
+            'class': 'focus:ring-primary-500 h-4 w-4 text-primary-600 border-gray-300'
         }),
-        help_text="Include Saturdays and Sundays in the date range"
+        initial='partial'
     )
     
-    def clean(self):
-        cleaned_data = super().clean()
-        start_date = cleaned_data.get('start_date')
-        end_date = cleaned_data.get('end_date')
-        
-        if start_date and end_date:
-            if end_date < start_date:
-                raise ValidationError('End date must be after start date.')
-            
-            # Check for reasonable date range (max 6 months)
-            date_diff = end_date - start_date
-            if date_diff.days > 180:
-                raise ValidationError('Date range cannot exceed 6 months.')
-        
-        return cleaned_data
-    
-    def create_blocks(self, user):
-        """Create time blocks for each day in the date range"""
-        cleaned_data = self.cleaned_data
-        dentist = cleaned_data['dentist']
-        start_date = cleaned_data['start_date']
-        end_date = cleaned_data['end_date']
-        include_weekends = cleaned_data['include_weekends']
-        
-        blocks_created = []
-        current_date = start_date
-        
-        while current_date <= end_date:
-            # Skip weekends if not included
-            if not include_weekends and current_date.weekday() >= 5:  # Saturday=5, Sunday=6
-                current_date += timedelta(days=1)
-                continue
-            
-            # Check if block already exists
-            existing_block = TimeBlock.objects.filter(
-                dentist=dentist,
-                date=current_date
-            ).first()
-            
-            if not existing_block:
-                block = TimeBlock.objects.create(
-                    dentist=dentist,
-                    date=current_date,
-                    block_type=cleaned_data['block_type'],
-                    reason=cleaned_data['reason'],
-                    notes=cleaned_data['notes'],
-                    created_by=user
-                )
-                blocks_created.append(block)
-            
-            current_date += timedelta(days=1)
-        
-        return blocks_created
-
-
-class QuickTimeBlockForm(forms.Form):
-    """Simplified form for quick time blocking from calendar view"""
-    
-    date = forms.DateField(widget=forms.HiddenInput())
-    start_time = forms.TimeField(widget=forms.HiddenInput())
-    end_time = forms.TimeField(widget=forms.HiddenInput())
-    dentist = forms.ModelChoiceField(
-        queryset=User.objects.filter(is_active_dentist=True),
-        widget=forms.HiddenInput()
-    )
-    
-    reason = forms.CharField(
-        max_length=255,
-        widget=forms.TextInput(attrs={
+    installment_months = forms.IntegerField(
+        required=False,
+        min_value=1,
+        max_value=24,
+        widget=forms.NumberInput(attrs={
             'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
-            'placeholder': 'Quick reason (e.g., Emergency, Meeting)',
-            'autofocus': True
-        })
+            'min': 1,
+            'max': 24
+        }),
+        help_text='Required only for first installment payment'
     )
     
-    block_type = forms.ChoiceField(
-        choices=[
-            ('meeting', 'Meeting'),
-            ('personal', 'Personal'),
-            ('other', 'Other')
-        ],
-        initial='other',
+    class Meta:
+        model = PaymentTransaction
+        fields = ['amount', 'payment_date', 'notes']
+        widgets = {
+            'amount': forms.NumberInput(attrs={
+                'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
+                'step': '0.01',
+                'min': '0.01'
+            }),
+            'payment_date': forms.DateInput(attrs={
+                'type': 'date',
+                'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500'
+            }),
+            'notes': forms.Textarea(attrs={
+                'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
+                'rows': 2,
+                'placeholder': 'Optional notes about this payment...'
+            }),
+        }
+    
+    def __init__(self, *args, **kwargs):
+        self.payment = kwargs.pop('payment', None)
+        super().__init__(*args, **kwargs)
+        
+        # Set default payment date to today
+        self.fields['payment_date'].initial = date.today()
+        
+        if self.payment:
+            # Set maximum amount to outstanding balance
+            self.fields['amount'].widget.attrs['max'] = str(self.payment.outstanding_balance)
+            
+            # If payment is already set up for installments, hide installment months
+            if self.payment.payment_type == 'installment':
+                self.fields['installment_months'].widget = forms.HiddenInput()
+    
+    def clean_amount(self):
+        amount = self.cleaned_data.get('amount')
+        
+        if self.payment and amount:
+            if amount > self.payment.outstanding_balance:
+                raise ValidationError(
+                    f'Payment amount cannot exceed outstanding balance of ₱{self.payment.outstanding_balance}'
+                )
+            
+            if amount <= 0:
+                raise ValidationError('Payment amount must be greater than zero.')
+        
+        return amount
+    
+    def clean_payment_date(self):
+        payment_date = self.cleaned_data.get('payment_date')
+        
+        if payment_date and payment_date > date.today():
+            raise ValidationError('Payment date cannot be in the future.')
+        
+        return payment_date
+
+
+class PaymentFilterForm(forms.Form):
+    """Form for filtering payments in list view"""
+    
+    STATUS_CHOICES = [('', 'All Statuses')] + Payment.STATUS_CHOICES
+    BALANCE_CHOICES = [
+        ('', 'All Balances'),
+        ('has_balance', 'Has Outstanding Balance'),
+        ('no_balance', 'Fully Paid'),
+    ]
+    OVERDUE_CHOICES = [
+        ('', 'All'),
+        ('yes', 'Overdue Only'),
+    ]
+    
+    status = forms.ChoiceField(
+        choices=STATUS_CHOICES,
+        required=False,
         widget=forms.Select(attrs={
             'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500'
         })
     )
     
+    amount_min = forms.DecimalField(
+        required=False,
+        min_value=0,
+        decimal_places=2,
+        widget=forms.NumberInput(attrs={
+            'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
+            'placeholder': 'Min amount',
+            'step': '0.01'
+        })
+    )
+    
+    amount_max = forms.DecimalField(
+        required=False,
+        min_value=0,
+        decimal_places=2,
+        widget=forms.NumberInput(attrs={
+            'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
+            'placeholder': 'Max amount',
+            'step': '0.01'
+        })
+    )
+    
+    date_from = forms.DateField(
+        required=False,
+        widget=forms.DateInput(attrs={
+            'type': 'date',
+            'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500'
+        })
+    )
+    
+    date_to = forms.DateField(
+        required=False,
+        widget=forms.DateInput(attrs={
+            'type': 'date',
+            'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500'
+        })
+    )
+    
+    balance = forms.ChoiceField(
+        choices=BALANCE_CHOICES,
+        required=False,
+        widget=forms.Select(attrs={
+            'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500'
+        })
+    )
+    
+    overdue = forms.ChoiceField(
+        choices=OVERDUE_CHOICES,
+        required=False,
+        widget=forms.Select(attrs={
+            'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500'
+        })
+    )
+    
+    search = forms.CharField(
+        required=False,
+        widget=forms.TextInput(attrs={
+            'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
+            'placeholder': 'Search patient name...'
+        })
+    )
+    
     def clean(self):
         cleaned_data = super().clean()
-        date = cleaned_data.get('date')
+        amount_min = cleaned_data.get('amount_min')
+        amount_max = cleaned_data.get('amount_max')
+        date_from = cleaned_data.get('date_from')
+        date_to = cleaned_data.get('date_to')
         
-        if date and date < timezone.now().date():
-            raise ValidationError('Cannot create blocks for past dates.')
+        # Validate amount range
+        if amount_min and amount_max and amount_min > amount_max:
+            raise ValidationError('Minimum amount cannot be greater than maximum amount.')
+        
+        # Validate date range
+        if date_from and date_to and date_from > date_to:
+            raise ValidationError('Start date cannot be after end date.')
         
         return cleaned_data

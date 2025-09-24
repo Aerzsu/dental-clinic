@@ -13,12 +13,12 @@ class ServiceForm(forms.ModelForm):
             'description': forms.Textarea(attrs={'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500', 'rows': 4}),
             'min_price': forms.NumberInput(attrs={'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500', 'step': '0.01'}),
             'max_price': forms.NumberInput(attrs={'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500', 'step': '0.01'}),
-            'duration_minutes': forms.NumberInput(attrs={'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500', 'min': '15', 'step': '15'}),
+            'duration_minutes': forms.NumberInput(attrs={'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500', 'min': '1'}),
         }
         help_texts = {
             'min_price': 'Minimum price for this service',
             'max_price': 'Maximum price for this service',
-            'duration_minutes': 'Expected duration in minutes (15-minute intervals)',
+            'duration_minutes': 'Expected duration in minutes',
         }
     
     def clean(self):
@@ -30,8 +30,8 @@ class ServiceForm(forms.ModelForm):
         if min_price and max_price and max_price < min_price:
             raise forms.ValidationError('Maximum price cannot be less than minimum price.')
         
-        if duration and duration < 15:
-            raise forms.ValidationError('Duration must be at least 15 minutes.')
+        if duration and duration < 1:
+            raise forms.ValidationError('Duration must be at least 1 minute.')
         
         return cleaned_data
 

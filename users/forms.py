@@ -73,7 +73,7 @@ class UserForm(forms.ModelForm):
     
     def __init__(self, *args, **kwargs):
         self.is_update = kwargs.pop('is_update', False)
-        self.request_user = kwargs.pop('request_user', None)  # Pass current user from view
+        self.request_user = kwargs.pop('request_user', None)
         super().__init__(*args, **kwargs)
         
         # Make password required for new users
@@ -85,42 +85,29 @@ class UserForm(forms.ModelForm):
         # Filter out archived roles from the dropdown
         self.fields['role'].queryset = Role.objects.filter(is_archived=False).order_by('display_name')
         
-        # Remove the empty '--------' option and set default role to 'dentist' for new users only
+        # Remove the empty option for new users
         if not self.is_update and not self.instance.pk:
-            self.fields['role'].empty_label = None  # Remove the '--------' option
+            self.fields['role'].empty_label = None
             try:
-                dentist_role = Role.objects.get(name='dentist', is_archived=False)
+                dentist_role = Role.objects.get(name='_dentist', is_archived=False)
                 self.fields['role'].initial = dentist_role.pk
             except Role.DoesNotExist:
-                # If dentist role doesn't exist, still remove empty label but no default
                 pass
         
-        # Protect admin users from changing their own role and is_active status
-        # Only apply protection if this is the last admin in the system
+        # Only protect against removing the last admin
         if (self.is_update and self.instance and self.request_user and 
             self.instance == self.request_user and 
-            self.request_user.role and self.request_user.role.name == 'admin'):
+            self.request_user.role and self.request_user.role.name == '_admin'):
             
-            # Check if this is the last admin
             admin_count = User.objects.filter(
-                role__name='admin', 
+                role__name='_admin',
                 is_active=True
             ).exclude(pk=self.instance.pk).count()
             
-            if admin_count == 0:  # This is the last admin
+            if admin_count == 0:
                 self.fields['role'].disabled = True
                 self.fields['is_active'].disabled = True
         
-        # Restrict is_active_dentist to only admin and dentist roles
-        if self.instance and self.instance.pk:  # Editing existing user
-            if self.instance.role and self.instance.role.name not in ['admin', 'dentist']:
-                self.fields['is_active_dentist'].disabled = True
-                self.fields['is_active_dentist'].help_text = "Only Admin and Dentist roles can accept appointments."
-        else:  # Creating new user - we'll handle this with JavaScript
-            self.fields['is_active_dentist'].widget.attrs.update({
-                'data-restricted-roles': 'admin,dentist'
-            })
-    
     def clean(self):
         cleaned_data = super().clean()
         password1 = cleaned_data.get('password1')

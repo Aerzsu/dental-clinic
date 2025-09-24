@@ -176,63 +176,6 @@
                 </div>
             </div>
 
-            <!-- Emergency Contact -->
-            <div>
-                <h3 class="text-lg font-medium text-gray-900 mb-4">Emergency Contact</h3>
-                <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
-                    <!-- Emergency Contact Name -->
-                    <div>
-                        <label for="{{ form.emergency_contact_name.id_for_label }}" class="block text-sm font-medium text-gray-700">
-                            Emergency Contact Name
-                        </label>
-                        {{ form.emergency_contact_name }}
-                        {% if form.emergency_contact_name.errors %}
-                            <div class="mt-1 text-sm text-red-600">
-                                {% for error in form.emergency_contact_name.errors %}
-                                    <p>{{ error }}</p>
-                                {% endfor %}
-                            </div>
-                        {% endif %}
-                    </div>
-
-                    <!-- Emergency Contact Phone -->
-                    <div>
-                        <label for="{{ form.emergency_contact_phone.id_for_label }}" class="block text-sm font-medium text-gray-700">
-                            Emergency Contact Phone
-                        </label>
-                        {{ form.emergency_contact_phone }}
-                        {% if form.emergency_contact_phone.errors %}
-                            <div class="mt-1 text-sm text-red-600">
-                                {% for error in form.emergency_contact_phone.errors %}
-                                    <p>{{ error }}</p>
-                                {% endfor %}
-                            </div>
-                        {% endif %}
-                    </div>
-                </div>
-            </div>
-
-            <!-- Medical Information -->
-            <div>
-                <h3 class="text-lg font-medium text-gray-900 mb-4">Medical Information</h3>
-                <div>
-                    <label for="{{ form.medical_notes.id_for_label }}" class="block text-sm font-medium text-gray-700">
-                        Medical Notes
-                    </label>
-                    {{ form.medical_notes }}
-                    {% if form.medical_notes.errors %}
-                        <div class="mt-1 text-sm text-red-600">
-                            {% for error in form.medical_notes.errors %}
-                                <p>{{ error }}</p>
-                            {% endfor %}
-                        </div>
-                    {% endif %}
-                    <p class="mt-1 text-sm text-gray-500">
-                        Include any allergies, medical conditions, medications, or special instructions
-                    </p>
-                </div>
-            </div>
-
             <!-- Form Actions -->
             <div class="flex items-center justify-end space-x-4 pt-6 border-t border-gray-200">
                 <a href="{% url 'patients:patient_list' %}" 

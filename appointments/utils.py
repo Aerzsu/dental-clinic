@@ -1,10 +1,10 @@
-# appointments/utils.py - Fixed version with proper timezone handling
+# appointments/utils.py - Simplified for AM/PM slot system
 from datetime import time, timedelta, datetime
 from django.db import transaction
 from django.core.exceptions import ValidationError
-from django.db import IntegrityError
 from django.utils import timezone
 from core.models import SystemSetting
+
 
 class AppointmentConfig:
     """Helper class for appointment-related configuration - SIMPLIFIED"""
@@ -19,21 +19,13 @@ class AppointmentConfig:
    
     @classmethod
     def get_clinic_hours(cls):
-        """Get clinic operating hours - HARDCODED for simplicity"""
-        return time(10, 0), time(18, 0)  # 10 AM to 6 PM
+        """Get clinic operating hours"""
+        return time(8, 0), time(18, 0)  # 8 AM to 6 PM
    
     @classmethod
     def get_lunch_break(cls):
-        """Get lunch break hours - HARDCODED for simplicity"""
+        """Get lunch break hours"""
         return time(12, 0), time(13, 0)  # 12 PM to 1 PM
-   
-    @classmethod
-    def get_time_slot_duration(cls):
-        """Get time slot duration in minutes"""
-        try:
-            return SystemSetting.get_int_setting('appointment_time_slot_minutes', 30)
-        except:
-            return 30  # Default fallback
    
     @classmethod
     def get_minimum_booking_notice(cls):
@@ -53,21 +45,17 @@ class AppointmentConfig:
 
 
 @transaction.atomic
-def create_appointment_atomic(patient, dentist, service, appointment_date, appointment_time, 
-                            patient_type, reason='', buffer_minutes=15):
+def create_appointment_simple(patient, service, appointment_date, period, patient_type, reason=''):
     """
-    Atomically create appointment and schedule with proper conflict checking.
-    FIXED VERSION with proper timezone handling.
+    Simple appointment creation for AM/PM slot system
     
     Args:
         patient: Patient instance
-        dentist: User instance (dentist)
         service: Service instance
         appointment_date: date object
-        appointment_time: time object
+        period: str ('AM' or 'PM')
         patient_type: str ('new' or 'returning')
         reason: str (optional)
-        buffer_minutes: int (buffer time after appointment)
     
     Returns:
         tuple: (appointment, created) where created is boolean
@@ -75,102 +63,136 @@ def create_appointment_atomic(patient, dentist, service, appointment_date, appoi
     Raises:
         ValidationError: If there are conflicts or validation errors
     """
-    # Import here to avoid circular imports
-    from .models import Appointment, AppointmentSlot
-    from users.models import User
+    from .models import Appointment
     
-    # Create timezone-aware datetimes for consistency
-    naive_start = datetime.combine(appointment_date, appointment_time)
-    naive_end = naive_start + timedelta(minutes=service.duration_minutes)
-    naive_end_with_buffer = naive_start + timedelta(minutes=service.duration_minutes + buffer_minutes)
+    # Check slot availability
+    can_book, message = Appointment.can_book_appointment(appointment_date, period)
     
-    # Make timezone-aware if needed
-    if timezone.is_naive(naive_start):
-        start_datetime = timezone.make_aware(naive_start)
-        end_datetime = timezone.make_aware(naive_end)
-        end_with_buffer = timezone.make_aware(naive_end_with_buffer)
-    else:
-        start_datetime = naive_start
-        end_datetime = naive_end
-        end_with_buffer = naive_end_with_buffer
-    
-    end_time = end_datetime.time()
-    
-    # Use select_for_update to prevent race conditions
-    dentist = User.objects.select_for_update().get(id=dentist.id, is_active_dentist=True)
-    
-    # SIMPLIFIED conflict checking approach
-    # Instead of using the complex model method, do direct database query
-    conflicting_appointments = Appointment.objects.filter(
-        dentist=dentist,
-        appointment_slot__date=appointment_date,
-        status__in=Appointment.BLOCKING_STATUSES
-    ).select_related('appointment_slot', 'service')
-    
-    for existing in conflicting_appointments:
-        # Create timezone-aware datetimes for existing appointment
-        existing_naive_start = datetime.combine(appointment_date, existing.appointment_slot.start_time)
-        existing_naive_end = existing_naive_start + timedelta(minutes=existing.service.duration_minutes)
-        existing_naive_end_with_buffer = existing_naive_end + timedelta(minutes=existing.appointment_slot.buffer_minutes)
-        
-        # Make timezone-aware
-        if timezone.is_naive(existing_naive_start):
-            existing_start = timezone.make_aware(existing_naive_start)
-            existing_end_with_buffer = timezone.make_aware(existing_naive_end_with_buffer)
-        else:
-            existing_start = existing_naive_start
-            existing_end_with_buffer = existing_naive_end_with_buffer
-        
-        # Check for overlap - now both datetimes are timezone-aware
-        if start_datetime < existing_end_with_buffer and end_with_buffer > existing_start:
-            raise ValidationError(
-                f"Time slot conflicts with existing appointment: "
-                f"{existing.appointment_slot.start_time.strftime('%I:%M %p')}-"
-                f"{existing_end_with_buffer.time().strftime('%I:%M %p')}"
-            )
-    
-    # Create appointment slot first
-    try:
-        appointment_slot = AppointmentSlot.objects.create(
-            dentist=dentist,
-            date=appointment_date,
-            start_time=appointment_time,
-            end_time=end_time,
-            buffer_minutes=buffer_minutes,
-            is_available=True,
-            notes='Created for appointment booking'
-        )
-    except IntegrityError:
-        # Handle case where slot already exists with exact same times
-        try:
-            appointment_slot = AppointmentSlot.objects.get(
-                dentist=dentist,
-                date=appointment_date,
-                start_time=appointment_time,
-                end_time=end_time
-            )
-            
-            # Check if this slot already has an appointment
-            existing_appointment = Appointment.objects.filter(
-                appointment_slot=appointment_slot,
-                status__in=Appointment.BLOCKING_STATUSES
-            ).first()
-            
-            if existing_appointment:
-                raise ValidationError("This time slot is already booked.")
-        except AppointmentSlot.DoesNotExist:
-            # If we can't get the slot, there's a conflict
-            raise ValidationError("Unable to create appointment slot. Time may be unavailable.")
+    if not can_book:
+        raise ValidationError(message)
     
     # Create appointment
     appointment = Appointment.objects.create(
         patient=patient,
-        dentist=dentist,
         service=service,
-        appointment_slot=appointment_slot,
+        appointment_date=appointment_date,
+        period=period,
         patient_type=patient_type,
         reason=reason,
         status='pending'
     )
     
     return appointment, True
+
+
+def get_available_slots_for_date(date_obj):
+    """
+    Get available AM/PM slots for a specific date
+    
+    Args:
+        date_obj: date object
+    
+    Returns:
+        dict: {
+            'am_available': int,
+            'pm_available': int,
+            'am_total': int,
+            'pm_total': int
+        }
+    """
+    from .models import DailySlots
+    
+    # Don't allow Sundays or past dates
+    if date_obj.weekday() == 6 or date_obj < timezone.now().date():
+        return {
+            'am_available': 0,
+            'pm_available': 0,
+            'am_total': 0,
+            'pm_total': 0
+        }
+    
+    daily_slots, _ = DailySlots.get_or_create_for_date(date_obj)
+    
+    if daily_slots:
+        return {
+            'am_available': daily_slots.get_available_am_slots(),
+            'pm_available': daily_slots.get_available_pm_slots(),
+            'am_total': daily_slots.am_slots,
+            'pm_total': daily_slots.pm_slots
+        }
+    else:
+        return {
+            'am_available': 0,
+            'pm_available': 0,
+            'am_total': 0,
+            'pm_total': 0
+        }
+
+
+def get_next_available_dates(days_ahead=30):
+    """
+    Get list of dates with available slots in the next N days
+    
+    Args:
+        days_ahead: int (default 30)
+    
+    Returns:
+        list: List of date objects with available slots
+    """
+    available_dates = []
+    start_date = timezone.now().date() + timedelta(days=1)  # Start from tomorrow
+    
+    for i in range(days_ahead):
+        check_date = start_date + timedelta(days=i)
+        
+        # Skip Sundays
+        if check_date.weekday() == 6:
+            continue
+        
+        slots = get_available_slots_for_date(check_date)
+        if slots['am_available'] > 0 or slots['pm_available'] > 0:
+            available_dates.append(check_date)
+    
+    return available_dates
+
+
+def validate_appointment_date(appointment_date):
+    """
+    Validate if an appointment date is acceptable
+    
+    Args:
+        appointment_date: date object
+    
+    Returns:
+        tuple: (is_valid, error_message)
+    """
+    if not appointment_date:
+        return False, "Appointment date is required"
+    
+    # Check if date is in the past
+    if appointment_date <= timezone.now().date():
+        return False, "Appointment date cannot be today or in the past"
+    
+    # Check if it's Sunday
+    if appointment_date.weekday() == 6:
+        return False, "No appointments available on Sundays"
+    
+    return True, "Date is valid"
+
+
+def get_period_display_time(period):
+    """
+    Get display time range for AM/PM period
+    
+    Args:
+        period: str ('AM' or 'PM')
+    
+    Returns:
+        str: Time range display
+    """
+    if period == 'AM':
+        return "8:00 AM - 12:00 PM"
+    elif period == 'PM':
+        return "1:00 PM - 6:00 PM"
+    else:
+        return "Invalid period"

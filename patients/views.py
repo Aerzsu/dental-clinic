@@ -1,4 +1,4 @@
-# patients/views.py
+# patients/views.py - Updated for AM/PM slot system
 from django.shortcuts import get_object_or_404, redirect
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.decorators import login_required
@@ -19,7 +19,7 @@ from appointments.models import Appointment
 
 
 class PatientListView(LoginRequiredMixin, ListView):
-    """Enhanced list view with filtering, search, and export functionality"""
+    """Enhanced list view with filtering, search, and export functionality - UPDATED for AM/PM system"""
     model = Patient
     template_name = 'patients/patient_list.html'
     context_object_name = 'patients'
@@ -32,8 +32,8 @@ class PatientListView(LoginRequiredMixin, ListView):
         return super().dispatch(request, *args, **kwargs)
     
     def get_queryset(self):
-        # Updated to use appointment_slot instead of schedule
-        queryset = Patient.objects.select_related().prefetch_related('appointments__appointment_slot', 'appointments__service')
+        # Updated to use appointment_date instead of appointment_slot
+        queryset = Patient.objects.select_related().prefetch_related('appointments__service', 'appointments__assigned_dentist')
         
         # Get filter parameters
         search = self.request.GET.get('search', '').strip()
@@ -69,30 +69,30 @@ class PatientListView(LoginRequiredMixin, ListView):
             elif contact == 'none':
                 queryset = queryset.filter(email='', contact_number='')
         
-        # Apply activity filter - updated to use appointment_slot
+        # Apply activity filter - UPDATED to use appointment_date
         if activity:
             today = date.today()
             if activity == 'recent':
                 recent_date = today - timedelta(days=30)
                 recent_patient_ids = Appointment.objects.filter(
-                    appointment_slot__date__gte=recent_date,
+                    appointment_date__gte=recent_date,
                     status='completed'
                 ).values_list('patient_id', flat=True).distinct()
                 queryset = queryset.filter(id__in=recent_patient_ids)
             elif activity == 'upcoming':
                 upcoming_patient_ids = Appointment.objects.filter(
-                    appointment_slot__date__gte=today,
+                    appointment_date__gte=today,
                     status__in=['approved', 'pending']
                 ).values_list('patient_id', flat=True).distinct()
                 queryset = queryset.filter(id__in=upcoming_patient_ids)
             elif activity == 'no_recent':
                 old_date = today - timedelta(days=90)
                 recent_patient_ids = Appointment.objects.filter(
-                    appointment_slot__date__gte=old_date
+                    appointment_date__gte=old_date
                 ).values_list('patient_id', flat=True).distinct()
                 queryset = queryset.exclude(id__in=recent_patient_ids)
         
-        # Apply sorting - updated to use appointment_slot
+        # Apply sorting - UPDATED to use appointment_date
         if sort_by == 'name_asc':
             queryset = queryset.order_by('last_name', 'first_name')
         elif sort_by == 'name_desc':
@@ -102,19 +102,19 @@ class PatientListView(LoginRequiredMixin, ListView):
         elif sort_by == 'date_added_asc':
             queryset = queryset.order_by('created_at')
         elif sort_by == 'last_visit_desc':
-            # Updated to use appointment_slot__date
+            # Updated to use appointment_date
             queryset = queryset.annotate(
                 last_visit_date=Case(
-                    When(appointments__appointment_slot__date__isnull=False, 
-                         then='appointments__appointment_slot__date'),
+                    When(appointments__appointment_date__isnull=False, 
+                         then='appointments__appointment_date'),
                     default=None
                 )
             ).order_by('-last_visit_date')
         elif sort_by == 'last_visit_asc':
             queryset = queryset.annotate(
                 last_visit_date=Case(
-                    When(appointments__appointment_slot__date__isnull=False, 
-                         then='appointments__appointment_slot__date'),
+                    When(appointments__appointment_date__isnull=False, 
+                         then='appointments__appointment_date'),
                     default=None
                 )
             ).order_by('last_visit_date')
@@ -129,7 +129,7 @@ class PatientListView(LoginRequiredMixin, ListView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         
-        # Get filter parameters
+        # Get filter parameters (unchanged)
         context['current_filters'] = {
             'search': self.request.GET.get('search', ''),
             'status': self.request.GET.get('status', ''),
@@ -138,7 +138,7 @@ class PatientListView(LoginRequiredMixin, ListView):
             'sort': self.request.GET.get('sort', 'name_asc'),
         }
         
-        # Build active filters list for display
+        # Build active filters list for display (unchanged)
         active_filters = []
         if context['current_filters']['search']:
             active_filters.append(f"Search: {context['current_filters']['search']}")
@@ -151,19 +151,25 @@ class PatientListView(LoginRequiredMixin, ListView):
         
         context['active_filters'] = active_filters
         
-        # Get insights for dashboard - updated to use appointment_slot
+        # Get insights for dashboard - UPDATED to exclude pending appointments
         total_patients = Patient.objects.filter(is_active=True).count()
         today = date.today()
+        
+        # Only count appointments with confirmed patient records
         upcoming_appointments = Appointment.objects.filter(
-            appointment_slot__date__gte=today,
-            status__in=['approved', 'pending']
+            appointment_date__gte=today,
+            status__in=['confirmed', 'pending'],  # pending appointments with existing patients still count
+            patient__isnull=False  # Only count appointments with linked patient records
         ).values('patient').distinct().count()
         
         with_email = Patient.objects.filter(is_active=True, email__isnull=False).exclude(email='').count()
         
+        # Only consider patients with completed appointments (confirmed patients only)
         old_date = today - timedelta(days=90)
         no_recent_visits = Patient.objects.filter(is_active=True).exclude(
-            appointments__appointment_slot__date__gte=old_date
+            appointments__appointment_date__gte=old_date,
+            appointments__status='completed',
+            appointments__patient__isnull=False  # Only confirmed appointments
         ).count()
         
         context['insights'] = {
@@ -173,9 +179,10 @@ class PatientListView(LoginRequiredMixin, ListView):
             'no_recent_visits': no_recent_visits,
         }
         
+        # Total count remains the same (only actual Patient records)
         context['total_count'] = Patient.objects.count()
         
-        # Handle export
+        # Handle export (unchanged)
         export_format = self.request.GET.get('export')
         if export_format in ['csv', 'pdf']:
             return self.export_patients(context['patients'], export_format)
@@ -244,7 +251,7 @@ class PatientListView(LoginRequiredMixin, ListView):
 
 
 class PatientDetailView(LoginRequiredMixin, DetailView):
-    """View patient details with appointment history"""
+    """View patient details with appointment history - UPDATED for AM/PM system and payment context"""
     model = Patient
     template_name = 'patients/patient_detail.html'
     context_object_name = 'patient'
@@ -259,29 +266,78 @@ class PatientDetailView(LoginRequiredMixin, DetailView):
         context = super().get_context_data(**kwargs)
         patient = self.object
         
-        # Get all appointments ordered by date (most recent first) - updated to use appointment_slot
+        # Get all appointments ordered by date (most recent first) - UPDATED for AM/PM system
         appointments = Appointment.objects.filter(patient=patient).select_related(
-            'appointment_slot', 'service', 'dentist'
-        ).order_by('-appointment_slot__date', '-appointment_slot__start_time')
+            'service', 'assigned_dentist'
+        ).order_by('-appointment_date', '-period', '-requested_at')
         
-        # Categorize appointments - updated to use appointment_slot
+        # Categorize appointments - UPDATED to use appointment_date
         today = date.today()
         completed_appointments = appointments.filter(status='completed')
         upcoming_appointments = appointments.filter(
-            appointment_slot__date__gte=today, 
-            status__in=['approved', 'pending']
+            appointment_date__gte=today, 
+            status__in=['confirmed', 'pending']
         )
         cancelled_appointments = appointments.filter(status__in=['cancelled', 'rejected'])
+        
+        # Payment context - NEW
+        from appointments.models import Payment, PaymentTransaction
+        from decimal import Decimal
+        
+        # Get all payments for this patient
+        patient_payments = Payment.objects.filter(patient=patient).select_related('appointment__service')
+        
+        # Calculate payment summary
+        total_amount_due = Decimal('0')
+        total_amount_paid = Decimal('0')
+        
+        for payment in patient_payments:
+            total_amount_due += payment.total_amount
+            total_amount_paid += payment.amount_paid
+        
+        outstanding_balance = total_amount_due - total_amount_paid
+        
+        # Get recent payments for display (last 5)
+        recent_payments = patient_payments.order_by('-created_at')[:5]
+        
+        # Get next due date and check if overdue
+        next_due_date = None
+        is_overdue = False
+        
+        overdue_payment = patient_payments.filter(
+            status__in=['pending', 'partially_paid'],
+            next_due_date__isnull=False
+        ).order_by('next_due_date').first()
+        
+        if overdue_payment:
+            next_due_date = overdue_payment.next_due_date
+            is_overdue = next_due_date < today
+        
+        # Get last payment transaction
+        last_payment = None
+        if patient_payments.exists():
+            last_payment = PaymentTransaction.objects.filter(
+                payment__patient=patient
+            ).order_by('-payment_datetime').first()
         
         context.update({
             'appointments': appointments,
             'completed_appointments': completed_appointments,
             'upcoming_appointments': upcoming_appointments,
             'cancelled_appointments': cancelled_appointments,
+            
+            # Payment context
+            'patient_payments': patient_payments,
+            'total_amount_due': total_amount_due,
+            'total_amount_paid': total_amount_paid,
+            'outstanding_balance': outstanding_balance,
+            'recent_payments': recent_payments,
+            'next_due_date': next_due_date,
+            'is_overdue': is_overdue,
+            'last_payment': last_payment,
         })
         
         return context
-
 
 class PatientCreateView(LoginRequiredMixin, CreateView):
     """Create new patient"""
@@ -424,23 +480,23 @@ def toggle_patient_active(request, pk):
 
 @login_required  
 def patient_quick_info(request, pk):
-    """Return quick patient info as JSON for AJAX requests"""
+    """Return quick patient info as JSON for AJAX requests - UPDATED for AM/PM system"""
     if not request.user.has_permission('patients'):
         return JsonResponse({'error': 'Permission denied'}, status=403)
     
     try:
         patient = Patient.objects.get(pk=pk)
         
-        # Get recent appointments - updated to use appointment_slot
+        # Get recent appointments - UPDATED to use appointment_date
         recent_appointments = patient.appointments.filter(
-            appointment_slot__date__gte=date.today() - timedelta(days=30)
-        ).order_by('-appointment_slot__date')[:3]
+            appointment_date__gte=date.today() - timedelta(days=30)
+        ).order_by('-appointment_date', '-period')[:3]
         
         appointments_data = []
         for apt in recent_appointments:
             appointments_data.append({
-                'date': apt.appointment_slot.date.strftime('%Y-%m-%d'),
-                'time': apt.appointment_slot.start_time.strftime('%H:%M'),
+                'date': apt.appointment_date.strftime('%Y-%m-%d'),
+                'period': apt.get_period_display(),  # 'Morning' or 'Afternoon'
                 'service': apt.service.name,
                 'status': apt.get_status_display(),
             })

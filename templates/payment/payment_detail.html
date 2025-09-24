@@ -1,0 +1,713 @@
+{% extends "base.html" %}
+{% load user_tags %}
+
+{% block title %}Payment Details - {{ payment.patient.full_name }}{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="sm:flex sm:items-center sm:justify-between">
+        <div>
+            <nav class="flex" aria-label="Breadcrumb">
+                <ol role="list" class="flex items-center space-x-4">
+                    <li>
+                        <div class="flex">
+                            <a href="{% url 'appointments:payment_list' %}" class="text-sm font-medium text-gray-500 hover:text-gray-700">
+                                Payments
+                            </a>
+                        </div>
+                    </li>
+                    <li>
+                        <div class="flex items-center">
+                            <svg class="flex-shrink-0 h-5 w-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" />
+                            </svg>
+                            <span class="ml-4 text-sm font-medium text-gray-500">#{{ payment.id|stringformat:"06d" }}</span>
+                        </div>
+                    </li>
+                </ol>
+            </nav>
+            <h1 class="mt-2 text-2xl font-bold text-gray-900">Payment Details</h1>
+            <p class="mt-1 text-sm text-gray-600">
+                {{ payment.patient.full_name }} - {{ payment.created_at|date:"F d, Y" }}
+            </p>
+        </div>
+        <div class="mt-4 flex space-x-3 sm:mt-0">
+            {% if payment.outstanding_balance > 0 %}
+                <button type="button" onclick="showAddPaymentModal()" 
+                        class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700">
+                    Add Payment
+                </button>
+            {% endif %}
+            <button type="button" onclick="showAddItemModal()" 
+                    class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
+                Add Service Item
+            </button>
+        </div>
+    </div>
+
+    <!-- Payment Status Alert -->
+    {% if payment.is_overdue %}
+    <div class="bg-red-50 border-l-4 border-red-400 p-4">
+        <div class="flex">
+            <div class="flex-shrink-0">
+                <svg class="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                </svg>
+            </div>
+            <div class="ml-3">
+                <h3 class="text-sm font-medium text-red-800">Payment Overdue</h3>
+                <p class="mt-2 text-sm text-red-700">
+                    This payment was due on {{ payment.next_due_date|date:"F d, Y" }}. Outstanding balance: ₱{{ payment.outstanding_balance|floatformat:2 }}
+                </p>
+            </div>
+        </div>
+    </div>
+    {% elif payment.status == 'completed' %}
+    <div class="bg-green-50 border-l-4 border-green-400 p-4">
+        <div class="flex">
+            <div class="flex-shrink-0">
+                <svg class="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                </svg>
+            </div>
+            <div class="ml-3">
+                <h3 class="text-sm font-medium text-green-800">Payment Completed</h3>
+                <p class="mt-2 text-sm text-green-700">
+                    This payment has been fully settled.
+                </p>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <!-- Main Content -->
+        <div class="lg:col-span-2 space-y-6">
+            <!-- Payment Summary -->
+            <div class="bg-white shadow rounded-lg">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <h3 class="text-lg font-medium text-gray-900">Payment Summary</h3>
+                </div>
+                <div class="px-6 py-4">
+                    <dl class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <div>
+                            <dt class="text-sm font-medium text-gray-500">Bill ID</dt>
+                            <dd class="mt-1 text-sm text-gray-900">#{{ payment.id|stringformat:"06d" }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-sm font-medium text-gray-500">Status</dt>
+                            <dd class="mt-1">
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                                    {% if payment.status == 'pending' %}bg-yellow-100 text-yellow-800
+                                    {% elif payment.status == 'partially_paid' %}bg-blue-100 text-blue-800
+                                    {% elif payment.status == 'completed' %}bg-green-100 text-green-800
+                                    {% elif payment.status == 'cancelled' %}bg-red-100 text-red-800
+                                    {% else %}bg-gray-100 text-gray-800{% endif %}">
+                                    {{ payment.get_status_display }}
+                                </span>
+                            </dd>
+                        </div>
+                        <div>
+                            <dt class="text-sm font-medium text-gray-500">Total Amount</dt>
+                            <dd class="mt-1 text-lg font-semibold text-gray-900">₱{{ payment.total_amount|floatformat:2 }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-sm font-medium text-gray-500">Amount Paid</dt>
+                            <dd class="mt-1 text-lg font-semibold text-green-600">₱{{ payment.amount_paid|floatformat:2 }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-sm font-medium text-gray-500">Outstanding Balance</dt>
+                            <dd class="mt-1 text-lg font-semibold {% if payment.outstanding_balance == 0 %}text-green-600{% elif payment.is_overdue %}text-red-600{% else %}text-yellow-600{% endif %}">
+                                ₱{{ payment.outstanding_balance|floatformat:2 }}
+                            </dd>
+                        </div>
+                        <div>
+                            <dt class="text-sm font-medium text-gray-500">Payment Type</dt>
+                            <dd class="mt-1 text-sm text-gray-900">
+                                {{ payment.get_payment_type_display }}
+                                {% if payment.payment_type == 'installment' %}
+                                    <span class="text-gray-500">({{ payment.installment_months }} months)</span>
+                                {% endif %}
+                            </dd>
+                        </div>
+                    </dl>
+                    
+                    <!-- Payment Progress -->
+                    {% if payment.total_amount > 0 %}
+                    <div class="mt-6">
+                        <div class="flex justify-between text-sm text-gray-600 mb-2">
+                            <span>Payment Progress</span>
+                            <span>{{ payment.payment_progress_percentage|floatformat:1 }}%</span>
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-3">
+                            <div class="bg-primary-600 h-3 rounded-full transition-all duration-300" 
+                                 style="width: {{ payment.payment_progress_percentage }}%"></div>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Service Items -->
+            <div class="bg-white shadow rounded-lg">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <h3 class="text-lg font-medium text-gray-900">Service Items</h3>
+                </div>
+                <div class="overflow-hidden">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Service</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Qty</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Unit Price</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Discount</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200">
+                            {% for item in payment_items %}
+                            <tr>
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <div class="text-sm font-medium text-gray-900">{{ item.service.name }}</div>
+                                    {% if item.notes %}
+                                        <div class="text-sm text-gray-500">{{ item.notes|truncatechars:50 }}</div>
+                                    {% endif %}
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ item.quantity }}</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">₱{{ item.unit_price|floatformat:2 }}</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                    {% if item.discount %}
+                                        {{ item.discount.name }}<br>
+                                        <span class="text-green-600">-₱{{ item.discount_amount|floatformat:2 }}</span>
+                                    {% else %}
+                                        —
+                                    {% endif %}
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">₱{{ item.total|floatformat:2 }}</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                    <button onclick="removePaymentItem({{ item.id }})" 
+                                            class="text-red-600 hover:text-red-900">Remove</button>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="6" class="px-6 py-4 text-center text-gray-500">
+                                    No service items added yet.
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                        <tfoot class="bg-gray-50">
+                            <tr>
+                                <td colspan="4" class="px-6 py-3 text-sm font-medium text-gray-900 text-right">
+                                    Subtotal:
+                                </td>
+                                <td class="px-6 py-3 text-sm font-medium text-gray-900">
+                                    ₱{{ payment_summary.subtotal|floatformat:2 }}
+                                </td>
+                                <td></td>
+                            </tr>
+                            <tr>
+                                <td colspan="4" class="px-6 py-3 text-sm font-medium text-gray-900 text-right">
+                                    Total Discount:
+                                </td>
+                                <td class="px-6 py-3 text-sm font-medium text-green-600">
+                                    -₱{{ payment_summary.total_discount|floatformat:2 }}
+                                </td>
+                                <td></td>
+                            </tr>
+                            <tr>
+                                <td colspan="4" class="px-6 py-3 text-sm font-bold text-gray-900 text-right">
+                                    Total Amount:
+                                </td>
+                                <td class="px-6 py-3 text-sm font-bold text-gray-900">
+                                    ₱{{ payment_summary.total_amount|floatformat:2 }}
+                                </td>
+                                <td></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Payment History -->
+            <div class="bg-white shadow rounded-lg">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <h3 class="text-lg font-medium text-gray-900">Payment History</h3>
+                </div>
+                <div class="overflow-hidden">
+                    {% if transactions %}
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Receipt #</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Amount</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Notes</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody class="bg-white divide-y divide-gray-200">
+                                {% for transaction in transactions %}
+                                <tr>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                        {{ transaction.receipt_number }}
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                        {{ transaction.payment_date|date:"M d, Y" }}<br>
+                                        <span class="text-xs text-gray-500">{{ transaction.payment_datetime|time:"g:i A" }}</span>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-green-600">
+                                        ₱{{ transaction.amount|floatformat:2 }}
+                                    </td>
+                                    <td class="px-6 py-4 text-sm text-gray-500">
+                                        {{ transaction.notes|default:"—" }}
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                        <a href="{% url 'appointments:receipt_pdf' transaction.pk %}" 
+                                           class="text-primary-600 hover:text-primary-900">Download Receipt</a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    {% else %}
+                        <div class="px-6 py-8 text-center text-gray-500">
+                            No payments have been made yet.
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Sidebar -->
+        <div class="space-y-6">
+            <!-- Patient Information -->
+            <div class="bg-white shadow rounded-lg">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <h3 class="text-lg font-medium text-gray-900">Patient Information</h3>
+                </div>
+                <div class="px-6 py-4">
+                    <div class="flex items-center space-x-3 mb-4">
+                        <div class="flex-shrink-0 h-10 w-10">
+                            <div class="h-10 w-10 rounded-full bg-primary-600 flex items-center justify-center">
+                                <span class="text-sm font-medium text-white">
+                                    {{ payment.patient.first_name|first }}{{ payment.patient.last_name|first }}
+                                </span>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="text-sm font-medium text-gray-900">
+                                <a href="{% url 'patients:patient_detail' payment.patient.pk %}" 
+                                   class="hover:text-primary-600">
+                                    {{ payment.patient.full_name }}
+                                </a>
+                            </div>
+                            <div class="text-sm text-gray-500">
+                                {% if payment.patient.email %}{{ payment.patient.email }}{% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    {% if payment.patient.contact_number %}
+                    <div class="text-sm text-gray-600 mb-2">
+                        Phone: {{ payment.patient.contact_number }}
+                    </div>
+                    {% endif %}
+                    
+                    <div class="mt-4">
+                        <a href="{% url 'patients:patient_detail' payment.patient.pk %}" 
+                           class="text-sm text-primary-600 hover:text-primary-500">
+                            View Full Patient Record →
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Appointment Information -->
+            <div class="bg-white shadow rounded-lg">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <h3 class="text-lg font-medium text-gray-900">Related Appointment</h3>
+                </div>
+                <div class="px-6 py-4">
+                    <dl class="space-y-2">
+                        <div>
+                            <dt class="text-sm font-medium text-gray-500">Date</dt>
+                            <dd class="text-sm text-gray-900">{{ payment.appointment.appointment_date|date:"F d, Y" }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-sm font-medium text-gray-500">Period</dt>
+                            <dd class="text-sm text-gray-900">{{ payment.appointment.get_period_display }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-sm font-medium text-gray-500">Service</dt>
+                            <dd class="text-sm text-gray-900">{{ payment.appointment.service.name }}</dd>
+                        </div>
+                        {% if payment.appointment.assigned_dentist %}
+                        <div>
+                            <dt class="text-sm font-medium text-gray-500">Dentist</dt>
+                            <dd class="text-sm text-gray-900">{{ payment.appointment.assigned_dentist.full_name }}</dd>
+                        </div>
+                        {% endif %}
+                    </dl>
+                    
+                    <div class="mt-4">
+                        <a href="{% url 'appointments:appointment_detail' payment.appointment.pk %}" 
+                           class="text-sm text-primary-600 hover:text-primary-500">
+                            View Appointment Details →
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Next Due Date -->
+            {% if payment.next_due_date and payment.outstanding_balance > 0 %}
+            <div class="bg-white shadow rounded-lg">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <h3 class="text-lg font-medium text-gray-900">Next Payment Due</h3>
+                </div>
+                <div class="px-6 py-4">
+                    <div class="text-center">
+                        <div class="text-2xl font-bold {% if payment.is_overdue %}text-red-600{% else %}text-gray-900{% endif %}">
+                            {{ payment.next_due_date|date:"M d, Y" }}
+                        </div>
+                        {% if payment.is_overdue %}
+                            <div class="text-sm text-red-600 font-medium">OVERDUE</div>
+                        {% else %}
+                            <div class="text-sm text-gray-500">{{ payment.next_due_date|timeuntil }} remaining</div>
+                        {% endif %}
+                        {% if payment.payment_type == 'installment' %}
+                            <div class="mt-2 text-sm text-gray-600">
+                                Suggested: ₱{{ payment.monthly_amount|floatformat:2 }}
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Add Payment Modal -->
+<div id="addPaymentModal" class="fixed inset-0 z-50 hidden overflow-y-auto">
+    <div class="flex items-center justify-center min-h-screen px-4">
+        <div class="fixed inset-0 bg-black opacity-50"></div>
+        <div class="relative bg-white rounded-lg max-w-md w-full p-6">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-medium text-gray-900">Add Payment</h3>
+                <button onclick="hideAddPaymentModal()" class="text-gray-400 hover:text-gray-600">
+                    <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            
+            <form id="addPaymentForm">
+                {% csrf_token %}
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Payment Amount</label>
+                        <input type="number" name="amount" step="0.01" min="0.01" 
+                               max="{{ payment.outstanding_balance }}" required
+                               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500"
+                               placeholder="Enter amount">
+                        <p class="text-xs text-gray-500 mt-1">Max: ₱{{ payment.outstanding_balance|floatformat:2 }}</p>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Payment Date</label>
+                        <input type="date" name="payment_date" required
+                               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500">
+                    </div>
+                    
+                    {% if payment.payment_type != 'installment' %}
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Payment Type</label>
+                        <div class="space-y-2">
+                            <label class="flex items-center">
+                                <input type="radio" name="payment_type" value="full" class="mr-2">
+                                <span class="text-sm">Full Payment (₱{{ payment.outstanding_balance|floatformat:2 }})</span>
+                            </label>
+                            <label class="flex items-center">
+                                <input type="radio" name="payment_type" value="partial" checked class="mr-2">
+                                <span class="text-sm">Partial Payment</span>
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div id="installmentOptions" class="hidden">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Installment Months</label>
+                        <select name="installment_months" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500">
+                            <option value="3">3 months</option>
+                            <option value="6">6 months</option>
+                            <option value="12">12 months</option>
+                            <option value="24">24 months</option>
+                        </select>
+                    </div>
+                    {% endif %}
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                        <textarea name="notes" rows="2" 
+                                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500"
+                                  placeholder="Optional notes..."></textarea>
+                    </div>
+                </div>
+                
+                <div class="mt-6 flex space-x-3">
+                    <button type="submit" 
+                            class="flex-1 px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700">
+                        Add Payment
+                    </button>
+                    <button type="button" onclick="hideAddPaymentModal()" 
+                            class="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50">
+                        Cancel
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Add Service Item Modal -->
+<div id="addItemModal" class="fixed inset-0 z-50 hidden overflow-y-auto">
+    <div class="flex items-center justify-center min-h-screen px-4">
+        <div class="fixed inset-0 bg-black opacity-50"></div>
+        <div class="relative bg-white rounded-lg max-w-md w-full p-6">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-medium text-gray-900">Add Service Item</h3>
+                <button onclick="hideAddItemModal()" class="text-gray-400 hover:text-gray-600">
+                    <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            
+            <form id="addItemForm">
+                {% csrf_token %}
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Service</label>
+                        <select name="service_id" required onchange="updateServicePriceRange(this)"
+                                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500">
+                            <option value="">Select a service...</option>
+                            {% for service in available_services %}
+                                <option value="{{ service.id }}" 
+                                        data-min-price="{{ service.min_price|default:'' }}" 
+                                        data-max-price="{{ service.max_price|default:'' }}"
+                                        data-default-price="{{ service.default_price|default:'' }}">
+                                    {{ service.name }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
+                            <input type="number" name="unit_price" step="0.01" min="0.01" required
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500">
+                            <div id="priceRange" class="text-xs text-gray-500 mt-1 hidden"></div>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Discount</label>
+                        <select name="discount_id" 
+                                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500">
+                            <option value="">No discount</option>
+                            {% for discount in available_discounts %}
+                                <option value="{{ discount.id }}">{{ discount.name }} ({{ discount.discount_type }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                        <input type="text" name="notes" 
+                               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500"
+                               placeholder="Optional notes...">
+                    </div>
+                </div>
+                
+                <div class="mt-6 flex space-x-3">
+                    <button type="submit" 
+                            class="flex-1 px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700">
+                        Add Item
+                    </button>
+                    <button type="button" onclick="hideAddItemModal()" 
+                            class="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50">
+                        Cancel
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+// Modal functions
+function showAddPaymentModal() {
+    document.getElementById('addPaymentModal').classList.remove('hidden');
+    // Set today as default payment date
+    document.querySelector('input[name="payment_date"]').value = new Date().toISOString().split('T')[0];
+    
+    // Handle payment type change
+    document.querySelectorAll('input[name="payment_type"]').forEach(radio => {
+        radio.addEventListener('change', function() {
+            const installmentOptions = document.getElementById('installmentOptions');
+            const amountInput = document.querySelector('input[name="amount"]');
+            
+            if (this.value === 'full') {
+                amountInput.value = {{ payment.outstanding_balance }};
+                amountInput.readOnly = true;
+                if (installmentOptions) installmentOptions.classList.add('hidden');
+            } else {
+                amountInput.value = '';
+                amountInput.readOnly = false;
+                if (installmentOptions && {{ payment.payment_type != 'installment'|yesno:'true,false' }}) {
+                    installmentOptions.classList.remove('hidden');
+                }
+            }
+        });
+    });
+}
+
+function hideAddPaymentModal() {
+    document.getElementById('addPaymentModal').classList.add('hidden');
+    document.getElementById('addPaymentForm').reset();
+}
+
+function showAddItemModal() {
+    document.getElementById('addItemModal').classList.remove('hidden');
+}
+
+function hideAddItemModal() {
+    document.getElementById('addItemModal').classList.add('hidden');
+    document.getElementById('addItemForm').reset();
+    document.getElementById('priceRange').classList.add('hidden');
+}
+
+// Update service price range display
+function updateServicePriceRange(select) {
+    const selectedOption = select.selectedOptions[0];
+    const priceRangeDiv = document.getElementById('priceRange');
+    const unitPriceInput = document.querySelector('input[name="unit_price"]');
+    
+    if (selectedOption && selectedOption.value) {
+        const minPrice = selectedOption.dataset.minPrice;
+        const maxPrice = selectedOption.dataset.maxPrice;
+        const defaultPrice = selectedOption.dataset.defaultPrice;
+        
+        // Set default price
+        if (defaultPrice) {
+            unitPriceInput.value = defaultPrice;
+        }
+        
+        // Show price range
+        if (minPrice && maxPrice) {
+            priceRangeDiv.textContent = `Price range: ₱${minPrice} - ₱${maxPrice}`;
+            priceRangeDiv.classList.remove('hidden');
+            unitPriceInput.min = minPrice;
+            unitPriceInput.max = maxPrice;
+        } else {
+            priceRangeDiv.classList.add('hidden');
+            unitPriceInput.min = '0.01';
+            unitPriceInput.removeAttribute('max');
+        }
+    } else {
+        priceRangeDiv.classList.add('hidden');
+        unitPriceInput.value = '';
+        unitPriceInput.min = '0.01';
+        unitPriceInput.removeAttribute('max');
+    }
+}
+
+// Form submissions
+document.getElementById('addPaymentForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    const data = Object.fromEntries(formData.entries());
+    
+    try {
+        const response = await fetch(`/appointments/payments/{{ payment.pk }}/add-payment/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            },
+            body: JSON.stringify(data)
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            location.reload(); // Refresh page to show updated data
+        } else {
+            alert(result.error || 'Error adding payment');
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        alert('An error occurred while adding payment');
+    }
+});
+
+document.getElementById('addItemForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    const data = Object.fromEntries(formData.entries());
+    
+    try {
+        const response = await fetch(`/appointments/payments/{{ payment.pk }}/add-item/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            },
+            body: JSON.stringify(data)
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            location.reload(); // Refresh page to show updated data
+        } else {
+            alert(result.error || 'Error adding service item');
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        alert('An error occurred while adding service item');
+    }
+});
+
+// Remove payment item
+async function removePaymentItem(itemId) {
+    if (!confirm('Are you sure you want to remove this service item?')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/appointments/payment-items/${itemId}/delete/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            }
+        });
+        
+        if (response.ok) {
+            location.reload();
+        } else {
+            alert('Error removing service item');
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        alert('An error occurred while removing service item');
+    }
+}
+</script>
+{% endblock %}

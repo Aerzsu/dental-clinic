@@ -32,6 +32,7 @@
 </head>
 <body class="bg-gray-50 h-screen overflow-hidden" x-data="{ sidebarOpen: false, isMobile: window.innerWidth < 768 }" @resize.window="isMobile = window.innerWidth < 768">
     {% if user.is_authenticated %}
+        {% load user_tags %}
         <!-- Top Navigation Bar -->
         <nav class="fixed top-0 left-0 right-0 bg-white border-b border-gray-200 shadow-sm z-40 h-16">
             <div class="flex items-center justify-between h-full px-4">
@@ -94,7 +95,7 @@
                                 </a>
                                 <a href="{% url 'users:logout' %}" class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-150">
                                     <svg class="w-4 h-4 mr-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013 3v1"></path>
                                     </svg>
                                     Sign out
                                 </a>
@@ -129,18 +130,23 @@
                     <!-- Navigation Menu -->
                     <nav class="mt-8 flex-1 px-2 space-y-1 pb-4">
                         <!-- Dashboard -->
+                        {% if user.is_superuser or user|has_permission:"dashboard" %}
                         <a href="{% url 'core:dashboard' %}" class="{% if request.resolver_match.url_name == 'dashboard' %}bg-primary-50 border-r-2 border-primary-600 text-primary-700{% else %}text-gray-700 hover:bg-gray-50{% endif %} group flex items-center px-2 py-2 text-sm font-medium rounded-md transition-colors duration-150">
                             <span class="mr-3 text-lg">📊</span>
                             <span :class="{ 'opacity-100': !collapsed, 'opacity-0 w-0 overflow-hidden': collapsed }" x-show="!collapsed">Dashboard</span>
                         </a>
+                        {% endif %}
                         
-                        <!-- Patients (Non-collapsible) -->
+                        <!-- Patients -->
+                        {% if user.is_superuser or user|has_permission:"patients" %}
                         <a href="{% url 'patients:patient_list' %}" class="{% if 'patients' in request.resolver_match.namespace %}bg-primary-50 border-r-2 border-primary-600 text-primary-700{% else %}text-gray-700 hover:bg-gray-50{% endif %} group flex items-center px-2 py-2 text-sm font-medium rounded-md transition-colors duration-150">
                             <span class="mr-3 text-lg">👥</span>
                             <span :class="{ 'opacity-100': !collapsed, 'opacity-0 w-0 overflow-hidden': collapsed }" x-show="!collapsed">Patients</span>
                         </a>
+                        {% endif %}
                         
                         <!-- Appointments -->
+                        {% if user.is_superuser or user|has_permission:"appointments" %}
                         <div x-data="{ open: {% if 'appointments' in request.resolver_match.namespace %}true{% else %}false{% endif %} }">
                             <button @click="open = !open" class="{% if 'appointments' in request.resolver_match.namespace %}bg-primary-50 border-r-2 border-primary-600 text-primary-700{% else %}text-gray-700 hover:bg-gray-50{% endif %} group w-full flex items-center px-2 py-2 text-sm font-medium rounded-md transition-colors duration-150">
                                 <span class="mr-3 text-lg">📅</span>
@@ -151,27 +157,29 @@
                             </button>
                             <div x-show="open && !collapsed" x-collapse class="ml-6 space-y-1">
                                 <a href="{% url 'appointments:appointment_calendar' %}" class="group flex items-center px-2 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-md">Calendar View</a>
-                                <a href="{% url 'appointments:schedule_settings' %}" class="group flex items-center px-2 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-md">Schedule</a>
-                                <a href="{% url 'appointments:time_block_list' %}" class="group flex items-center px-2 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-md">Time Block</a>
+                                <a href="{% url 'appointments:daily_slots_list' %}" class="group flex items-center px-2 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-md">Slot List</a>
                             </div>
                         </div>
+                        {% endif %}
                         
-                        <!-- Billing (Non-collapsible) -->
-                        <!-- TODO: Replace '#' with actual billing dashboard URL when view is created -->
-                        <a href="#" class="text-gray-700 hover:bg-gray-50 group flex items-center px-2 py-2 text-sm font-medium rounded-md transition-colors duration-150">
+                        <!-- Billing -->
+                        {% if user.is_superuser or user|has_permission:"billing" %}
+                        <a href="{% url 'appointments:payment_list' %}" class="text-gray-700 hover:bg-gray-50 group flex items-center px-2 py-2 text-sm font-medium rounded-md transition-colors duration-150">
                             <span class="mr-3 text-lg">💳</span>
                             <span :class="{ 'opacity-100': !collapsed, 'opacity-0 w-0 overflow-hidden': collapsed }" x-show="!collapsed">Billing</span>
                         </a>
-                        
+                        {% endif %}
+
                         <!-- Reports -->
+                         {% if user.is_superuser or user|has_permission:"reports" %}
                         <a href="#" class="text-gray-700 hover:bg-gray-50 group flex items-center px-2 py-2 text-sm font-medium rounded-md transition-colors duration-150">
                             <span class="mr-3 text-lg">📈</span>
                             <span :class="{ 'opacity-100': !collapsed, 'opacity-0 w-0 overflow-hidden': collapsed }" x-show="!collapsed">Reports</span>
                         </a>
+                        {% endif %}
                         
                         <!-- Maintenance -->
-                        {% load user_tags %}
-                        {% if user|has_permission:"maintenance" %}
+                        {% if user.is_superuser or user|has_permission:"maintenance" %}
                         <div x-data="{ open: {% if 'users' in request.resolver_match.namespace or 'services' in request.resolver_match.namespace or 'core' in request.resolver_match.namespace and request.resolver_match.url_name != 'dashboard' %}true{% else %}false{% endif %} }">
                             <button @click="open = !open" class="{% if 'users' in request.resolver_match.namespace or 'services' in request.resolver_match.namespace or 'core' in request.resolver_match.namespace and request.resolver_match.url_name != 'dashboard' %}bg-primary-50 border-r-2 border-primary-600 text-primary-700{% else %}text-gray-700 hover:bg-gray-50{% endif %} group w-full flex items-center px-2 py-2 text-sm font-medium rounded-md transition-colors duration-150">
                                 <span class="mr-3 text-lg">⚙️</span>
@@ -184,9 +192,18 @@
                                 <a href="{% url 'users:user_list' %}" class="group flex items-center px-2 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-md">Users & Roles</a>
                                 <a href="{% url 'services:service_list' %}" class="group flex items-center px-2 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-md">Services</a>
                                 <a href="{% url 'services:discount_list' %}" class="group flex items-center px-2 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-md">Discounts</a>
-                                <a href="{% url 'core:holiday_list' %}" class="group flex items-center px-2 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-md">Holidays</a>
                                 <a href="{% url 'core:audit_logs' %}" class="group flex items-center px-2 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-md">Audit Logs</a>
                                 <a href="{% url 'core:system_settings' %}" class="group flex items-center px-2 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-md">Settings</a>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        <!-- No Access Message -->
+                        {% if not user.is_superuser and not user|has_permission:"dashboard" and not user|has_permission:"patients" and not user|has_permission:"appointments" and not user|has_permission:"billing" and not user|has_permission:"maintenance" %}
+                        <div class="px-2 py-4 text-center">
+                            <div class="text-gray-400 text-sm">
+                                <div class="mb-2">🔒</div>
+                                <p class="text-xs leading-relaxed">No access to any modules. Please contact your administrator.</p>
                             </div>
                         </div>
                         {% endif %}
@@ -195,7 +212,7 @@
             </div>
         </div>
         
-        <!-- Mobile Header (Enhanced) -->
+        <!-- Mobile Header -->
         <div class="md:hidden bg-white shadow-sm border-b px-4 py-3 flex items-center justify-between flex-shrink-0 fixed top-0 left-0 right-0 z-40 h-16">
             <div class="flex items-center">
                 <div class="w-8 h-8 bg-primary-600 rounded-lg flex items-center justify-center">
@@ -262,31 +279,54 @@
         <!-- Mobile Bottom Navigation -->
         <div class="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-50">
             <div class="flex overflow-x-auto">
+                {% if user.is_superuser or user|has_permission:"dashboard" %}
                 <a href="{% url 'core:dashboard' %}" class="{% if request.resolver_match.url_name == 'dashboard' %}text-primary-600 bg-primary-50{% else %}text-gray-600{% endif %} flex-shrink-0 flex flex-col items-center justify-center px-3 py-2 text-xs font-medium min-w-0 w-20">
                     <span class="text-lg mb-1">📊</span>
                     <span class="truncate">Dashboard</span>
                 </a>
+                {% endif %}
+                
+                {% if user.is_superuser or user|has_permission:"patients" %}
                 <a href="{% url 'patients:patient_list' %}" class="{% if 'patients' in request.resolver_match.namespace %}text-primary-600 bg-primary-50{% else %}text-gray-600{% endif %} flex-shrink-0 flex flex-col items-center justify-center px-3 py-2 text-xs font-medium min-w-0 w-20">
                     <span class="text-lg mb-1">👥</span>
                     <span class="truncate">Patients</span>
                 </a>
+                {% endif %}
+                
+                {% if user.is_superuser or user|has_permission:"appointments" %}
                 <a href="{% url 'appointments:appointment_calendar' %}" class="{% if 'appointments' in request.resolver_match.namespace %}text-primary-600 bg-primary-50{% else %}text-gray-600{% endif %} flex-shrink-0 flex flex-col items-center justify-center px-3 py-2 text-xs font-medium min-w-0 w-20">
                     <span class="text-lg mb-1">📅</span>
                     <span class="truncate">Appointments</span>
                 </a>
-                <a href="{% url 'services:service_list' %}" class="{% if 'services' in request.resolver_match.namespace %}text-primary-600 bg-primary-50{% else %}text-gray-600{% endif %} flex-shrink-0 flex flex-col items-center justify-center px-3 py-2 text-xs font-medium min-w-0 w-20">
+                {% endif %}
+                
+                {% if user.is_superuser or user|has_permission:"billing" %}
+                <a href="{% url 'appointments:payment_list' %}" class="text-gray-600 flex-shrink-0 flex flex-col items-center justify-center px-3 py-2 text-xs font-medium min-w-0 w-20">
                     <span class="text-lg mb-1">💳</span>
                     <span class="truncate">Billing</span>
                 </a>
+                {% endif %}
+
+                {% if user.is_superuser or user|has_permission:"reports" %}
                 <a href="#" class="text-gray-600 flex-shrink-0 flex flex-col items-center justify-center px-3 py-2 text-xs font-medium min-w-0 w-20">
                     <span class="text-lg mb-1">📈</span>
                     <span class="truncate">Reports</span>
                 </a>
-                {% if user|has_permission:"maintenance" %}
+                {% endif %}
+                
+                {% if user.is_superuser or user|has_permission:"maintenance" %}
                 <a href="{% url 'core:maintenance_hub' %}" class="{% if 'users' in request.resolver_match.namespace or 'core' in request.resolver_match.namespace and request.resolver_match.url_name != 'dashboard' %}text-primary-600 bg-primary-50{% else %}text-gray-600{% endif %} flex-shrink-0 flex flex-col items-center justify-center px-3 py-2 text-xs font-medium min-w-0 w-20">
                     <span class="text-lg mb-1">⚙️</span>
                     <span class="truncate">Maintenance</span>
                 </a>
+                {% endif %}
+
+                <!-- No Access Message for Mobile -->
+                {% if not user.is_superuser and not user|has_permission:"dashboard" and not user|has_permission:"patients" and not user|has_permission:"appointments" and not user|has_permission:"billing" and not user|has_permission:"maintenance" %}
+                <div class="flex-1 flex flex-col items-center justify-center px-3 py-2 text-xs text-gray-500">
+                    <span class="text-lg mb-1">🔒</span>
+                    <span class="truncate text-center">No Access</span>
+                </div>
                 {% endif %}
             </div>
         </div>
@@ -294,7 +334,7 @@
         <!-- Main Content Area -->
         <div class="flex flex-col h-screen pt-16" :class="{ 'md:ml-64': true }">
             <!-- Mobile Maintenance Breadcrumb -->
-            {% if user|has_permission:"maintenance" %}
+            {% if user.is_superuser or user|has_permission:"maintenance" %}
                 {% if 'users' in request.resolver_match.namespace or 'services' in request.resolver_match.namespace or 'core' in request.resolver_match.namespace and request.resolver_match.url_name != 'dashboard' and request.resolver_match.url_name != 'maintenance_hub' %}
                 <div class="md:hidden px-4 py-3 bg-gray-50 border-b border-gray-200 flex-shrink-0">
                     <a href="{% url 'core:maintenance_hub' %}" class="flex items-center text-sm text-gray-600 hover:text-gray-900">

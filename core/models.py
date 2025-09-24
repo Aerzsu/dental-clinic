@@ -73,39 +73,6 @@ class SystemSetting(models.Model):
             setting.save()
         return setting
 
-
-class Holiday(models.Model):
-    """Simplified holiday model"""
-    name = models.CharField(max_length=100)
-    date = models.DateField()
-    is_active = models.BooleanField(default=True)
-    is_recurring = models.BooleanField(default=False, help_text="If true, holiday repeats annually")
-    created_at = models.DateTimeField(auto_now_add=True)
-    
-    class Meta:
-        ordering = ['date']
-        unique_together = ['name', 'date']
-    
-    def __str__(self):
-        return f"{self.name} - {self.date}"
-    
-    @classmethod
-    def is_holiday(cls, check_date):
-        """Check if a given date is a holiday"""
-        # Check exact date match
-        if cls.objects.filter(date=check_date, is_active=True).exists():
-            return True
-        
-        # Check recurring holidays (same month/day)
-        recurring_holidays = cls.objects.filter(
-            is_recurring=True, 
-            is_active=True,
-            date__month=check_date.month,
-            date__day=check_date.day
-        )
-        return recurring_holidays.exists()
-
-
 class AuditLog(models.Model):
     """Simplified audit logging"""
     ACTION_CHOICES = [

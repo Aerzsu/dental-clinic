@@ -1,6 +1,6 @@
 # core/admin.py
 from django.contrib import admin
-from .models import AuditLog, SystemSetting, Holiday
+from .models import AuditLog, SystemSetting
 
 @admin.register(AuditLog)
 class AuditLogAdmin(admin.ModelAdmin):
@@ -36,10 +36,3 @@ class SystemSettingAdmin(admin.ModelAdmin):
     def value_preview(self, obj):
         return obj.value[:50] + ('...' if len(obj.value) > 50 else '')
     value_preview.short_description = 'Value'
-
-@admin.register(Holiday)
-class HolidayAdmin(admin.ModelAdmin):
-    list_display = ['name', 'date', 'is_recurring', 'is_active']
-    list_filter = ['is_recurring', 'is_active', 'date']
-    search_fields = ['name']
-    date_hierarchy = 'date'

@@ -377,7 +377,7 @@
                                     <a href="{% url 'patients:patient_detail' patient.pk %}" 
                                        class="text-primary-600 hover:text-primary-900">View</a>
                                     <a href="{% url 'patients:patient_update' patient.pk %}" 
-                                       class="text-indigo-600 hover:text-indigo-900">Edit</a>
+                                       class="text-gray-600 hover:text-gray-900">Edit</a>
                                     {% if user|has_permission:'appointments' %}
                                     <a href="{% url 'appointments:appointment_create' %}?patient={{ patient.pk }}" 
                                        class="text-green-600 hover:text-green-900">Book</a>

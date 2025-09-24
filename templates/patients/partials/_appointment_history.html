@@ -1,0 +1,153 @@
+<!-- templates/patients/partials/_appointment_history.html -->
+{% load user_tags %}
+<div class="bg-white shadow rounded-lg overflow-hidden">
+    <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
+        <h3 class="text-lg leading-6 font-medium text-gray-900">Appointment History</h3>
+        <p class="mt-1 text-sm text-gray-500">Complete appointment history for this patient</p>
+    </div>
+    <div class="px-4 py-5 sm:p-6">
+        {% if appointments %}
+            <div class="space-y-4">
+                {% for appointment in appointments %}
+                    <div class="border-l-4 {% if appointment.status == 'completed' %}border-green-400{% elif appointment.status == 'confirmed' %}border-blue-400{% elif appointment.status == 'pending' %}border-yellow-400{% else %}border-red-400{% endif %} pl-4">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <h4 class="text-sm font-medium text-gray-900">
+                                    {{ appointment.service.name }}
+                                </h4>
+                                <p class="text-sm text-gray-500">
+                                    {{ appointment.appointment_date|date:"M j, Y" }} {{ appointment.get_period_display }}
+                                    {% if appointment.assigned_dentist %}
+                                        - Dr. {{ appointment.assigned_dentist.get_full_name|default:appointment.assigned_dentist.username }}
+                                    {% endif %}
+                                </p>
+                                {% if appointment.reason %}
+                                    <p class="text-xs text-gray-400 mt-1">{{ appointment.reason|truncatewords:10 }}</p>
+                                {% endif %}
+                            </div>
+                            <div class="flex items-center space-x-2">
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                                    {% if appointment.status == 'completed' %}bg-green-100 text-green-800
+                                    {% elif appointment.status == 'confirmed' %}bg-blue-100 text-blue-800
+                                    {% elif appointment.status == 'pending' %}bg-yellow-100 text-yellow-800
+                                    {% else %}bg-red-100 text-red-800{% endif %}">
+                                    {{ appointment.get_status_display }}
+                                </span>
+                                {% if user|has_permission:'appointments' %}
+                                    <a href="{% url 'appointments:appointment_detail' appointment.pk %}" 
+                                       class="text-primary-600 hover:text-primary-700">
+                                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                                        </svg>
+                                    </a>
+                                {% endif %}
+                            </div>
+                        </div>
+                        
+                        <!-- Show quick preview of clinical notes if available -->
+                        {% if appointment.symptoms or appointment.procedures or appointment.diagnosis %}
+                            <div class="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                                {% if appointment.symptoms %}
+                                    <div class="text-xs">
+                                        <span class="font-medium text-gray-500">Symptoms:</span>
+                                        <span class="text-gray-600">{{ appointment.symptoms|truncatewords:5 }}</span>
+                                    </div>
+                                {% endif %}
+                                {% if appointment.procedures %}
+                                    <div class="text-xs">
+                                        <span class="font-medium text-gray-500">Procedures:</span>
+                                        <span class="text-gray-600">{{ appointment.procedures|truncatewords:5 }}</span>
+                                    </div>
+                                {% endif %}
+                                {% if appointment.diagnosis %}
+                                    <div class="text-xs">
+                                        <span class="font-medium text-gray-500">Diagnosis:</span>
+                                        <span class="text-gray-600">{{ appointment.diagnosis|truncatewords:5 }}</span>
+                                    </div>
+                                {% endif %}
+                            </div>
+                        {% endif %}
+
+                        <!-- Payment status for completed appointments -->
+                        {% if appointment.status == 'completed' %}
+                            {% for payment in appointment.payments.all %}
+                                <div class="mt-2 flex items-center justify-between text-xs">
+                                    <span class="text-gray-500">Payment Status:</span>
+                                    <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium
+                                        {% if payment.status == 'completed' %}bg-green-100 text-green-700
+                                        {% elif payment.status == 'partially_paid' %}bg-yellow-100 text-yellow-700
+                                        {% else %}bg-red-100 text-red-700{% endif %}">
+                                        {{ payment.get_status_display }}
+                                        {% if payment.outstanding_balance > 0 %}
+                                            - ₱{{ payment.outstanding_balance|floatformat:2 }} due
+                                        {% endif %}
+                                    </span>
+                                </div>
+                            {% empty %}
+                                {% if user|has_permission:'billing' %}
+                                    <div class="mt-2 text-xs">
+                                        <a href="{% url 'appointments:payment_create' appointment_pk=appointment.pk %}" 
+                                           class="text-primary-600 hover:text-primary-700">
+                                            Create payment record →
+                                        </a>
+                                    </div>
+                                {% endif %}
+                            {% endfor %}
+                        {% endif %}
+                    </div>
+                {% endfor %}
+                
+                {% if appointments.count > 10 %}
+                    <div class="text-center pt-4 border-t border-gray-200">
+                        <p class="text-sm text-gray-500">Showing recent 10 appointments</p>
+                        {% if user|has_permission:'appointments' %}
+                            <a href="{% url 'appointments:appointment_list' %}?patient={{ patient.pk }}" 
+                               class="mt-2 inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
+                                View All Appointments
+                            </a>
+                        {% endif %}
+                    </div>
+                {% endif %}
+            </div>
+        {% else %}
+            <div class="text-center py-8">
+                <svg class="mx-auto h-12 w-12 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                </svg>
+                <h4 class="text-sm font-medium text-gray-900 mb-1">No Appointments</h4>
+                <p class="text-sm text-gray-500">This patient has no appointment history.</p>
+                {% if user|has_permission:'appointments' %}
+                    <div class="mt-4">
+                        <a href="{% url 'appointments:appointment_create' %}?patient={{ patient.pk }}" 
+                           class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700">
+                            Book First Appointment
+                        </a>
+                    </div>
+                {% endif %}
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Handle appointment quick actions if needed
+    const appointmentLinks = document.querySelectorAll('[data-appointment-action]');
+    
+    appointmentLinks.forEach(function(link) {
+        link.addEventListener('click', function(e) {
+            // Add any appointment-specific JavaScript functionality here
+            // For example: quick status updates, notes preview, etc.
+        });
+    });
+    
+    // Add smooth scrolling for appointment navigation
+    const appointmentItems = document.querySelectorAll('.appointment-item');
+    appointmentItems.forEach(function(item) {
+        item.addEventListener('mouseenter', function() {
+            // Subtle hover effects handled by CSS
+        });
+    });
+});
+</script>

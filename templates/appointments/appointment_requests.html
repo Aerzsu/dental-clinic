@@ -20,11 +20,11 @@
         <div class="mt-4 sm:mt-0 flex space-x-3">
             <a href="{% url 'appointments:appointment_calendar' %}" 
                class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
-                📅 Calendar View
+                Calendar View
             </a>
             <a href="{% url 'appointments:appointment_create' %}" 
                class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
-                ➕ New Appointment
+                New Appointment
             </a>
         </div>
     </div>
@@ -47,10 +47,10 @@
                     </select>
                 </div>
                 <div>
-                    <select name="dentist" class="block w-full px-3 py-2 rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500">
+                    <select name="assigned_dentist" class="block w-full px-3 py-2 rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500">
                         <option value="">All Dentists</option>
                         {% for dentist in dentists %}
-                            <option value="{{ dentist.id }}" {% if filters.dentist == dentist.id|stringformat:"s" %}selected{% endif %}>
+                            <option value="{{ dentist.id }}" {% if filters.assigned_dentist == dentist.id|stringformat:"s" %}selected{% endif %}>
                                 Dr. {{ dentist.first_name }} {{ dentist.last_name }}
                             </option>
                         {% endfor %}
@@ -92,10 +92,10 @@
                                         </div>
                                         <div class="flex-1 min-w-0">
                                             <p class="text-sm font-medium text-gray-900 truncate">
-                                                {{ appointment.patient.full_name }}
+                                                {{ appointment.patient_name }}
                                             </p>
                                             <p class="text-sm text-gray-500 truncate">
-                                                {{ appointment.patient.email|default:appointment.patient.contact_number }}
+                                                {{ appointment.patient_email|default:appointment.patient_phone|default:"No contact provided" }}
                                             </p>
                                         </div>
                                     </div>
@@ -103,16 +103,26 @@
                                         <div class="flex items-center text-sm text-gray-500 space-x-4">
                                             <div class="flex items-center">
                                                 <span class="mr-1">📅</span>
-                                                {{ appointment.schedule.date|date:"M d, Y" }} at {{ appointment.schedule.start_time|time:"g:i A" }}
+                                                {{ appointment.appointment_date|date:"M d, Y" }} - {{ appointment.get_period_display }}
+                                                <span class="text-xs text-gray-400 ml-1">
+                                                    ({% if appointment.period == 'AM' %}8:00 AM - 12:00 PM{% else %}1:00 PM - 6:00 PM{% endif %})
+                                                </span>
                                             </div>
                                             <div class="flex items-center">
                                                 <span class="mr-1">🦷</span>
                                                 {{ appointment.service.name }}
                                             </div>
+                                            {% if appointment.assigned_dentist %}
                                             <div class="flex items-center">
                                                 <span class="mr-1">👨‍⚕️</span>
-                                                Dr. {{ appointment.dentist.first_name }} {{ appointment.dentist.last_name }}
+                                                Dr. {{ appointment.assigned_dentist.first_name }} {{ appointment.assigned_dentist.last_name }}
                                             </div>
+                                            {% else %}
+                                            <div class="flex items-center">
+                                                <span class="mr-1">👨‍⚕️</span>
+                                                <span class="italic text-gray-400">Unassigned</span>
+                                            </div>
+                                            {% endif %}
                                         </div>
                                         {% if appointment.reason %}
                                             <p class="mt-2 text-sm text-gray-600">

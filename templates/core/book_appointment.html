@@ -1,6 +1,6 @@
 {% extends "base_public.html" %}
 
-{% block title %}Book Appointment - KingJoy Appointment System{% endblock %}
+{% block title %}Book Appointment - Dental Clinic{% endblock %}
 
 {% block content %}
 <div class="container mx-auto px-4 py-8" x-data="appointmentBooking()">
@@ -10,11 +10,11 @@
             <span class="text-white text-2xl">🦷</span>
         </div>
         <h1 class="text-3xl font-bold text-gray-900 mb-2">Book Your Appointment</h1>
-        <p class="text-gray-600">Schedule your dental visit with our experienced team</p>
+        <p class="text-gray-600">Schedule your dental visit - simple 3-step process</p>
     </div>
 
     <!-- Progress Steps -->
-    <div class="max-w-4xl mx-auto mb-8">
+    <div class="max-w-3xl mx-auto mb-8">
         <div class="flex items-center justify-between">
             <div class="flex items-center" :class="step >= 1 ? 'text-primary-600' : 'text-gray-400'">
                 <div class="w-8 h-8 rounded-full border-2 flex items-center justify-center" 
@@ -29,7 +29,7 @@
                      :class="step >= 2 ? 'border-primary-600 bg-primary-600 text-white' : 'border-gray-300'">
                     <span class="text-sm font-medium">2</span>
                 </div>
-                <span class="ml-2 text-sm font-medium">Service & Dentist</span>
+                <span class="ml-2 text-sm font-medium">Service & Schedule</span>
             </div>
             <div class="flex-1 h-px mx-4" :class="step >= 3 ? 'bg-primary-600' : 'bg-gray-300'"></div>
             <div class="flex items-center" :class="step >= 3 ? 'text-primary-600' : 'text-gray-400'">
@@ -37,21 +37,13 @@
                      :class="step >= 3 ? 'border-primary-600 bg-primary-600 text-white' : 'border-gray-300'">
                     <span class="text-sm font-medium">3</span>
                 </div>
-                <span class="ml-2 text-sm font-medium">Date & Time</span>
-            </div>
-            <div class="flex-1 h-px mx-4" :class="step >= 4 ? 'bg-primary-600' : 'bg-gray-300'"></div>
-            <div class="flex items-center" :class="step >= 4 ? 'text-primary-600' : 'text-gray-400'">
-                <div class="w-8 h-8 rounded-full border-2 flex items-center justify-center" 
-                     :class="step >= 4 ? 'border-primary-600 bg-primary-600 text-white' : 'border-gray-300'">
-                    <span class="text-sm font-medium">4</span>
-                </div>
                 <span class="ml-2 text-sm font-medium">Confirm</span>
             </div>
         </div>
     </div>
 
     <!-- Error Banner -->
-    <div x-show="errorMessage" class="max-w-4xl mx-auto mb-6">
+    <div x-show="errorMessage" class="max-w-3xl mx-auto mb-6">
         <div class="bg-red-50 border-l-4 border-red-400 p-4">
             <div class="flex">
                 <div class="flex-shrink-0">
@@ -75,8 +67,8 @@
         </div>
     </div>
 
-    <!-- Warning Banner -->
-    <div class="max-w-4xl mx-auto mb-6">
+    <!-- Important Notice -->
+    <div class="max-w-3xl mx-auto mb-6">
         <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4">
             <div class="flex">
                 <div class="flex-shrink-0">
@@ -87,8 +79,8 @@
                 <div class="ml-3">
                     <p class="text-sm text-yellow-700">
                         <strong>Important:</strong> This is an appointment request, not a confirmed booking. 
-                        Cancellations must be made at least 24 hours in advance. 
-                        Appointments are available Monday to Saturday, 10:00 AM to 6:00 PM.
+                        You will receive confirmation within 24 hours. Appointments are available Monday to Saturday.
+                        Morning (AM): {{ am_period_display }} | Afternoon (PM): {{ pm_period_display }}
                     </p>
                 </div>
             </div>
@@ -96,7 +88,7 @@
     </div>
 
     <!-- Success Message -->
-    <div x-show="submitted" class="max-w-4xl mx-auto bg-white shadow-xl rounded-lg overflow-hidden mb-2">
+    <div x-show="submitted" class="max-w-3xl mx-auto bg-white shadow-xl rounded-lg overflow-hidden mb-2">
         <div class="p-8 text-center">
             <div class="w-16 h-16 bg-green-100 rounded-full mx-auto mb-4 flex items-center justify-center">
                 <svg class="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -104,10 +96,12 @@
                 </svg>
             </div>
             <h2 class="text-2xl font-bold text-gray-900 mb-2">Request Submitted!</h2>
-            <p class="text-gray-600 mb-4">Your appointment request has been successfully submitted. You will receive a confirmation via email or SMS within 24 hours.</p>
+            <p class="text-gray-600 mb-4">Your appointment request has been successfully submitted.</p>
             <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
                 <p class="text-sm text-blue-700">
                     <strong>Reference Number:</strong> <span x-text="referenceNumber"></span><br>
+                    <strong>Date:</strong> <span x-text="formatDate(form.appointment_date)"></span><br>
+                    <strong>Period:</strong> <span x-text="form.period === 'AM' ? 'Morning' : 'Afternoon'"></span><br>
                     Please keep this reference number for your records.
                 </p>
             </div>
@@ -118,9 +112,10 @@
         </div>
     </div>
 
-    <form class="max-w-4xl mx-auto bg-white shadow-xl rounded-lg overflow-hidden" @submit.prevent="submitForm">
-        <!-- Step 1: Patient Type & Info -->
-        <div class="form-step" :class="step === 1 ? 'active' : ''" x-show="step === 1">
+    <!-- Booking Form -->
+    <form x-show="!submitted" class="max-w-3xl mx-auto bg-white shadow-xl rounded-lg overflow-hidden" @submit.prevent="submitForm">
+        <!-- Step 1: Patient Information -->
+        <div x-show="step === 1">
             <div class="p-8">
                 <h2 class="text-2xl font-bold text-gray-900 mb-6">Patient Information</h2>
                 
@@ -165,7 +160,7 @@
                         <input type="text" x-model="form.patient_identifier" 
                                :class="['w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500', errors.patient_identifier ? 'border-red-300' : 'border-gray-300']"
                                placeholder="patient@example.com or +639123456789"
-                               @input="clearErrors('patient_identifier')">
+                               @input="clearErrors('patient_identifier'); searchPatient()">
                         <p class="mt-1 text-sm text-gray-500">Enter your email or phone number to find your record</p>
                         <p x-show="errors.patient_identifier" class="mt-1 text-sm text-red-600" x-text="errors.patient_identifier"></p>
                     </div>
@@ -181,9 +176,6 @@
                             </div>
                         </div>
                     </div>
-                    <div x-show="form.patient_identifier && !patientFound && !searchingPatient" class="p-4 bg-red-50 border border-red-200 rounded-md">
-                        <p class="text-sm text-red-700">No patient record found with this information. Please check your details or register as a new patient.</p>
-                    </div>
                 </div>
 
                 <!-- New Patient Form -->
@@ -193,16 +185,14 @@
                             <label class="block text-sm font-medium text-gray-700 mb-2">First Name *</label>
                             <input type="text" x-model="form.first_name" 
                                    :class="['w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500', errors.first_name ? 'border-red-300' : 'border-gray-300']"
-                                   @input="clearErrors('first_name')"
-                                   @blur="validateName('first_name')">
+                                   @input="clearErrors('first_name')">
                             <p x-show="errors.first_name" class="mt-1 text-sm text-red-600" x-text="errors.first_name"></p>
                         </div>
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-2">Last Name *</label>
                             <input type="text" x-model="form.last_name" 
                                    :class="['w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500', errors.last_name ? 'border-red-300' : 'border-gray-300']"
-                                   @input="clearErrors('last_name')"
-                                   @blur="validateName('last_name')">
+                                   @input="clearErrors('last_name')">
                             <p x-show="errors.last_name" class="mt-1 text-sm text-red-600" x-text="errors.last_name"></p>
                         </div>
                     </div>
@@ -211,8 +201,7 @@
                             <label class="block text-sm font-medium text-gray-700 mb-2">Email Address *</label>
                             <input type="email" x-model="form.email" 
                                    :class="['w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500', errors.email ? 'border-red-300' : 'border-gray-300']"
-                                   @input="clearErrors('email')"
-                                   @blur="validateEmail()">
+                                   @input="clearErrors('email')">
                             <p x-show="errors.email" class="mt-1 text-sm text-red-600" x-text="errors.email"></p>
                         </div>
                         <div>
@@ -220,9 +209,8 @@
                             <input type="tel" x-model="form.contact_number"
                                    :class="['w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500', errors.contact_number ? 'border-red-300' : 'border-gray-300']"
                                    placeholder="+639123456789"
-                                   @input="clearErrors('contact_number')"
-                                   @blur="validateContactNumber()">
-                            <p class="mt-1 text-sm text-gray-500">Optional: Provide for SMS updates</p>
+                                   @input="clearErrors('contact_number')">
+                            <p class="mt-1 text-sm text-gray-500">Optional: For SMS updates</p>
                             <p x-show="errors.contact_number" class="mt-1 text-sm text-red-600" x-text="errors.contact_number"></p>
                         </div>
                     </div>
@@ -237,18 +225,18 @@
             <div class="px-8 py-4 bg-gray-50 flex justify-end">
                 <button type="button" @click="nextStep()" 
                         class="px-6 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500">
-                    Next: Service & Dentist
+                    Next: Service & Schedule
                 </button>
             </div>
         </div>
 
-        <!-- Step 2: Service & Dentist Selection -->
-        <div class="form-step" :class="step === 2 ? 'active' : ''" x-show="step === 2">
+        <!-- Step 2: Service & Date/Period Selection -->
+        <div x-show="step === 2">
             <div class="p-8">
-                <h2 class="text-2xl font-bold text-gray-900 mb-6">Service & Dentist Selection</h2>
+                <h2 class="text-2xl font-bold text-gray-900 mb-6">Service & Schedule</h2>
                 
                 <!-- Service Selection -->
-                <div class="mb-6">
+                <div class="mb-8">
                     <label class="block text-sm font-medium text-gray-700 mb-3">Select Service *</label>
                     <select x-model="form.service" @change="updateServiceInfo(); clearErrors('service')" 
                             :class="['w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500', errors.service ? 'border-red-300' : 'border-gray-300']">
@@ -263,34 +251,95 @@
                     <div x-show="selectedService" class="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
                         <h4 class="font-medium text-blue-900 mb-2">Service Details</h4>
                         <div class="text-sm text-blue-700 space-y-1">
-                            <p><strong>Duration:</strong> <span x-text="selectedService?.duration"></span></p>
                             <p><strong>Price Range:</strong> <span x-text="selectedService?.price_range"></span></p>
                             <p><strong>Description:</strong> <span x-text="selectedService?.description"></span></p>
                         </div>
                     </div>
                 </div>
 
-                <!-- Dentist Selection -->
-                <div class="mb-6">
-                    <label class="block text-sm font-medium text-gray-700 mb-3">Preferred Dentist *</label>
-                    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                        <template x-for="dentist in dentists" :key="dentist.id">
-                            <label class="relative">
-                                <input type="radio" x-model="form.dentist" :value="dentist.id" class="sr-only" @change="clearErrors('dentist')">
-                                <div class="p-4 border rounded-lg cursor-pointer transition-all" 
-                                     :class="form.dentist == dentist.id ? 'border-primary-600 bg-primary-50 ring-2 ring-primary-600' : 'border-gray-300 hover:border-gray-400'">
-                                    <div class="text-center">
-                                        <div class="w-12 h-12 bg-primary-600 rounded-full mx-auto mb-2 flex items-center justify-center">
-                                            <span class="text-white font-medium" x-text="dentist.initials"></span>
-                                        </div>
-                                        <h3 class="font-medium text-gray-900" x-text="dentist.name"></h3>
-                                        <p class="text-sm text-gray-500" x-text="dentist.specialization || 'General Dentist'"></p>
+                <!-- Date Selection -->
+                <div class="mb-8">
+                    <label class="block text-sm font-medium text-gray-700 mb-3">Select Date *</label>
+                    <div class="bg-white border border-gray-200 rounded-lg p-4">
+                        <div class="flex items-center justify-between mb-4">
+                            <button type="button" @click="changeMonth(-1)" 
+                                    class="p-2 hover:bg-gray-100 rounded-md">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                                </svg>
+                            </button>
+                            <h4 class="font-medium text-gray-900" x-text="currentMonthName + ' ' + currentYear"></h4>
+                            <button type="button" @click="changeMonth(1)" 
+                                    class="p-2 hover:bg-gray-100 rounded-md">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                                </svg>
+                            </button>
+                        </div>
+                        <div class="grid grid-cols-7 gap-1 mb-2">
+                            <div class="text-center text-xs font-medium text-gray-500 py-2">Mon</div>
+                            <div class="text-center text-xs font-medium text-gray-500 py-2">Tue</div>
+                            <div class="text-center text-xs font-medium text-gray-500 py-2">Wed</div>
+                            <div class="text-center text-xs font-medium text-gray-500 py-2">Thu</div>
+                            <div class="text-center text-xs font-medium text-gray-500 py-2">Fri</div>
+                            <div class="text-center text-xs font-medium text-gray-500 py-2">Sat</div>
+                            <div class="text-center text-xs font-medium text-gray-500 py-2">Sun</div>
+                        </div>
+                        <div class="grid grid-cols-7 gap-1">
+                            <template x-for="day in calendarDays" :key="day.date || day.index">
+                                <button type="button" 
+                                        class="calendar-day text-sm rounded-md border min-h-[40px] flex items-center justify-center" 
+                                        :class="getDateClasses(day)"
+                                        @click="day.isEmpty || !day.available ? null : selectDate(day)"
+                                        :disabled="day.isEmpty || !day.available"
+                                        x-text="day.day">
+                                </button>
+                            </template>
+                        </div>
+                    </div>
+                    <p x-show="errors.appointment_date" class="mt-2 text-sm text-red-600" x-text="errors.appointment_date"></p>
+                </div>
+
+                <!-- Period Selection (AM/PM) -->
+                <div x-show="form.appointment_date" class="mb-6">
+                    <label class="block text-sm font-medium text-gray-700 mb-3">Select Time Period *</label>
+                    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <label class="relative">
+                            <input type="radio" x-model="form.period" value="AM" class="sr-only" @change="clearErrors('period')">
+                            <div class="p-4 border rounded-lg cursor-pointer transition-all" 
+                                 :class="form.period === 'AM' ? 'border-primary-600 bg-primary-50 ring-2 ring-primary-600' : (availableSlots.AM > 0 ? 'border-gray-300 hover:border-gray-400' : 'border-gray-200 bg-gray-50 cursor-not-allowed opacity-50')">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <h3 class="text-lg font-medium text-gray-900">Morning (AM)</h3>
+                                        <p class="text-sm text-gray-500">{{ am_period_display }}</p>
+                                    </div>
+                                    <div class="text-right">
+                                        <p class="text-sm font-medium" :class="availableSlots.AM > 0 ? 'text-green-600' : 'text-red-600'">
+                                            <span x-text="availableSlots.AM"></span> slots available
+                                        </p>
                                     </div>
                                 </div>
-                            </label>
-                        </template>
+                            </div>
+                        </label>
+                        <label class="relative">
+                            <input type="radio" x-model="form.period" value="PM" class="sr-only" @change="clearErrors('period')">
+                            <div class="p-4 border rounded-lg cursor-pointer transition-all" 
+                                 :class="form.period === 'PM' ? 'border-primary-600 bg-primary-50 ring-2 ring-primary-600' : (availableSlots.PM > 0 ? 'border-gray-300 hover:border-gray-400' : 'border-gray-200 bg-gray-50 cursor-not-allowed opacity-50')">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <h3 class="text-lg font-medium text-gray-900">Afternoon (PM)</h3>
+                                        <p class="text-sm text-gray-500">{{ pm_period_display }}</p>
+                                    </div>
+                                    <div class="text-right">
+                                        <p class="text-sm font-medium" :class="availableSlots.PM > 0 ? 'text-green-600' : 'text-red-600'">
+                                            <span x-text="availableSlots.PM"></span> slots available
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </label>
                     </div>
-                    <p x-show="errors.dentist" class="mt-2 text-sm text-red-600" x-text="errors.dentist"></p>
+                    <p x-show="errors.period" class="mt-2 text-sm text-red-600" x-text="errors.period"></p>
                 </div>
 
                 <!-- Reason (Optional) -->
@@ -309,104 +358,13 @@
                 </button>
                 <button type="button" @click="nextStep()" 
                         class="px-6 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500">
-                    Next: Select Date & Time
-                </button>
-            </div>
-        </div>
-
-        <!-- Step 3: Date & Time Selection -->
-        <div class="form-step" :class="step === 3 ? 'active' : ''" x-show="step === 3">
-            <div class="p-8">
-                <h2 class="text-2xl font-bold text-gray-900 mb-6">Select Date & Time</h2>
-                
-                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                    <!-- Calendar -->
-                    <div>
-                        <h3 class="text-lg font-medium text-gray-900 mb-4">Available Dates</h3>
-                        <div class="bg-white border border-gray-200 rounded-lg p-4">
-                            <div class="flex items-center justify-between mb-4">
-                                <button type="button" @click="changeMonth(-1)" 
-                                        class="p-2 hover:bg-gray-100 rounded-md">
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
-                                    </svg>
-                                </button>
-                                <h4 class="font-medium text-gray-900" x-text="currentMonthName + ' ' + currentYear"></h4>
-                                <button type="button" @click="changeMonth(1)" 
-                                        class="p-2 hover:bg-gray-100 rounded-md">
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
-                                    </svg>
-                                </button>
-                            </div>
-                            <div class="grid grid-cols-7 gap-1 mb-2">
-                                <div class="text-center text-xs font-medium text-gray-500 py-2">Mon</div>
-                                <div class="text-center text-xs font-medium text-gray-500 py-2">Tue</div>
-                                <div class="text-center text-xs font-medium text-gray-500 py-2">Wed</div>
-                                <div class="text-center text-xs font-medium text-gray-500 py-2">Thu</div>
-                                <div class="text-center text-xs font-medium text-gray-500 py-2">Fri</div>
-                                <div class="text-center text-xs font-medium text-gray-500 py-2">Sat</div>
-                                <div class="text-center text-xs font-medium text-gray-500 py-2">Sun</div>
-                            </div>
-                            <div class="grid grid-cols-7 gap-1">
-                                <template x-for="day in calendarDays" :key="day.date">
-                                    <button type="button" 
-                                            class="calendar-day text-sm rounded-md border min-h-[40px] flex items-center justify-center" 
-                                            :class="getDateClasses(day)"
-                                            @click="day.isEmpty ? null : selectDate(day)"
-                                            :disabled="day.isEmpty || !day.available"
-                                            x-text="day.day">
-                                    </button>
-                                </template>
-                            </div>
-                        </div>
-                        <p x-show="errors.selected_date" class="mt-2 text-sm text-red-600" x-text="errors.selected_date"></p>
-                    </div>
-
-                    <!-- Time Slots -->
-                    <div>
-                        <h3 class="text-lg font-medium text-gray-900 mb-4">Available Times</h3>
-                        <div x-show="!form.selected_date" class="text-center text-gray-500 py-8">
-                            <div class="text-4xl mb-2">📅</div>
-                            <p>Please select a date first</p>
-                        </div>
-                        <div x-show="form.selected_date && loadingTimes" class="text-center text-gray-500 py-8">
-                            <div class="animate-spin w-8 h-8 border-4 border-primary-600 border-t-transparent rounded-full mx-auto mb-2"></div>
-                            <p>Loading available times...</p>
-                        </div>
-                        <div x-show="form.selected_date && !loadingTimes && availableTimes.length === 0" class="text-center text-gray-500 py-8">
-                            <div class="text-4xl mb-2">⏰</div>
-                            <p>No available times for selected date</p>
-                        </div>
-                        <div x-show="form.selected_date && !loadingTimes && availableTimes.length > 0" class="grid grid-cols-2 gap-2">
-                            <template x-for="time in availableTimes" :key="time">
-                                <button type="button" 
-                                        class="time-slot p-3 border rounded-lg text-sm font-medium transition-all"
-                                        :class="form.selected_time === time ? 'selected bg-primary-600 text-white' : 'border-gray-300 hover:border-primary-600'"
-                                        @click="form.selected_time = time; clearErrors('selected_time')"
-                                        x-text="formatTime(time)">
-                                </button>
-                            </template>
-                        </div>
-                        <p x-show="errors.selected_time" class="mt-2 text-sm text-red-600" x-text="errors.selected_time"></p>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="px-8 py-4 bg-gray-50 flex justify-between">
-                <button type="button" @click="prevStep()" 
-                        class="px-6 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500">
-                    Back
-                </button>
-                <button type="button" @click="nextStep()" 
-                        class="px-6 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500">
                     Next: Review & Confirm
                 </button>
             </div>
         </div>
 
-        <!-- Step 4: Confirmation -->
-        <div class="form-step" :class="step === 4 ? 'active' : ''" x-show="step === 4">
+        <!-- Step 3: Confirmation -->
+        <div x-show="step === 3">
             <div class="p-8">
                 <h2 class="text-2xl font-bold text-gray-900 mb-6">Review & Confirm</h2>
                 
@@ -422,16 +380,12 @@
                             <span class="font-medium" x-text="getSelectedServiceName()"></span>
                         </div>
                         <div class="flex justify-between">
-                            <span class="text-gray-600">Dentist:</span>
-                            <span class="font-medium" x-text="getSelectedDentistName()"></span>
-                        </div>
-                        <div class="flex justify-between">
                             <span class="text-gray-600">Date:</span>
-                            <span class="font-medium" x-text="formatDate(form.selected_date)"></span>
+                            <span class="font-medium" x-text="formatDate(form.appointment_date)"></span>
                         </div>
                         <div class="flex justify-between">
-                            <span class="text-gray-600">Time:</span>
-                            <span class="font-medium" x-text="formatTime(form.selected_time)"></span>
+                            <span class="text-gray-600">Period:</span>
+                            <span class="font-medium" x-text="form.period === 'AM' ? 'Morning ({{ am_period_display }})' : 'Afternoon ({{ pm_period_display }})'"></span>
                         </div>
                         <div x-show="form.reason" class="flex justify-between">
                             <span class="text-gray-600">Reason:</span>
@@ -477,12 +431,6 @@
 </div>
 
 <style>
-    .calendar-day {
-        min-height: 40px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
     .calendar-day.unavailable {
         opacity: 0.3;
         cursor: not-allowed;
@@ -494,28 +442,12 @@
         background-color: #3b82f6;
         color: white;
     }
-    .time-slot {
-        transition: all 0.2s;
-    }
-    .time-slot:hover {
-        transform: translateY(-1px);
-    }
-    .time-slot.selected {
-        background-color: #3b82f6;
-        color: white;
-    }
-    .form-step {
-        display: none;
-    }
-    .form-step.active {
-        display: block;
-    }
 </style>
 
+<!-- Updated JavaScript section with correct URL references -->
 <script>
     // Get Django data
     const servicesData = {{ services_json|safe }};
-    const dentistsData = {{ dentists_json|safe }};
     const csrfToken = '{{ csrf_token }}';
     
     function appointmentBooking() {
@@ -523,23 +455,17 @@
             step: 1,
             submitting: false,
             submitted: false,
-            loadingTimes: false,
             patientFound: false,
-            searchingPatient: false,
             referenceNumber: '',
             errorMessage: '',
-            
-            // Simple timeout variables
-            searchTimeout: null,
             
             // Validation errors
             errors: {},
             
-            // Initialize with Django data
+            // Services data from Django
             services: servicesData || [],
-            dentists: dentistsData || [],
             
-            // Form data
+            // Form data - SIMPLIFIED (no dentist)
             form: {
                 patient_type: '',
                 patient_identifier: '',
@@ -549,10 +475,9 @@
                 contact_number: '',
                 address: '',
                 service: '',
-                dentist: '',
+                appointment_date: '',
+                period: '',
                 reason: '',
-                selected_date: '',
-                selected_time: '',
                 agreed_to_terms: false
             },
             
@@ -563,42 +488,18 @@
             // Data
             foundPatient: {},
             selectedService: null,
-            availableTimes: [],
             calendarDays: [],
+            availableSlots: { AM: 0, PM: 0 },
+            slotData: {},
             
-            // SIMPLIFIED: Init method
             init() {
-                console.log('Initializing appointment booking');
-                console.log('Services:', this.services);
-                console.log('Dentists:', this.dentists);
-                
                 this.generateCalendar();
                 
-                // Simple watchers
-                this.$watch('form.patient_identifier', (value) => {
-                    if (this.searchTimeout) clearTimeout(this.searchTimeout);
-                    this.searchTimeout = setTimeout(() => {
-                        this.searchPatient();
-                    }, 500);
-                });
-                
-                this.$watch('form.selected_date', (value) => {
-                    console.log('Date changed to:', value);
-                    this.form.selected_time = '';
-                    this.loadAvailableTimes();
-                });
-                
-                this.$watch('form.dentist', () => {
-                    console.log('Dentist changed to:', this.form.dentist);
-                    this.form.selected_time = '';
-                    this.loadAvailableTimes();
-                });
-                
-                this.$watch('form.service', () => {
-                    console.log('Service changed to:', this.form.service);
-                    this.updateServiceInfo();
-                    this.form.selected_time = '';
-                    this.loadAvailableTimes();
+                // Watch for date changes to load slot availability
+                this.$watch('form.appointment_date', (value) => {
+                    if (value) {
+                        this.loadSlotAvailability();
+                    }
                 });
             },
             
@@ -616,48 +517,6 @@
                 this.errorMessage = '';
             },
             
-            validateName(field) {
-                const value = this.form[field];
-                if (!value || !value.trim()) {
-                    return;
-                }
-                
-                const namePattern = /^[a-zA-Z\s\-']+$/;
-                if (!namePattern.test(value)) {
-                    this.errors[field] = 'Name should only contain letters, spaces, hyphens, and apostrophes';
-                } else {
-                    delete this.errors[field];
-                }
-            },
-            
-            validateEmail() {
-                const email = this.form.email;
-                if (!email || !email.trim()) {
-                    return;
-                }
-                
-                const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-                if (!emailPattern.test(email)) {
-                    this.errors.email = 'Please enter a valid email address';
-                } else {
-                    delete this.errors.email;
-                }
-            },
-            
-            validateContactNumber() {
-                const contact = this.form.contact_number;
-                if (!contact || !contact.trim()) {
-                    return;
-                }
-                
-                const phonePattern = /^(\+63|0)?9\d{9}$/;
-                if (!phonePattern.test(contact.replace(/\s/g, ''))) {
-                    this.errors.contact_number = 'Please enter a valid Philippine mobile number (e.g., +639123456789)';
-                } else {
-                    delete this.errors.contact_number;
-                }
-            },
-            
             validateStep() {
                 this.clearErrors();
                 let isValid = true;
@@ -670,7 +529,7 @@
                         }
                         
                         if (this.form.patient_type === 'existing') {
-                            if (!this.form.patient_identifier || !this.form.patient_identifier.trim()) {
+                            if (!this.form.patient_identifier?.trim()) {
                                 this.errors.patient_identifier = 'Please enter your email or contact number';
                                 isValid = false;
                             } else if (!this.patientFound) {
@@ -678,33 +537,25 @@
                                 isValid = false;
                             }
                         } else if (this.form.patient_type === 'new') {
-                            if (!this.form.first_name || !this.form.first_name.trim()) {
-                                this.errors.first_name = 'First name is required';
-                                isValid = false;
-                            } else {
-                                this.validateName('first_name');
-                                if (this.errors.first_name) isValid = false;
+                            const requiredFields = ['first_name', 'last_name', 'email'];
+                            for (const field of requiredFields) {
+                                if (!this.form[field]?.trim()) {
+                                    const label = field.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
+                                    this.errors[field] = `${label} is required`;
+                                    isValid = false;
+                                }
                             }
                             
-                            if (!this.form.last_name || !this.form.last_name.trim()) {
-                                this.errors.last_name = 'Last name is required';
+                            // Validate email format
+                            if (this.form.email && !this.isValidEmail(this.form.email)) {
+                                this.errors.email = 'Please enter a valid email address';
                                 isValid = false;
-                            } else {
-                                this.validateName('last_name');
-                                if (this.errors.last_name) isValid = false;
                             }
                             
-                            if (!this.form.email || !this.form.email.trim()) {
-                                this.errors.email = 'Email address is required';
+                            // Validate phone number if provided
+                            if (this.form.contact_number && !this.isValidPhoneNumber(this.form.contact_number)) {
+                                this.errors.contact_number = 'Please enter a valid Philippine mobile number';
                                 isValid = false;
-                            } else {
-                                this.validateEmail();
-                                if (this.errors.email) isValid = false;
-                            }
-                            
-                            if (this.form.contact_number && this.form.contact_number.trim()) {
-                                this.validateContactNumber();
-                                if (this.errors.contact_number) isValid = false;
                             }
                         }
                         break;
@@ -714,38 +565,28 @@
                             this.errors.service = 'Please select a service';
                             isValid = false;
                         }
-                        if (!this.form.dentist) {
-                            this.errors.dentist = 'Please select a dentist';
+                        if (!this.form.appointment_date) {
+                            this.errors.appointment_date = 'Please select an appointment date';
+                            isValid = false;
+                        }
+                        if (!this.form.period) {
+                            this.errors.period = 'Please select a time period (AM or PM)';
+                            isValid = false;
+                        }
+                        
+                        // Validate slot availability
+                        if (this.form.period && this.availableSlots[this.form.period] <= 0) {
+                            this.errors.period = `No ${this.form.period} slots available for selected date`;
                             isValid = false;
                         }
                         break;
                         
                     case 3:
-                        if (!this.form.selected_date) {
-                            this.errors.selected_date = 'Please select an appointment date';
-                            isValid = false;
-                        }
-                        if (!this.form.selected_time) {
-                            this.errors.selected_time = 'Please select an appointment time';
-                            isValid = false;
-                        }
-                        break;
-                        
-                    case 4:
                         if (!this.form.agreed_to_terms) {
                             this.errors.agreed_to_terms = 'Please agree to the terms and conditions';
                             isValid = false;
                         }
                         break;
-                }
-                
-                if (!isValid) {
-                    this.$nextTick(() => {
-                        const firstError = document.querySelector('.text-red-600');
-                        if (firstError) {
-                            firstError.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        }
-                    });
                 }
                 
                 return isValid;
@@ -754,10 +595,6 @@
             nextStep() {
                 if (this.validateStep()) {
                     this.step++;
-                    if (this.step === 3) {
-                        this.generateCalendar();
-                        this.loadAvailableTimes();
-                    }
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                 }
             },
@@ -768,23 +605,21 @@
                 window.scrollTo({ top: 0, behavior: 'smooth' });
             },
             
-            // SIMPLIFIED: Direct patient search
             async searchPatient() {
                 if (!this.form.patient_identifier || this.form.patient_identifier.length < 3) {
                     this.patientFound = false;
                     return;
                 }
                 
-                this.searchingPatient = true;
-                this.clearErrors('patient_identifier');
-                
                 try {
-                    const response = await fetch(`{% url "appointments:find_patient_api" %}?identifier=${encodeURIComponent(this.form.patient_identifier)}`);
+                    // Use the correct URL pattern from appointments app
+                    const response = await fetch(`/appointments/api/find-patient/?identifier=${encodeURIComponent(this.form.patient_identifier)}`);
                     const data = await response.json();
                     
                     if (data.found) {
                         this.patientFound = true;
                         this.foundPatient = data.patient;
+                        this.clearErrors('patient_identifier');
                     } else {
                         this.patientFound = false;
                         this.foundPatient = {};
@@ -792,229 +627,334 @@
                 } catch (error) {
                     console.error('Error searching patient:', error);
                     this.patientFound = false;
-                    this.errors.patient_identifier = 'Error searching for patient. Please try again.';
-                } finally {
-                    this.searchingPatient = false;
                 }
             },
             
             updateServiceInfo() {
-                this.selectedService = this.services.find(s => s.id == this.form.service) || null;
-                console.log('Selected service updated:', this.selectedService);
+                if (this.form.service) {
+                    this.selectedService = this.services.find(s => s.id == this.form.service);
+                } else {
+                    this.selectedService = null;
+                }
+            },
+            
+            // Calendar functions
+            generateCalendar() {
+                console.log('=== CALENDAR DEBUG START ===');
+                console.log('Generating calendar for:', this.currentYear, this.currentMonth + 1);
+                
+                // Create first day of current month
+                const firstDay = new Date(this.currentYear, this.currentMonth, 1);
+                console.log('First day of month:', firstDay.toString());
+                console.log('First day weekday:', firstDay.getDay());
+                
+                // Calculate how many days to go back to get to Monday
+                const firstDayOfWeek = firstDay.getDay();
+                const daysToGoBack = firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1;
+                
+                console.log('Days to go back to Monday:', daysToGoBack);
+                
+                this.calendarDays = [];
+                
+                // Generate 42 days (6 weeks × 7 days)
+                for (let i = 0; i < 42; i++) {
+                    // Calculate the date for this calendar position
+                    // Start from (1 - daysToGoBack) and add i days
+                    const dayOfMonth = 1 - daysToGoBack + i;
+                    const currentDate = new Date(this.currentYear, this.currentMonth, dayOfMonth);
+                    
+                    const dayData = {
+                        date: this.formatDateForAPI(currentDate),
+                        day: currentDate.getDate(), // This will now be correct
+                        isEmpty: currentDate.getMonth() !== this.currentMonth,
+                        available: false,
+                        isToday: this.isToday(currentDate),
+                        isSelected: this.form.appointment_date === this.formatDateForAPI(currentDate)
+                    };
+                    
+                    // Check if date is available (basic rules)
+                    if (this.isDateAvailable(currentDate)) {
+                        dayData.available = true;
+                    }
+                    
+                    // Debug specific positions
+                    if (i >= 19 && i <= 25) {
+                        const dayName = currentDate.toLocaleDateString('en-US', { weekday: 'long' });
+                        const expectedDayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+                        const expectedDay = expectedDayNames[i % 7];
+                        console.log(`Position ${i}: Date ${dayData.date} shows day ${dayData.day}, is ${dayName}, expected ${expectedDay}`);
+                        
+                        // Additional verification
+                        console.log(`  -> Date object: ${currentDate.toString()}`);
+                        console.log(`  -> getDate(): ${currentDate.getDate()}, getMonth(): ${currentDate.getMonth()}, isEmpty: ${dayData.isEmpty}`);
+                    }
+                    
+                    this.calendarDays.push(dayData);
+                }
+                
+                console.log('Generated', this.calendarDays.length, 'calendar days');
+                console.log('=== CALENDAR DEBUG END ===');
+                
+                // Load slot availability for the month
+                this.loadMonthSlotAvailability();
+            },
+
+            // Also add this debugging function to check what day is at what position
+            getCalendarPositionInfo(dayIndex) {
+                const day = this.calendarDays[dayIndex];
+                if (!day) return 'Invalid index';
+                
+                const date = new Date(day.date);
+                const dayName = date.toLocaleDateString('en-US', { weekday: 'long' });
+                const expectedDayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+                const expectedDay = expectedDayNames[dayIndex % 7];
+                
+                return `Position ${dayIndex}: ${day.date} is ${dayName} (expected ${expectedDay})`;
             },
             
             changeMonth(direction) {
                 this.currentMonth += direction;
-                if (this.currentMonth > 11) {
-                    this.currentMonth = 0;
-                    this.currentYear++;
-                } else if (this.currentMonth < 0) {
+                if (this.currentMonth < 0) {
                     this.currentMonth = 11;
                     this.currentYear--;
+                } else if (this.currentMonth > 11) {
+                    this.currentMonth = 0;
+                    this.currentYear++;
                 }
                 this.generateCalendar();
             },
             
-            generateCalendar() {
-                const firstDay = new Date(this.currentYear, this.currentMonth, 1);
-                const lastDay = new Date(this.currentYear, this.currentMonth + 1, 0);
-                const firstDayOfWeek = (firstDay.getDay() + 6) % 7;
-                const daysInMonth = lastDay.getDate();
-                
-                this.calendarDays = [];
-                
-                // Add empty cells for days before the first day
-                for (let i = 0; i < firstDayOfWeek; i++) {
-                    this.calendarDays.push({ 
-                        day: '', 
-                        date: `empty-${this.currentYear}-${this.currentMonth}-${i}`,
-                        available: false,
-                        isEmpty: true
-                    });
-                }
-                
-                // Add days of the month
+            isToday(date) {
+                const today = new Date();
+                return date.toDateString() === today.toDateString();
+            },
+            
+            isDateAvailable(date) {
                 const today = new Date();
                 today.setHours(0, 0, 0, 0);
                 
-                for (let day = 1; day <= daysInMonth; day++) {
-                    const date = new Date(this.currentYear, this.currentMonth, day);
-                    const year = date.getFullYear();
-                    const month = String(date.getMonth() + 1).padStart(2, '0');
-                    const dayStr = String(date.getDate()).padStart(2, '0');
-                    const dateStr = `${year}-${month}-${dayStr}`;
-                    
-                    // Check availability
-                    let available = true;
-                    
-                    // Past dates not available (including today)
-                    if (date <= today) available = false;
-                    
-                    // Sundays not available
-                    if (date.getDay() === 0) available = false;
-                    
-                    const isToday = dateStr === this.getTodayDateString();
-                    const isSelected = dateStr === this.form.selected_date;
-                    
-                    this.calendarDays.push({
-                        day: day,
-                        date: dateStr,
-                        available: available,
-                        isToday: isToday,
-                        isSelected: isSelected,
-                        isEmpty: false
-                    });
+                // Create a comparable date without time
+                const checkDate = new Date(date);
+                checkDate.setHours(0, 0, 0, 0);
+                
+                // Must be future date (tomorrow or later)
+                if (checkDate <= today) {
+                    console.log(`Date ${this.formatDateForAPI(date)} is not available: past or today`);
+                    return false;
                 }
+                
+                // No Sundays (0 = Sunday)
+                if (date.getDay() === 0) {
+                    console.log(`Date ${this.formatDateForAPI(date)} is not available: Sunday`);
+                    return false;
+                }
+                
+                console.log(`Date ${this.formatDateForAPI(date)} is available`);
+                return true;
             },
             
-            getTodayDateString() {
-                const today = new Date();
-                const year = today.getFullYear();
-                const month = String(today.getMonth() + 1).padStart(2, '0');
-                const day = String(today.getDate()).padStart(2, '0');
-                return `${year}-${month}-${day}`;
+            selectDate(day) {
+                console.log('=== SELECT DATE DEBUG ===');
+                console.log('Attempting to select:', day);
+                console.log('Day available:', day.available);
+                console.log('Day hasSlots:', day.hasSlots);
+                console.log('Day AM slots:', day.amSlots);
+                console.log('Day PM slots:', day.pmSlots);
+                
+                if (!day.available || day.isEmpty) {
+                    console.log('Cannot select: day not available or empty');
+                    return;
+                }
+                
+                // Additional check for slot availability
+                if (day.hasSlots === false || (day.amSlots === 0 && day.pmSlots === 0)) {
+                    console.log('Cannot select: no slots available for this date');
+                    this.errorMessage = `No appointment slots available for ${this.formatDate(day.date)}`;
+                    return;
+                }
+                
+                const selectedDate = new Date(day.date);
+                const dayName = selectedDate.toLocaleDateString('en-US', { weekday: 'long' });
+                console.log(`Selecting ${day.date} (${dayName})`);
+                
+                this.form.appointment_date = day.date;
+                this.form.period = ''; // Reset period selection
+                
+                // Load specific slot availability for this date
+                this.loadSlotAvailability();
+                
+                this.generateCalendar(); // Refresh to show selection
             },
             
             getDateClasses(day) {
                 let classes = [];
                 
-                if (!day.available) {
-                    classes.push('unavailable', 'text-gray-300', 'cursor-not-allowed');
+                if (day.isEmpty) {
+                    classes.push('text-gray-300', 'cursor-not-allowed');
+                } else if (!day.available) {
+                    // Day is not available (either past date, Sunday, or no slots)
+                    classes.push('text-gray-400', 'bg-gray-100', 'cursor-not-allowed', 'unavailable');
                 } else {
-                    classes.push('available', 'hover:bg-blue-100', 'cursor-pointer');
-                }
-                
-                if (day.isSelected) {
-                    classes.push('selected', 'bg-primary-600', 'text-white');
-                } else if (day.isToday) {
-                    classes.push('border-primary-600', 'text-primary-600');
-                } else {
-                    classes.push('border-gray-200');
+                    // Day is available
+                    classes.push('text-gray-900', 'hover:bg-blue-100', 'cursor-pointer', 'available');
+                    
+                    if (day.isSelected) {
+                        classes.push('bg-primary-600', 'text-white', 'selected');
+                    } else if (day.isToday) {
+                        classes.push('bg-blue-50', 'text-blue-600', 'font-semibold');
+                    }
+                    
+                    // Add visual indicator for slots
+                    if (day.hasSlots === false || (day.amSlots === 0 && day.pmSlots === 0)) {
+                        classes.push('ring-2', 'ring-red-200'); // Red ring for no slots
+                    } else if (day.amSlots > 0 || day.pmSlots > 0) {
+                        classes.push('ring-2', 'ring-green-200'); // Green ring for available slots
+                    }
                 }
                 
                 return classes.join(' ');
             },
             
-            selectDate(day) {
-                if (!day.available) return;
+            // Slot availability functions
+            async loadMonthSlotAvailability() {
+                if (!this.currentYear || this.currentMonth < 0) return;
                 
-                this.form.selected_date = day.date;
-                this.form.selected_time = '';
-                this.clearErrors('selected_date');
-                this.generateCalendar(); // Refresh to update selected state
-                
-                console.log('Selected appointment date:', day.date);
-                this.loadAvailableTimes();
-            },
-            
-            // SIMPLIFIED: Direct time loading without complex debouncing
-            async loadAvailableTimes() {
-                // Check if we have all required data
-                if (!this.form.selected_date || !this.form.dentist || !this.form.service) {
-                    console.log('Missing required data for time loading:', {
-                        date: this.form.selected_date,
-                        dentist: this.form.dentist,
-                        service: this.form.service
-                    });
-                    this.availableTimes = [];
-                    return;
-                }
-                
-                console.log('Loading available times for:', {
-                    dentist: this.form.dentist,
-                    date: this.form.selected_date,
-                    service: this.form.service
-                });
-                
-                this.loadingTimes = true;
-                this.availableTimes = [];
+                const startDate = new Date(this.currentYear, this.currentMonth, 1);
+                const endDate = new Date(this.currentYear, this.currentMonth + 1, 0);
                 
                 try {
-                    const params = new URLSearchParams({
-                        dentist_id: this.form.dentist,
-                        date: this.form.selected_date,
-                        service_id: this.form.service
-                    });
-                    
-                    const url = `{% url "appointments:get_available_times_api" %}?${params}`;
-                    console.log('Making request to:', url);
-                    
-                    const response = await fetch(url, {
-                        method: 'GET',
-                        headers: {
-                            'X-Requested-With': 'XMLHttpRequest',
-                        },
-                    });
-                    
-                    console.log('Response status:', response.status);
+                    const response = await fetch(
+                        `/appointments/api/slot-availability/?start_date=${this.formatDateForAPI(startDate)}&end_date=${this.formatDateForAPI(endDate)}`
+                    );
                     
                     if (!response.ok) {
-                        throw new Error(`HTTP error! status: ${response.status}`);
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                     }
                     
                     const data = await response.json();
-                    console.log('Available times response:', data);
                     
-                    if (data.available_times) {
-                        this.availableTimes = data.available_times;
-                        console.log('Set available times:', this.availableTimes);
-                    } else if (data.error) {
-                        console.error('API Error:', data.error);
-                        this.errorMessage = data.error;
+                    if (data.availability) {
+                        this.slotData = data.availability;
+                        console.log('=== SLOT DATA LOADED ===');
+                        console.log('Available dates:', Object.keys(this.slotData));
+                        
+                        // FIXED: Update calendar days with correct slot availability mapping
+                        this.calendarDays = this.calendarDays.map(day => {
+                            if (!day.isEmpty && day.available && this.slotData[day.date]) {
+                                const daySlots = this.slotData[day.date];
+                                const hasSlots = daySlots.am_slots.available > 0 || daySlots.pm_slots.available > 0;
+                                
+                                console.log(`Mapping ${day.date} (day ${day.day}): AM=${daySlots.am_slots.available}, PM=${daySlots.pm_slots.available}, hasSlots=${hasSlots}`);
+                                
+                                return {
+                                    ...day,
+                                    available: hasSlots,
+                                    hasSlots: hasSlots, // Add this flag for easier debugging
+                                    amSlots: daySlots.am_slots.available,
+                                    pmSlots: daySlots.pm_slots.available
+                                };
+                            }
+                            
+                            // If no slot data, keep original availability (based on date rules only)
+                            return day;
+                        });
+                        
+                        console.log('=== UPDATED CALENDAR DAYS ===');
+                        // Debug: show availability for dates around 22
+                        this.calendarDays.forEach((day, index) => {
+                            if (day.day >= 22 && day.day <= 29 && !day.isEmpty) {
+                                console.log(`Day ${day.day} (${day.date}): available=${day.available}, hasSlots=${day.hasSlots}, AM=${day.amSlots}, PM=${day.pmSlots}`);
+                            }
+                        });
                     }
                 } catch (error) {
-                    console.error('Error loading available times:', error);
-                    this.errorMessage = 'Failed to load available times. Please try again.';
-                    this.availableTimes = [];
-                } finally {
-                    this.loadingTimes = false;
-                    console.log('Finished loading times. Available times count:', this.availableTimes.length);
+                    console.error('Error loading month slot availability:', error);
+                    // Don't disable all dates on error, keep the basic availability logic
                 }
             },
             
-            formatTime(time) {
-                if (!time) return '';
-                const [hours, minutes] = time.split(':');
-                const hour = parseInt(hours);
-                const ampm = hour >= 12 ? 'PM' : 'AM';
-                const displayHour = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour;
-                return `${displayHour}:${minutes} ${ampm}`;
-            },
-            
-            formatDate(date) {
-                if (!date) return '';
-                const [year, month, day] = date.split('-');
-                const d = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
-                return d.toLocaleDateString('en-US', { 
-                    weekday: 'long', 
-                    year: 'numeric', 
-                    month: 'long', 
-                    day: 'numeric' 
-                });
-            },
-            
-            getPatientName() {
-                if (this.form.patient_type === 'existing') {
-                    return this.foundPatient.name || 'Existing Patient';
-                } else {
-                    return `${this.form.first_name} ${this.form.last_name}`;
-                }
-            },
-            
-            getSelectedServiceName() {
-                return this.selectedService?.name || '';
-            },
-            
-            getSelectedDentistName() {
-                const dentist = this.dentists.find(d => d.id == this.form.dentist);
-                return dentist?.name || '';
-            },
-            
-            async submitForm() {
-                if (this.submitting) {
+            async loadSlotAvailability() {
+                if (!this.form.appointment_date) {
+                    this.availableSlots = { AM: 0, PM: 0 };
                     return;
                 }
                 
+                console.log('Loading slot availability for:', this.form.appointment_date); // Debug log
+                
+                // First check if we have the data in slotData
+                if (this.slotData[this.form.appointment_date]) {
+                    const dayData = this.slotData[this.form.appointment_date];
+                    this.availableSlots = {
+                        AM: dayData.am_slots?.available || 0,
+                        PM: dayData.pm_slots?.available || 0
+                    };
+                    console.log('Used cached slot data:', this.availableSlots); // Debug log
+                    return;
+                }
+                
+                // Fallback: load specific date from API
+                try {
+                    const nextDate = new Date(this.form.appointment_date);
+                    nextDate.setDate(nextDate.getDate() + 1);
+                    
+                    const response = await fetch(
+                        `/appointments/api/slot-availability/?start_date=${this.form.appointment_date}&end_date=${this.formatDateForAPI(nextDate)}`
+                    );
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+                    
+                    const data = await response.json();
+                    console.log('API response for single date:', data); // Debug log
+                    
+                    if (data.availability && data.availability[this.form.appointment_date]) {
+                        const dayData = data.availability[this.form.appointment_date];
+                        this.availableSlots = {
+                            AM: dayData.am_slots?.available || 0,
+                            PM: dayData.pm_slots?.available || 0
+                        };
+                        
+                        // Update the cached data too
+                        this.slotData[this.form.appointment_date] = dayData;
+                        
+                        console.log('Loaded from API:', this.availableSlots); // Debug log
+                    } else {
+                        console.log('No data found for date in API response'); // Debug log
+                        this.availableSlots = { AM: 0, PM: 0 };
+                    }
+                } catch (error) {
+                    console.error('Error loading slot availability:', error);
+                    this.availableSlots = { AM: 0, PM: 0 };
+                }
+                this.debugSlotData();
+            },
+
+            debugSlotData() {
+                console.log('=== SLOT DATA DEBUG ===');
+                console.log('form.appointment_date:', this.form.appointment_date);
+                console.log('availableSlots:', this.availableSlots);
+                console.log('slotData keys:', Object.keys(this.slotData));
+                
+                // Show a few entries around the selected date
+                const selectedDate = new Date(this.form.appointment_date);
+                for (let i = -1; i <= 1; i++) {
+                    const checkDate = new Date(selectedDate);
+                    checkDate.setDate(checkDate.getDate() + i);
+                    const dateStr = checkDate.toISOString().split('T')[0];
+                    const dayName = checkDate.toLocaleDateString('en-US', { weekday: 'long' });
+                    
+                    if (this.slotData[dateStr]) {
+                        console.log(`${dateStr} (${dayName}):`, this.slotData[dateStr]);
+                    } else {
+                        console.log(`${dateStr} (${dayName}): NO DATA`);
+                    }
+                }
+                console.log('======================');
+            },
+            
+            // Form submission
+            async submitForm() {
                 if (!this.validateStep()) {
                     return;
                 }
@@ -1023,7 +963,8 @@
                 this.clearErrors();
                 
                 try {
-                    const response = await fetch('{% url "core:book_appointment" %}', {
+                    // Use the correct URL for booking
+                    const response = await fetch('/book-appointment/', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
@@ -1035,32 +976,36 @@
                     const data = await response.json();
                     
                     if (data.success) {
-                        this.referenceNumber = data.reference_number;
                         this.submitted = true;
+                        this.referenceNumber = data.reference_number;
+                        this.submitting = false;
+                        
+                        // Scroll to top to show success message
                         window.scrollTo({ top: 0, behavior: 'smooth' });
                     } else {
+                        this.submitting = false;
                         this.errorMessage = data.error || 'An error occurred while submitting your request.';
                         window.scrollTo({ top: 0, behavior: 'smooth' });
                     }
                 } catch (error) {
-                    console.error('Submit error:', error);
-                    this.errorMessage = 'Network error. Please check your connection and try again.';
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                } finally {
                     this.submitting = false;
+                    console.error('Error submitting form:', error);
+                    this.errorMessage = 'An error occurred while submitting your request. Please try again.';
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
                 }
             },
             
             resetForm() {
-                if (this.searchTimeout) {
-                    clearTimeout(this.searchTimeout);
-                    this.searchTimeout = null;
-                }
-                
                 this.step = 1;
                 this.submitted = false;
+                this.submitting = false;
                 this.patientFound = false;
-                this.clearErrors();
+                this.referenceNumber = '';
+                this.errorMessage = '';
+                this.errors = {};
+                this.selectedService = null;
+                this.foundPatient = {};
+                this.availableSlots = { AM: 0, PM: 0 };
                 
                 this.form = {
                     patient_type: '',
@@ -1071,18 +1016,71 @@
                     contact_number: '',
                     address: '',
                     service: '',
-                    dentist: '',
+                    appointment_date: '',
+                    period: '',
                     reason: '',
-                    selected_date: '',
-                    selected_time: '',
                     agreed_to_terms: false
                 };
-                this.selectedService = null;
-                this.availableTimes = [];
-                this.foundPatient = {};
+                
                 this.generateCalendar();
+            },
+            
+            // Helper functions
+            getPatientName() {
+                if (this.form.patient_type === 'existing' && this.foundPatient.name) {
+                    return this.foundPatient.name;
+                } else if (this.form.patient_type === 'new') {
+                    return `${this.form.first_name} ${this.form.last_name}`.trim();
+                }
+                return '';
+            },
+            
+            getSelectedServiceName() {
+                return this.selectedService ? this.selectedService.name : '';
+            },
+            
+            formatDate(dateString) {
+                if (!dateString) return '';
+                const date = new Date(dateString);
+                return date.toLocaleDateString('en-US', { 
+                    weekday: 'long', 
+                    year: 'numeric', 
+                    month: 'long', 
+                    day: 'numeric' 
+                });
+            },
+            
+            formatDateForAPI(date) {
+                // Use local date components to avoid timezone shifting
+                const year = date.getFullYear();
+                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const day = String(date.getDate()).padStart(2, '0');
+                
+                return `${year}-${month}-${day}`;
+            },
+
+            // Also add this debug version to verify it's working
+            formatDateForAPIDebug(date) {
+                const year = date.getFullYear();
+                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const day = String(date.getDate()).padStart(2, '0');
+                const formatted = `${year}-${month}-${day}`;
+                
+                console.log(`formatDateForAPI: ${date.toString()} -> ${formatted}`);
+                return formatted;
+            },
+            
+            isValidEmail(email) {
+                const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                return emailRegex.test(email);
+            },
+            
+            isValidPhoneNumber(phone) {
+                const phoneRegex = /^(\+63|0)?9\d{9}$/;
+                const cleanPhone = phone.replace(/[\s-]/g, '');
+                return phoneRegex.test(cleanPhone);
             }
-        }
+        };
     }
 </script>
 {% endblock %}

@@ -1,41 +1,32 @@
-# appointments/views.py
+# appointments/views.py - Cleaned for AM/PM slot system
 
-# Standard library imports
 import json
-import re
-from datetime import datetime, date, timedelta, time
+from datetime import datetime, date, timedelta
 
-# Django core imports
 from django.shortcuts import get_object_or_404, redirect
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ValidationError
-from django.db import transaction, IntegrityError
+from django.db import transaction
 from django.db.models import Q
 from django.http import JsonResponse
 from django.urls import reverse_lazy
 from django.utils import timezone
-from django.utils.decorators import method_decorator
-from django.views.decorators.csrf import csrf_exempt
 from django.views.generic import ListView, DetailView, CreateView, UpdateView, TemplateView
 
-# Local app imports
-from .models import Appointment, AppointmentSlot
-from .forms import AppointmentForm
+from .models import Appointment, DailySlots
+from .forms import AppointmentForm, DailySlotsForm, AppointmentNoteFieldForm
 from patients.models import Patient
-from services.models import Service
 from users.models import User
-from core.models import Holiday, SystemSetting
+from core.models import AuditLog
+from django.views.decorators.http import require_POST
 
 
-# BACKEND ADMIN/STAFF VIEWS (Login Required, Permission Checked)
+# BACKEND ADMIN/STAFF VIEWS
 
 class AppointmentCalendarView(LoginRequiredMixin, TemplateView):
-    """
-    BACKEND VIEW: Calendar view for appointments - Main scheduling interface for staff
-    Displays monthly calendar with all appointments, handles navigation between months
-    """
+    """BACKEND VIEW: Calendar view for AM/PM appointments"""
     template_name = 'appointments/appointment_calendar.html'
     
     def dispatch(self, request, *args, **kwargs):
@@ -47,75 +38,125 @@ class AppointmentCalendarView(LoginRequiredMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         
-        # Get current month or requested month
+        # Get current month or requested month with validation
         today = timezone.now().date()
-        month = int(self.request.GET.get('month', today.month))
-        year = int(self.request.GET.get('year', today.year))
+        
+        try:
+            month = int(self.request.GET.get('month', today.month))
+            year = int(self.request.GET.get('year', today.year))
+            
+            # Validate month and year ranges
+            if not (1 <= month <= 12):
+                raise ValueError("Invalid month")
+            if not (2020 <= year <= 2030):  # Reasonable range
+                raise ValueError("Invalid year")
+                
+        except (ValueError, TypeError) as e:
+            # Fallback to current date if invalid parameters
+            month = today.month
+            year = today.year
+        
+        # Calculate date range with validation
+        try:
+            start_date = date(year, month, 1)
+            if month == 12:
+                end_date = date(year + 1, 1, 1)
+            else:
+                end_date = date(year, month + 1, 1)
+        except ValueError as e:
+            # Fallback if date creation fails
+            start_date = date(today.year, today.month, 1)
+            if today.month == 12:
+                end_date = date(today.year + 1, 1, 1)
+            else:
+                end_date = date(today.year, today.month + 1, 1)
+            month = today.month
+            year = today.year
         
         # Get appointments for the month
-        start_date = date(year, month, 1)
-        if month == 12:
-            end_date = date(year + 1, 1, 1)
-        else:
-            end_date = date(year, month + 1, 1)
-        
         appointments = Appointment.objects.filter(
-            appointment_slot__date__gte=start_date,
-            appointment_slot__date__lt=end_date,
-            status__in=Appointment.BLOCKING_STATUSES
-        ).select_related('patient', 'dentist', 'service', 'appointment_slot').order_by(
-            'appointment_slot__date', 'appointment_slot__start_time'
+            appointment_date__gte=start_date,
+            appointment_date__lt=end_date,
+            status__in=Appointment.BLOCKING_STATUSES,
+            patient__isnull=False
+        ).select_related('patient', 'assigned_dentist', 'service').order_by(
+            'appointment_date', 'period'
         )
         
-        # Group appointments by date and serialize for JSON
+        # FIXED: Group appointments by date with proper formatting and validation
         appointments_by_date = {}
         for appointment in appointments:
-            date_key = appointment.appointment_slot.date.strftime('%Y-%m-%d')
+            # Ensure consistent date formatting (YYYY-MM-DD)
+            date_key = appointment.appointment_date.strftime('%Y-%m-%d')
+            
+            # Validate the appointment has required fields
+            if not appointment.patient or not appointment.service:
+                continue  # Skip malformed appointments
+            
             if date_key not in appointments_by_date:
-                appointments_by_date[date_key] = []
+                appointments_by_date[date_key] = {'AM': [], 'PM': []}
+            
+            # Validate period
+            period = appointment.period
+            if period not in ['AM', 'PM']:
+                period = 'AM'  # Default fallback
             
             appointment_data = {
                 'id': appointment.id,
-                'patient__first_name': appointment.patient.first_name,
-                'patient__last_name': appointment.patient.last_name,
-                'dentist__first_name': appointment.dentist.first_name,
-                'dentist__last_name': appointment.dentist.last_name,
-                'service__name': appointment.service.name,
-                'appointment_slot__date': appointment.appointment_slot.date.strftime('%Y-%m-%d'),
-                'appointment_slot__start_time': appointment.appointment_slot.start_time.strftime('%I:%M %p'),
-                'appointment_slot__end_time': appointment.appointment_slot.end_time.strftime('%I:%M %p'),
+                'patient_name': appointment.patient.full_name or 'Unknown Patient',
+                'dentist_name': appointment.assigned_dentist.full_name if appointment.assigned_dentist else None,  # FIXED: Use None instead of 'Unassigned'
+                'service_name': appointment.service.name or 'Unknown Service',
                 'status': appointment.status,
                 'reason': appointment.reason or '',
                 'patient_type': appointment.patient_type,
+                'period': period,  # Add period to the data
+                'appointment_date': date_key,  # Add formatted date
             }
-            appointments_by_date[date_key].append(appointment_data)
+            appointments_by_date[date_key][period].append(appointment_data)
         
-        # Calculate navigation months
-        if month == 1:
-            prev_month, prev_year = 12, year - 1
-        else:
-            prev_month, prev_year = month - 1, year
-            
-        if month == 12:
-            next_month, next_year = 1, year + 1
-        else:
-            next_month, next_year = month + 1, year
+        # Get daily slots with validation
+        daily_slots = DailySlots.objects.filter(
+            date__gte=start_date,
+            date__lt=end_date
+        )
         
-        # Month names
-        month_names = [
-            '', 'January', 'February', 'March', 'April', 'May', 'June',
-            'July', 'August', 'September', 'October', 'November', 'December'
-        ]
-
+        slots_by_date = {}
+        for slot in daily_slots:
+            date_key = slot.date.strftime('%Y-%m-%d')
+            slots_by_date[date_key] = {
+                'am_available': max(0, slot.get_available_am_slots()),  # Ensure non-negative
+                'pm_available': max(0, slot.get_available_pm_slots()),
+                'am_total': max(0, slot.am_slots),
+                'pm_total': max(0, slot.pm_slots)
+            }
+        
+        # Calculate navigation months with validation
+        try:
+            if month == 1:
+                prev_month, prev_year = 12, year - 1
+            else:
+                prev_month, prev_year = month - 1, year
+                
+            if month == 12:
+                next_month, next_year = 1, year + 1
+            else:
+                next_month, next_year = month + 1, year
+        except:
+            # Fallback navigation
+            prev_month, prev_year = today.month, today.year
+            next_month, next_year = today.month, today.year
+        
+        # FIXED: Add debugging and validation
         context.update({
             'current_month': month,
             'current_year': year,
-            'current_month_name': month_names[month],
+            'current_month_name': date(year, month, 1).strftime('%B'),
             'prev_month': prev_month,
             'prev_year': prev_year,
             'next_month': next_month,
             'next_year': next_year,
-            'appointments_by_date': json.dumps(appointments_by_date),
+            'appointments_by_date': json.dumps(appointments_by_date, default=str),  # Handle any date serialization issues
+            'slots_by_date': json.dumps(slots_by_date, default=str),
             'dentists': User.objects.filter(is_active_dentist=True),
             'today': today.strftime('%Y-%m-%d'),
             'pending_count': Appointment.objects.filter(status='pending').count(),
@@ -124,11 +165,9 @@ class AppointmentCalendarView(LoginRequiredMixin, TemplateView):
         return context
 
 
+
 class AppointmentRequestsView(LoginRequiredMixin, ListView):
-    """
-    BACKEND VIEW: View pending appointment requests - Staff approval interface
-    Handles filtering, searching, and bulk operations on pending appointments
-    """
+    """BACKEND VIEW: View pending appointment requests"""
     model = Appointment
     template_name = 'appointments/appointment_requests.html'
     context_object_name = 'appointments'
@@ -143,23 +182,23 @@ class AppointmentRequestsView(LoginRequiredMixin, ListView):
     def get_queryset(self):
         queryset = Appointment.objects.filter(
             status='pending'
-        ).select_related('patient', 'dentist', 'service', 'appointment_slot').order_by('-requested_at')
+        ).select_related('patient', 'assigned_dentist', 'service').order_by('-requested_at')
         
         # Apply filters
         patient_type = self.request.GET.get('patient_type')
         if patient_type:
             queryset = queryset.filter(patient_type=patient_type)
         
-        dentist = self.request.GET.get('dentist')
-        if dentist:
-            queryset = queryset.filter(dentist_id=dentist)
+        assigned_dentist = self.request.GET.get('assigned_dentist')
+        if assigned_dentist:
+            queryset = queryset.filter(assigned_dentist_id=assigned_dentist)
         
         # Date range filtering
         date_from = self.request.GET.get('date_from')
         if date_from:
             try:
                 date_from = datetime.strptime(date_from, '%Y-%m-%d').date()
-                queryset = queryset.filter(appointment_slot__date__gte=date_from)
+                queryset = queryset.filter(appointment_date__gte=date_from)
             except ValueError:
                 pass
         
@@ -167,19 +206,38 @@ class AppointmentRequestsView(LoginRequiredMixin, ListView):
         if date_to:
             try:
                 date_to = datetime.strptime(date_to, '%Y-%m-%d').date()
-                queryset = queryset.filter(appointment_slot__date__lte=date_to)
+                queryset = queryset.filter(appointment_date__lte=date_to)
             except ValueError:
                 pass
         
-        # Text search
+        # Period filter
+        period = self.request.GET.get('period')
+        if period and period in ['AM', 'PM']:
+            queryset = queryset.filter(period=period)
+        
+        # FIXED: Text search - handle both patient records and temp data
         search = self.request.GET.get('search')
         if search:
-            queryset = queryset.filter(
+            # Create search conditions for both patient records and temp data
+            search_conditions = Q()
+            
+            # Search in linked patient records
+            search_conditions |= (
                 Q(patient__first_name__icontains=search) |
                 Q(patient__last_name__icontains=search) |
                 Q(patient__email__icontains=search) |
                 Q(patient__contact_number__icontains=search)
             )
+            
+            # Search in temporary data (for pending appointments)
+            search_conditions |= (
+                Q(temp_first_name__icontains=search) |
+                Q(temp_last_name__icontains=search) |
+                Q(temp_email__icontains=search) |
+                Q(temp_contact_number__icontains=search)
+            )
+            
+            queryset = queryset.filter(search_conditions)
         
         return queryset
     
@@ -188,10 +246,12 @@ class AppointmentRequestsView(LoginRequiredMixin, ListView):
         context.update({
             'pending_count': self.get_queryset().count(),
             'patient_types': [('new', 'New Patients'), ('returning', 'Returning Patients')],
+            'periods': [('AM', 'Morning'), ('PM', 'Afternoon')],
             'dentists': User.objects.filter(is_active_dentist=True),
             'filters': {
                 'patient_type': self.request.GET.get('patient_type', ''),
-                'dentist': self.request.GET.get('dentist', ''),
+                'assigned_dentist': self.request.GET.get('assigned_dentist', ''),
+                'period': self.request.GET.get('period', ''),
                 'date_from': self.request.GET.get('date_from', ''),
                 'date_to': self.request.GET.get('date_to', ''),
                 'search': self.request.GET.get('search', ''),
@@ -201,10 +261,7 @@ class AppointmentRequestsView(LoginRequiredMixin, ListView):
 
 
 class AppointmentListView(LoginRequiredMixin, ListView):
-    """
-    BACKEND VIEW: List all appointments with comprehensive filtering
-    Admin interface for viewing all appointment records with pagination
-    """
+    """BACKEND VIEW: List all appointments with comprehensive filtering"""
     model = Appointment
     template_name = 'appointments/appointment_list.html'
     context_object_name = 'appointments'
@@ -218,7 +275,7 @@ class AppointmentListView(LoginRequiredMixin, ListView):
     
     def get_queryset(self):
         queryset = Appointment.objects.select_related(
-            'patient', 'dentist', 'service', 'appointment_slot'
+            'patient', 'assigned_dentist', 'service'
         )
         
         # Status filtering
@@ -226,10 +283,15 @@ class AppointmentListView(LoginRequiredMixin, ListView):
         if status:
             queryset = queryset.filter(status=status)
         
-        # Dentist filtering
-        dentist = self.request.GET.get('dentist')
-        if dentist:
-            queryset = queryset.filter(dentist_id=dentist)
+        # Assigned dentist filtering
+        assigned_dentist = self.request.GET.get('assigned_dentist')
+        if assigned_dentist:
+            queryset = queryset.filter(assigned_dentist_id=assigned_dentist)
+        
+        # Period filtering
+        period = self.request.GET.get('period')
+        if period and period in ['AM', 'PM']:
+            queryset = queryset.filter(period=period)
         
         # Date range filtering
         date_from = self.request.GET.get('date_from')
@@ -238,14 +300,14 @@ class AppointmentListView(LoginRequiredMixin, ListView):
         if date_from:
             try:
                 date_from = datetime.strptime(date_from, '%Y-%m-%d').date()
-                queryset = queryset.filter(appointment_slot__date__gte=date_from)
+                queryset = queryset.filter(appointment_date__gte=date_from)
             except ValueError:
                 pass
         
         if date_to:
             try:
                 date_to = datetime.strptime(date_to, '%Y-%m-%d').date()
-                queryset = queryset.filter(appointment_slot__date__lte=date_to)
+                queryset = queryset.filter(appointment_date__lte=date_to)
             except ValueError:
                 pass
         
@@ -257,16 +319,18 @@ class AppointmentListView(LoginRequiredMixin, ListView):
                 Q(patient__last_name__icontains=search)
             )
         
-        return queryset.order_by('-appointment_slot__date', '-appointment_slot__start_time')
+        return queryset.order_by('-appointment_date', '-period')
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context.update({
             'status_choices': Appointment.STATUS_CHOICES,
+            'period_choices': [('AM', 'Morning'), ('PM', 'Afternoon')],
             'dentists': User.objects.filter(is_active_dentist=True),
             'filters': {
                 'status': self.request.GET.get('status', ''),
-                'dentist': self.request.GET.get('dentist', ''),
+                'assigned_dentist': self.request.GET.get('assigned_dentist', ''),
+                'period': self.request.GET.get('period', ''),
                 'date_from': self.request.GET.get('date_from', ''),
                 'date_to': self.request.GET.get('date_to', ''),
                 'search': self.request.GET.get('search', ''),
@@ -274,12 +338,8 @@ class AppointmentListView(LoginRequiredMixin, ListView):
         })
         return context
 
-
 class AppointmentCreateView(LoginRequiredMixin, CreateView):
-    """
-    BACKEND VIEW: Create new appointment - Staff booking interface
-    Enhanced with conflict detection and automatic approval for staff bookings
-    """
+    """BACKEND VIEW: Create new appointment - UPDATED for AM/PM"""
     model = Appointment
     form_class = AppointmentForm
     template_name = 'appointments/appointment_form.html'
@@ -303,30 +363,29 @@ class AppointmentCreateView(LoginRequiredMixin, CreateView):
                     form.instance.status = 'approved'
                     form.instance.approved_at = timezone.now()
                     form.instance.approved_by = self.request.user
+                    
+                    # Auto-assign dentist if not specified
+                    if not form.instance.assigned_dentist:
+                        available_dentist = User.objects.filter(is_active_dentist=True).first()
+                        if available_dentist:
+                            form.instance.assigned_dentist = available_dentist
                 
-                # Validate no conflicts before saving
-                appointment_slot = form.cleaned_data['appointment_slot']
-                service = form.cleaned_data['service']
+                response = super().form_valid(form)
                 
-                start_datetime = datetime.combine(appointment_slot.date, appointment_slot.start_time)
-                end_datetime = start_datetime + timedelta(minutes=service.duration_minutes)
-                end_with_buffer = end_datetime + timedelta(minutes=appointment_slot.buffer_minutes)
-                
-                conflicts = Appointment.get_conflicting_appointments(
-                    dentist=appointment_slot.dentist,
-                    start_datetime=start_datetime,
-                    end_datetime=end_with_buffer
+                # Log the action
+                AuditLog.log_action(
+                    user=self.request.user,
+                    action='create',
+                    model_instance=form.instance,
+                    changes={'status': form.instance.status},
+                    request=self.request
                 )
-                
-                if conflicts:
-                    form.add_error(None, 'This time slot conflicts with existing appointments.')
-                    return self.form_invalid(form)
                 
                 messages.success(
                     self.request, 
                     f'Appointment for {form.instance.patient.full_name} created successfully.'
                 )
-                return super().form_valid(form)
+                return response
                 
         except ValidationError as e:
             form.add_error(None, str(e))
@@ -340,10 +399,7 @@ class AppointmentCreateView(LoginRequiredMixin, CreateView):
 
 
 class AppointmentDetailView(LoginRequiredMixin, DetailView):
-    """
-    BACKEND VIEW: View detailed appointment information
-    Shows comprehensive appointment data with patient statistics and actions
-    """
+    """BACKEND VIEW: View detailed appointment information"""
     model = Appointment
     template_name = 'appointments/appointment_detail.html'
     context_object_name = 'appointment'
@@ -358,39 +414,46 @@ class AppointmentDetailView(LoginRequiredMixin, DetailView):
         context = super().get_context_data(**kwargs)
         appointment = self.object
         
-        # Patient appointment statistics
-        patient_appointments = appointment.patient.appointments.all()
-        context['patient_stats'] = {
-            'total_appointments': patient_appointments.count(),
-            'completed_appointments': patient_appointments.filter(status='completed').count(),
-            'pending_appointments': patient_appointments.filter(status='pending').count(),
-            'cancelled_appointments': patient_appointments.filter(status='cancelled').count(),
-        }
+        # Patient appointment statistics - FIXED: Handle None patient
+        if appointment.patient:
+            patient_appointments = appointment.patient.appointments.all()
+            context['patient_stats'] = {
+                'total_appointments': patient_appointments.count(),
+                'completed_appointments': patient_appointments.filter(status='completed').count(),
+                'pending_appointments': patient_appointments.filter(status='pending').count(),
+                'cancelled_appointments': patient_appointments.filter(status='cancelled').count(),
+            }
+        else:
+            # Handle case where appointment has no linked patient (pending appointments)
+            context['patient_stats'] = {
+                'total_appointments': 0,
+                'completed_appointments': 0,
+                'pending_appointments': 1,  # This appointment itself
+                'cancelled_appointments': 0,
+            }
         
         # Current date for template comparisons
         context['today'] = timezone.now().date()
         
-        # Dentist schedule statistics
-        today = timezone.now().date()
-        week_start = today - timedelta(days=today.weekday())
-        week_end = week_start + timedelta(days=6)
+        # Slot availability for the appointment date
+        if appointment.appointment_date:
+            daily_slots, _ = DailySlots.get_or_create_for_date(appointment.appointment_date)
+            if daily_slots:
+                context['slot_info'] = {
+                    'am_available': daily_slots.get_available_am_slots(),
+                    'pm_available': daily_slots.get_available_pm_slots(),
+                    'am_total': daily_slots.am_slots,
+                    'pm_total': daily_slots.pm_slots,
+                }
         
-        context['dentist_stats'] = {
-            'today_schedules': appointment.dentist.appointment_slots.filter(date=today).count(),
-            'week_schedules': appointment.dentist.appointment_slots.filter(
-                date__gte=week_start, 
-                date__lte=week_end
-            ).count(),
-        }
+        # Available dentists for assignment
+        context['available_dentists'] = User.objects.filter(is_active_dentist=True)
         
         return context
 
 
 class AppointmentUpdateView(LoginRequiredMixin, UpdateView):
-    """
-    BACKEND VIEW: Update existing appointment
-    Staff interface for modifying appointment details with validation
-    """
+    """BACKEND VIEW: Update existing appointment"""
     model = Appointment
     form_class = AppointmentForm
     template_name = 'appointments/appointment_form.html'
@@ -408,6 +471,14 @@ class AppointmentUpdateView(LoginRequiredMixin, UpdateView):
         return kwargs
     
     def form_valid(self, form):
+        # Log the changes
+        AuditLog.log_action(
+            user=self.request.user,
+            action='update',
+            model_instance=form.instance,
+            request=self.request
+        )
+        
         messages.success(
             self.request,
             f'Appointment for {form.instance.patient.full_name} updated successfully.'
@@ -418,217 +489,267 @@ class AppointmentUpdateView(LoginRequiredMixin, UpdateView):
         return reverse_lazy('appointments:appointment_detail', kwargs={'pk': self.object.pk})
 
 
-# PUBLIC/PATIENT VIEWS
-class BookAppointmentPublicView(TemplateView):
-    """
-    PUBLIC VIEW: Patient-facing appointment booking interface
-    TODO: Implement public booking form for patients
-    """
-    template_name = 'core/book_appointment.html'
+@login_required
+@require_POST
+def update_appointment_note(request, appointment_pk):
+    """Update individual clinical note field via AJAX"""
+    if not request.user.has_permission('patients'):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+    
+    appointment = get_object_or_404(Appointment, pk=appointment_pk)
+    
+    # Ensure user can edit this appointment's notes
+    # Only allow editing for confirmed appointments or appointments with linked patients
+    if not appointment.patient:
+        return JsonResponse({'error': 'Cannot edit notes for unconfirmed appointments'}, status=400)
+    
+    try:
+        data = json.loads(request.body)
+        field_name = data.get('field_name')
+        field_value = data.get('field_value', '').strip()
+        
+        # Validate field name
+        valid_fields = ['symptoms', 'procedures', 'diagnosis']
+        if field_name not in valid_fields:
+            return JsonResponse({'error': 'Invalid field name'}, status=400)
+        
+        # Update the field
+        setattr(appointment, field_name, field_value)
+        appointment.save(update_fields=[field_name, 'updated_at'])
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'{field_name.title()} updated successfully',
+            'field_name': field_name,
+            'field_value': field_value
+        })
+        
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON data'}, status=400)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+@login_required
+def get_appointment_notes(request, appointment_pk):
+    """Get appointment clinical notes via AJAX"""
+    if not request.user.has_permission('patients'):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+    
+    appointment = get_object_or_404(Appointment, pk=appointment_pk)
+    
+    return JsonResponse({
+        'appointment_id': appointment.pk,
+        'symptoms': appointment.symptoms,
+        'procedures': appointment.procedures,
+        'diagnosis': appointment.diagnosis,
+        'patient_name': appointment.patient_name,
+        'service_name': appointment.service.name,
+        'appointment_date': appointment.appointment_date.strftime('%Y-%m-%d'),
+        'period': appointment.get_period_display(),
+    })
+
+
+# DAILY SLOTS MANAGEMENT VIEWS (NEW for AM/PM system)
+class DailySlotsManagementView(LoginRequiredMixin, ListView):
+    """BACKEND VIEW: Manage daily slot allocations"""
+    model = DailySlots
+    template_name = 'appointments/daily_slots_list.html'
+    context_object_name = 'daily_slots'
+    paginate_by = 30
+    
+    def dispatch(self, request, *args, **kwargs):
+        if not request.user.has_permission('appointments'):
+            messages.error(request, 'You do not have permission to access this page.')
+            return redirect('core:dashboard')
+        return super().dispatch(request, *args, **kwargs)
+    
+    def get_queryset(self):
+        queryset = DailySlots.objects.all()
+        
+        # Date range filtering
+        date_from = self.request.GET.get('date_from')
+        date_to = self.request.GET.get('date_to')
+        
+        if not date_from and not date_to:
+            # Default to next 60 days
+            today = timezone.now().date()
+            queryset = queryset.filter(
+                date__gte=today,
+                date__lte=today + timedelta(days=60)
+            )
+        else:
+            if date_from:
+                try:
+                    date_from = datetime.strptime(date_from, '%Y-%m-%d').date()
+                    queryset = queryset.filter(date__gte=date_from)
+                except ValueError:
+                    pass
+            
+            if date_to:
+                try:
+                    date_to = datetime.strptime(date_to, '%Y-%m-%d').date()
+                    queryset = queryset.filter(date__lte=date_to)
+                except ValueError:
+                    pass
+        
+        return queryset.order_by('date')
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context.update({
-            'dentists': User.objects.filter(is_active_dentist=True),
-            'services': Service.objects.filter(is_archived=False),
+            'filters': {
+                'date_from': self.request.GET.get('date_from', ''),
+                'date_to': self.request.GET.get('date_to', ''),
+            }
         })
         return context
 
 
-# API ENDPOINTS (AJAX/JSON Responses for Frontend)
-
-def get_available_times_api(request):
+class DailySlotsCreateView(LoginRequiredMixin, CreateView):
     """
-    API ENDPOINT: Get available appointment time slots
-    Fixed version that uses the correct models and logic
+    BACKEND VIEW: Create/edit daily slots
+    """
+    model = DailySlots
+    form_class = DailySlotsForm
+    template_name = 'appointments/daily_slots_form.html'
+    
+    def dispatch(self, request, *args, **kwargs):
+        if not request.user.has_permission('appointments'):
+            messages.error(request, 'You do not have permission to access this page.')
+            return redirect('core:dashboard')
+        return super().dispatch(request, *args, **kwargs)
+    
+    def form_valid(self, form):
+        form.instance.created_by = self.request.user
+        
+        # Log the action
+        AuditLog.log_action(
+            user=self.request.user,
+            action='create',
+            model_instance=form.instance,
+            request=self.request
+        )
+        
+        messages.success(
+            self.request,
+            f'Daily slots for {form.instance.date} created successfully.'
+        )
+        return super().form_valid(form)
+    
+    def get_success_url(self):
+        return reverse_lazy('appointments:daily_slots_list')
+
+
+class DailySlotsUpdateView(LoginRequiredMixin, UpdateView):
+    """
+    BACKEND VIEW: Update daily slots
+    """
+    model = DailySlots
+    form_class = DailySlotsForm
+    template_name = 'appointments/daily_slots_form.html'
+    
+    def dispatch(self, request, *args, **kwargs):
+        if not request.user.has_permission('appointments'):
+            messages.error(request, 'You do not have permission to access this page.')
+            return redirect('core:dashboard')
+        return super().dispatch(request, *args, **kwargs)
+    
+    def form_valid(self, form):
+        # Log the action
+        AuditLog.log_action(
+            user=self.request.user,
+            action='update',
+            model_instance=form.instance,
+            request=self.request
+        )
+        
+        messages.success(
+            self.request,
+            f'Daily slots for {form.instance.date} updated successfully.'
+        )
+        return super().form_valid(form)
+    
+    def get_success_url(self):
+        return reverse_lazy('appointments:daily_slots_list')
+
+
+# API ENDPOINTS
+
+def get_slot_availability_api(request):
+    """
+    API ENDPOINT: Get AM/PM slot availability for date range
+    FIXED to handle past dates properly
     """
     if request.method != 'GET':
         return JsonResponse({'error': 'Method not allowed'}, status=405)
     
-    dentist_id = request.GET.get('dentist_id')
-    date_str = request.GET.get('date')
-    service_id = request.GET.get('service_id')
+    start_date_str = request.GET.get('start_date')
+    end_date_str = request.GET.get('end_date')
     
-    # Validate required parameters
-    if not all([dentist_id, date_str, service_id]):
-        return JsonResponse({'error': 'dentist_id, date, and service_id are required'}, status=400)
+    if not start_date_str or not end_date_str:
+        return JsonResponse({'error': 'start_date and end_date are required'}, status=400)
     
     try:
-        from users.models import User
-        from services.models import Service
-        from core.models import Holiday
-        from .models import Appointment, AppointmentSlot, DentistScheduleSettings, TimeBlock
-        
-        dentist = User.objects.get(id=dentist_id, is_active_dentist=True)
-        service = Service.objects.get(id=service_id, is_archived=False)
-        appointment_date = datetime.strptime(date_str, '%Y-%m-%d').date()
-    except (User.DoesNotExist, Service.DoesNotExist, ValueError):
-        return JsonResponse({'error': 'Invalid parameters'}, status=400)
+        start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+        end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+    except ValueError:
+        return JsonResponse({'error': 'Invalid date format. Use YYYY-MM-DD'}, status=400)
     
-    # Business rule validations
+    # Validate date range
     today = timezone.now().date()
-    if appointment_date <= today:
-        return JsonResponse({'available_times': [], 'error': 'Cannot book for past dates or today'})
     
-    if appointment_date.weekday() == 6:  # Sunday
-        return JsonResponse({'available_times': [], 'error': 'No appointments on Sundays'})
+    # FIXED: Don't reject if start_date is in the past, just adjust it
+    if start_date < today:
+        start_date = today
     
-    # Check holidays
-    try:
-        if Holiday.objects.filter(date=appointment_date, is_active=True).exists():
-            return JsonResponse({'available_times': [], 'error': 'No appointments on holidays'})
-    except:
-        # If Holiday model has issues, just continue
-        pass
+    if end_date < start_date:
+        return JsonResponse({'error': 'End date must be after or equal to start date'}, status=400)
     
-    # Get dentist's schedule settings for this day
-    weekday = appointment_date.weekday()
-    try:
-        schedule_settings = DentistScheduleSettings.objects.get(
-            dentist=dentist, 
-            weekday=weekday, 
-            is_working=True
-        )
-    except DentistScheduleSettings.DoesNotExist:
-        return JsonResponse({'available_times': [], 'error': 'Dentist not working on this day'})
+    # Limit range to prevent excessive queries
+    if (end_date - start_date).days > 90:
+        return JsonResponse({'error': 'Date range too large. Maximum 90 days.'}, status=400)
     
-    # Check for time blocks (vacations, meetings, etc.)
-    time_blocks = TimeBlock.objects.filter(dentist=dentist, date=appointment_date)
+    # Get availability for date range
+    availability = DailySlots.get_availability_for_range(start_date, end_date)
     
-    # If there's a full-day block, no times available
-    if time_blocks.filter(start_time__isnull=True, end_time__isnull=True).exists():
-        return JsonResponse({'available_times': [], 'error': 'Dentist not available on this date'})
-    
-    # Get existing appointments that block time slots
-    existing_appointments = Appointment.objects.filter(
-        dentist=dentist,
-        appointment_slot__date=appointment_date,
-        status__in=Appointment.BLOCKING_STATUSES
-    ).select_related('appointment_slot', 'service')
-    
-    # Generate available time slots
-    available_times = []
-    service_duration = timedelta(minutes=service.duration_minutes)
-    slot_duration = timedelta(minutes=schedule_settings.slot_duration_minutes)
-    
-    # Working hours from dentist's schedule
-    current_time = datetime.combine(appointment_date, schedule_settings.start_time)
-    end_of_day = datetime.combine(appointment_date, schedule_settings.end_time)
-    
-    # Lunch break times
-    lunch_start_dt = None
-    lunch_end_dt = None
-    if schedule_settings.has_lunch_break:
-        lunch_start_dt = datetime.combine(appointment_date, schedule_settings.lunch_start)
-        lunch_end_dt = datetime.combine(appointment_date, schedule_settings.lunch_end)
-    
-    while current_time + service_duration <= end_of_day:
-        slot_start_time = current_time.time()
-        service_end_time = current_time + service_duration
-        service_end_with_buffer = service_end_time + timedelta(minutes=schedule_settings.default_buffer_minutes)
+    # Format for frontend
+    formatted_availability = {}
+    for date_obj, slots in availability.items():
+        date_str = date_obj.strftime('%Y-%m-%d')
         
-        # Skip if extends past working hours
-        if service_end_with_buffer > end_of_day:
-            current_time += slot_duration
+        # Skip Sundays and past dates (but include today)
+        if date_obj.weekday() == 6 or date_obj < today:
             continue
         
-        # Skip lunch break overlap
-        if lunch_start_dt and lunch_end_dt:
-            if not (service_end_with_buffer <= lunch_start_dt or current_time >= lunch_end_dt):
-                current_time += slot_duration
-                continue
-        
-        # Check for conflicts with time blocks
-        blocked_by_time_block = False
-        for time_block in time_blocks:
-            if not time_block.is_full_day:  # Already checked full day blocks above
-                block_start = datetime.combine(appointment_date, time_block.start_time)
-                block_end = datetime.combine(appointment_date, time_block.end_time)
-                
-                if current_time < block_end and service_end_with_buffer > block_start:
-                    blocked_by_time_block = True
-                    break
-        
-        if blocked_by_time_block:
-            current_time += slot_duration
-            continue
-        
-        # Check for conflicts with existing appointments
-        has_conflict = False
-        for appointment in existing_appointments:
-            existing_start = datetime.combine(appointment_date, appointment.appointment_slot.start_time)
-            existing_service_end = existing_start + timedelta(minutes=appointment.service.duration_minutes)
-            existing_end_with_buffer = existing_service_end + timedelta(minutes=appointment.appointment_slot.buffer_minutes)
-            
-            if current_time < existing_end_with_buffer and service_end_with_buffer > existing_start:
-                has_conflict = True
-                break
-        
-        if not has_conflict:
-            available_times.append(slot_start_time.strftime('%H:%M'))
-        
-        current_time += slot_duration
+        formatted_availability[date_str] = {
+            'date': date_str,
+            'weekday': date_obj.strftime('%A'),
+            'am_slots': {
+                'available': slots['am_available'],
+                'total': slots['am_total'],
+                'is_available': slots['am_available'] > 0
+            },
+            'pm_slots': {
+                'available': slots['pm_available'],
+                'total': slots['pm_total'],
+                'is_available': slots['pm_available'] > 0
+            },
+            'has_availability': slots['am_available'] > 0 or slots['pm_available'] > 0
+        }
     
     return JsonResponse({
-        'available_times': available_times,
-        'service_duration': service.duration_minutes,
-        'buffer_minutes': schedule_settings.default_buffer_minutes,
-        'clinic_hours': {
-            'start': schedule_settings.start_time.strftime('%H:%M'),
-            'end': schedule_settings.end_time.strftime('%H:%M'),
-            'lunch_start': schedule_settings.lunch_start.strftime('%H:%M') if schedule_settings.has_lunch_break else None,
-            'lunch_end': schedule_settings.lunch_end.strftime('%H:%M') if schedule_settings.has_lunch_break else None,
+        'availability': formatted_availability,
+        'date_range': {
+            'start': start_date_str,
+            'end': end_date_str,
+            'adjusted_start': start_date.strftime('%Y-%m-%d') if start_date.strftime('%Y-%m-%d') != start_date_str else None
         }
     })
-
-
-def get_available_dates_api(request):
-    """
-    API ENDPOINT: Get available dates for appointment booking
-    Returns dates excluding Sundays, holidays, and past dates
-    """
-    if request.method != 'GET':
-        return JsonResponse({'error': 'Method not allowed'}, status=405)
-    
-    dentist_id = request.GET.get('dentist_id')
-    service_id = request.GET.get('service_id')
-    
-    if not dentist_id or not service_id:
-        return JsonResponse({'error': 'dentist_id and service_id are required'}, status=400)
-    
-    try:
-        dentist = User.objects.get(id=dentist_id, is_active_dentist=True)
-        service = Service.objects.get(id=service_id, is_archived=False)
-    except (User.DoesNotExist, Service.DoesNotExist):
-        return JsonResponse({'error': 'Invalid dentist or service'}, status=400)
-    
-    # Get available dates for the next 60 days
-    available_dates = []
-    start_date = timezone.now().date() + timedelta(days=1)  # Start from tomorrow
-    
-    # Get holidays in one query
-    holidays = set(Holiday.objects.filter(
-        date__gte=start_date,
-        date__lt=start_date + timedelta(days=60),
-        is_active=True
-    ).values_list('date', flat=True))
-    
-    for i in range(60):  # Next 60 days
-        check_date = start_date + timedelta(days=i)
-        
-        # Skip Sundays and holidays
-        if check_date.weekday() == 6 or check_date in holidays:
-            continue
-        
-        available_dates.append(check_date.strftime('%Y-%m-%d'))
-    
-    return JsonResponse({'available_dates': available_dates})
 
 
 def find_patient_api(request):
     """
     API ENDPOINT: Find existing patient by email or contact number
-    Used by booking forms to auto-populate patient information
     """
     if request.method != 'GET':
         return JsonResponse({'error': 'Method not allowed'}, status=405)
@@ -667,14 +788,10 @@ def find_patient_api(request):
         return JsonResponse({'found': False})
 
 
-# ACTION VIEWS (Individual Appointment Actions)
-
+# ACTION VIEWS
 @login_required
 def approve_appointment(request, pk):
-    """
-    ACTION VIEW: Approve pending appointment with conflict validation
-    Atomically updates appointment status with double-checking for conflicts
-    """
+    """ACTION VIEW: Approve pending appointment and create/update patient record"""
     if not request.user.has_permission('appointments'):
         messages.error(request, 'You do not have permission to perform this action.')
         return redirect('core:dashboard')
@@ -687,39 +804,57 @@ def approve_appointment(request, pk):
                 messages.error(request, 'Only pending appointments can be approved.')
                 return redirect('appointments:appointment_detail', pk=pk)
             
-            # Double-check for conflicts before approving
-            start_datetime = appointment.appointment_datetime
-            end_datetime = appointment.appointment_end_datetime
-            
-            conflicts = Appointment.get_conflicting_appointments(
-                dentist=appointment.dentist,
-                start_datetime=start_datetime,
-                end_datetime=end_datetime,
+            # Check slot availability
+            can_book, message = Appointment.can_book_appointment(
+                appointment_date=appointment.appointment_date,
+                period=appointment.period,
                 exclude_appointment_id=appointment.id
             )
             
-            if conflicts:
-                messages.error(
-                    request, 
-                    'Cannot approve: Time slot conflicts with other approved appointments.'
-                )
+            if not can_book:
+                messages.error(request, f'Cannot approve: {message}')
                 return redirect('appointments:appointment_detail', pk=pk)
             
-            appointment.approve(request.user)
-            messages.success(request, f'Appointment for {appointment.patient.full_name} has been approved.')
+            # Get dentist to assign (from POST data or assign first available)
+            assigned_dentist_id = request.POST.get('assigned_dentist')
+            if assigned_dentist_id:
+                try:
+                    assigned_dentist = User.objects.get(id=assigned_dentist_id, is_active_dentist=True)
+                except User.DoesNotExist:
+                    assigned_dentist = None
+            else:
+                assigned_dentist = User.objects.filter(is_active_dentist=True).first()
+            
+            # Approve appointment (this will create/update patient record automatically)
+            appointment.approve(request.user, assigned_dentist)
+            
+            # Log the action
+            AuditLog.log_action(
+                user=request.user,
+                action='approve',
+                model_instance=appointment,
+                changes={
+                    'assigned_dentist': assigned_dentist.full_name if assigned_dentist else None,
+                    'patient_created': appointment.patient.id,
+                    'patient_name': appointment.patient.full_name
+                },
+                request=request
+            )
+            
+            dentist_name = assigned_dentist.full_name if assigned_dentist else 'staff'
+            messages.success(
+                request, 
+                f'Appointment for {appointment.patient.full_name} has been approved.'
+            )
             
     except Exception as e:
         messages.error(request, f'Error approving appointment: {str(e)}')
     
     return redirect('appointments:appointment_detail', pk=pk)
 
-
 @login_required  
 def reject_appointment(request, pk):
-    """
-    ACTION VIEW: Reject pending appointment
-    Changes status to rejected and frees up the time slot
-    """
+    """ACTION VIEW: Reject pending appointment"""
     if not request.user.has_permission('appointments'):
         messages.error(request, 'You do not have permission to perform this action.')
         return redirect('core:dashboard')
@@ -732,21 +867,30 @@ def reject_appointment(request, pk):
                 messages.error(request, 'Only pending appointments can be rejected.')
                 return redirect('appointments:appointment_detail', pk=pk)
             
+            # Store patient name before rejection
+            patient_name = appointment.patient_name  # Use the property instead of appointment.patient.full_name
+            
             appointment.reject()
-            messages.success(request, f'Appointment for {appointment.patient.full_name} has been rejected.')
+            
+            # Log the action
+            AuditLog.log_action(
+                user=request.user,
+                action='reject',
+                model_instance=appointment,
+                request=request
+            )
+            
+            messages.success(request, f'Appointment for {patient_name} has been rejected.')
             
     except Exception as e:
         messages.error(request, f'Error rejecting appointment: {str(e)}')
     
     return redirect('appointments:appointment_requests')
 
-
 @login_required
-def cancel_appointment(request, pk):
-    """
-    ACTION VIEW: Cancel existing appointment
-    Validates cancellation eligibility and updates status
-    """
+@require_POST
+def update_appointment_status(request, pk):
+    """ACTION VIEW: Update appointment status via dropdown"""
     if not request.user.has_permission('appointments'):
         messages.error(request, 'You do not have permission to perform this action.')
         return redirect('core:dashboard')
@@ -754,120 +898,108 @@ def cancel_appointment(request, pk):
     try:
         with transaction.atomic():
             appointment = get_object_or_404(Appointment.objects.select_for_update(), pk=pk)
+            new_status = request.POST.get('status')
             
-            if not appointment.can_be_cancelled:
+            # Status validation rules
+            valid_transitions = {
+                'confirmed': ['cancelled', 'completed', 'did_not_arrive'],
+                'cancelled': ['confirmed'],  # Allow reactivation if needed
+                'completed': [],  # Final status
+                'did_not_arrive': ['confirmed'],  # Allow reactivation if patient shows up later
+            }
+            
+            current_status = appointment.status
+            
+            # Check if transition is allowed
+            if new_status not in valid_transitions.get(current_status, []):
+                messages.error(
+                    request, 
+                    f'Cannot change status from {appointment.get_status_display()} to {dict(Appointment.STATUS_CHOICES).get(new_status, new_status)}'
+                )
+                return redirect('appointments:appointment_detail', pk=pk)
+            
+            # Additional validation for cancellation
+            if new_status == 'cancelled' and not appointment.can_be_cancelled:
                 messages.error(request, 'This appointment cannot be cancelled.')
                 return redirect('appointments:appointment_detail', pk=pk)
             
-            appointment.cancel()
-            messages.success(request, f'Appointment for {appointment.patient.full_name} has been cancelled.')
+            # Store old status and patient name for logging
+            old_status = appointment.status
+            patient_name = appointment.patient_name
+            
+            # Update status
+            appointment.status = new_status
+            appointment.save(update_fields=['status'])
+            
+            # Log the action
+            AuditLog.log_action(
+                user=request.user,
+                action='status_change',
+                model_instance=appointment,
+                changes={
+                    'old_status': old_status,
+                    'new_status': new_status
+                },
+                request=request
+            )
+            
+            # Success message
+            status_display = appointment.get_status_display()
+            messages.success(
+                request, 
+                f'Appointment for {patient_name} has been marked as {status_display.lower()}.'
+            )
             
     except Exception as e:
-        messages.error(request, f'Error cancelling appointment: {str(e)}')
+        messages.error(request, f'Error updating appointment status: {str(e)}')
     
     return redirect('appointments:appointment_detail', pk=pk)
 
-
 @login_required
-def complete_appointment(request, pk):
+def bulk_create_daily_slots(request):
     """
-    ACTION VIEW: Mark appointment as completed
-    Finalizes appointment and updates patient treatment history
+    UTILITY VIEW: Bulk create daily slots for a date range
     """
     if not request.user.has_permission('appointments'):
         messages.error(request, 'You do not have permission to perform this action.')
         return redirect('core:dashboard')
     
-    try:
-        with transaction.atomic():
-            appointment = get_object_or_404(Appointment.objects.select_for_update(), pk=pk)
+    if request.method == 'POST':
+        start_date_str = request.POST.get('start_date')
+        end_date_str = request.POST.get('end_date')
+        am_slots = int(request.POST.get('am_slots', 6))
+        pm_slots = int(request.POST.get('pm_slots', 8))
+        
+        try:
+            start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+            end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
             
-            if appointment.status != 'approved':
-                messages.error(request, 'Only approved appointments can be marked as completed.')
-                return redirect('appointments:appointment_detail', pk=pk)
+            created_count = 0
+            current_date = start_date
             
-            appointment.complete()
-            messages.success(request, f'Appointment for {appointment.patient.full_name} has been marked as completed.')
+            with transaction.atomic():
+                while current_date <= end_date:
+                    # Skip Sundays
+                    if current_date.weekday() != 6:
+                        daily_slots, created = DailySlots.objects.get_or_create(
+                            date=current_date,
+                            defaults={
+                                'am_slots': am_slots,
+                                'pm_slots': pm_slots,
+                                'created_by': request.user
+                            }
+                        )
+                        
+                        if created:
+                            created_count += 1
+                    
+                    current_date += timedelta(days=1)
             
-    except Exception as e:
-        messages.error(request, f'Error completing appointment: {str(e)}')
+            messages.success(request, f'Successfully created slots for {created_count} days.')
+            
+        except ValueError:
+            messages.error(request, 'Invalid date format.')
+        except Exception as e:
+            messages.error(request, f'Error creating slots: {str(e)}')
     
-    return redirect('appointments:appointment_detail', pk=pk)
-
-
-# HELPER FUNCTIONS AND UTILITIES
-def _get_system_setting_time(key, default):
-    """
-    HELPER: Get system setting as time object with fallback
-    Args:
-        key (str): System setting key
-        default (time): Default time value if setting not found
-    Returns:
-        time: Parsed time object
-    """
-    try:
-        setting = SystemSetting.objects.get(key=key)
-        return datetime.strptime(setting.value, '%H:%M').time()
-    except (SystemSetting.DoesNotExist, ValueError):
-        return default
-
-
-def _get_system_setting_int(key, default):
-    """
-    HELPER: Get system setting as integer with fallback
-    Args:
-        key (str): System setting key
-        default (int): Default integer value if setting not found
-    Returns:
-        int: Parsed integer value
-    """
-    try:
-        setting = SystemSetting.objects.get(key=key)
-        return int(setting.value)
-    except (SystemSetting.DoesNotExist, ValueError):
-        return default
-
-
-def validate_name_field(value, field_name):
-    """
-    HELPER: Validate name fields for proper formatting
-    Args:
-        value (str): Name value to validate
-        field_name (str): Field name for error messages
-    Returns:
-        str: Cleaned name value
-    Raises:
-        ValidationError: If name format is invalid
-    """
-    if not value or not value.strip():
-        return value
-    
-    # Pattern allows letters, spaces, hyphens, and apostrophes
-    name_pattern = re.compile(r'^[a-zA-Z\s\-\']+$')
-    if not name_pattern.match(value.strip()):
-        raise ValidationError(f'{field_name} should only contain letters, spaces, hyphens, and apostrophes.')
-    
-    return value.strip()
-
-
-def validate_philippine_mobile(value):
-    """
-    HELPER: Validate Philippine mobile number formats
-    Args:
-        value (str): Mobile number to validate
-    Returns:
-        str: Cleaned mobile number
-    Raises:
-        ValidationError: If mobile number format is invalid
-    """
-    if not value or not value.strip():
-        return value
-    
-    # Philippine mobile number pattern
-    phone_pattern = re.compile(r'^(\+63|0)?[9]\d{9}$')
-    clean_contact = value.replace(' ', '').replace('-', '')
-    
-    if not phone_pattern.match(clean_contact):
-        raise ValidationError('Please enter a valid Philippine mobile number (e.g., +639123456789).')
-    
-    return clean_contact
+    return redirect('appointments:daily_slots_list')

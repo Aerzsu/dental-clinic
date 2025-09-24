@@ -1,0 +1,313 @@
+{% extends "base.html" %}
+{% load user_tags %}
+
+{% block title %}Create Payment - {{ appointment.patient.full_name }}{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="sm:flex sm:items-center sm:justify-between">
+        <div>
+            <nav class="flex" aria-label="Breadcrumb">
+                <ol role="list" class="flex items-center space-x-4">
+                    <li>
+                        <div class="flex">
+                            <a href="{% url 'appointments:payment_list' %}" class="text-sm font-medium text-gray-500 hover:text-gray-700">
+                                Payments
+                            </a>
+                        </div>
+                    </li>
+                    <li>
+                        <div class="flex items-center">
+                            <svg class="flex-shrink-0 h-5 w-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" />
+                            </svg>
+                            <span class="ml-4 text-sm font-medium text-gray-500">Create Payment</span>
+                        </div>
+                    </li>
+                </ol>
+            </nav>
+            <h1 class="mt-2 text-2xl font-bold text-gray-900">Create Payment Record</h1>
+            <p class="mt-1 text-sm text-gray-600">
+                Create payment tracking for {{ appointment.patient.full_name }}
+            </p>
+        </div>
+    </div>
+
+    <!-- Form -->
+    <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <!-- Main Form -->
+        <div class="lg:col-span-2">
+            <form method="post" class="space-y-6">
+                {% csrf_token %}
+                
+                <!-- Payment Configuration -->
+                <div class="bg-white shadow rounded-lg">
+                    <div class="px-6 py-4 border-b border-gray-200">
+                        <h3 class="text-lg font-medium text-gray-900">Payment Configuration</h3>
+                        <p class="mt-1 text-sm text-gray-500">Set up the payment plan for this appointment</p>
+                    </div>
+                    <div class="px-6 py-4">
+                        <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                            <!-- Payment Type -->
+                            <div class="sm:col-span-2">
+                                <fieldset>
+                                    <legend class="text-sm font-medium text-gray-900 mb-4">Payment Type</legend>
+                                    <div class="space-y-4 sm:flex sm:items-center sm:space-y-0 sm:space-x-6">
+                                        <div class="flex items-center">
+                                            {{ form.payment_type.0 }}
+                                            <label for="{{ form.payment_type.0.id_for_label }}" class="ml-3 text-sm font-medium text-gray-900">
+                                                {{ form.payment_type.0.choice_label }}
+                                            </label>
+                                        </div>
+                                        <div class="flex items-center">
+                                            {{ form.payment_type.1 }}
+                                            <label for="{{ form.payment_type.1.id_for_label }}" class="ml-3 text-sm font-medium text-gray-900">
+                                                {{ form.payment_type.1.choice_label }}
+                                            </label>
+                                        </div>
+                                    </div>
+                                    {% if form.payment_type.errors %}
+                                        <p class="mt-2 text-sm text-red-600">{{ form.payment_type.errors.0 }}</p>
+                                    {% endif %}
+                                </fieldset>
+                            </div>
+
+                            <!-- Installment Months (conditional) -->
+                            <div id="installmentMonths" class="hidden">
+                                <label for="{{ form.installment_months.id_for_label }}" class="block text-sm font-medium text-gray-700">
+                                    Number of Months
+                                </label>
+                                {{ form.installment_months }}
+                                {% if form.installment_months.errors %}
+                                    <p class="mt-2 text-sm text-red-600">{{ form.installment_months.errors.0 }}</p>
+                                {% endif %}
+                                <p class="mt-2 text-sm text-gray-500">How many months to split the payment</p>
+                            </div>
+
+                            <!-- Next Due Date -->
+                            <div id="nextDueDate">
+                                <label for="{{ form.next_due_date.id_for_label }}" class="block text-sm font-medium text-gray-700">
+                                    {% if form.payment_type.value == 'installment' %}First Payment Due Date{% else %}Payment Due Date{% endif %}
+                                </label>
+                                {{ form.next_due_date }}
+                                {% if form.next_due_date.errors %}
+                                    <p class="mt-2 text-sm text-red-600">{{ form.next_due_date.errors.0 }}</p>
+                                {% endif %}
+                                <p class="mt-2 text-sm text-gray-500">When should the {% if form.payment_type.value == 'installment' %}first{% endif %} payment be due</p>
+                            </div>
+                        </div>
+
+                        <!-- Notes -->
+                        <div class="mt-6">
+                            <label for="{{ form.notes.id_for_label }}" class="block text-sm font-medium text-gray-700">
+                                Notes
+                            </label>
+                            {{ form.notes }}
+                            {% if form.notes.errors %}
+                                <p class="mt-2 text-sm text-red-600">{{ form.notes.errors.0 }}</p>
+                            {% endif %}
+                            <p class="mt-2 text-sm text-gray-500">Optional notes about this payment arrangement</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Default Service Item -->
+                <div class="bg-white shadow rounded-lg">
+                    <div class="px-6 py-4 border-b border-gray-200">
+                        <h3 class="text-lg font-medium text-gray-900">Initial Service</h3>
+                        <p class="mt-1 text-sm text-gray-500">The appointment service will be automatically added</p>
+                    </div>
+                    <div class="px-6 py-4">
+                        <div class="bg-blue-50 border-l-4 border-blue-400 p-4">
+                            <div class="flex">
+                                <div class="flex-shrink-0">
+                                    <svg class="h-5 w-5 text-blue-400" viewBox="0 0 20 20" fill="currentColor">
+                                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+                                    </svg>
+                                </div>
+                                <div class="ml-3">
+                                    <h3 class="text-sm font-medium text-blue-800">
+                                        Default Service Item
+                                    </h3>
+                                    <div class="mt-2 text-sm text-blue-700">
+                                        <p><strong>{{ appointment.service.name }}</strong> will be automatically added to this payment.</p>
+                                        <p class="mt-1">You can modify the price and add more services after creating the payment record.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Form Actions -->
+                <div class="flex justify-end space-x-3">
+                    <a href="{% url 'appointments:appointment_detail' appointment.pk %}" 
+                       class="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
+                        Cancel
+                    </a>
+                    <button type="submit" 
+                            class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
+                        Create Payment Record
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Sidebar -->
+        <div class="space-y-6">
+            <!-- Appointment Information -->
+            <div class="bg-white shadow rounded-lg">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <h3 class="text-lg font-medium text-gray-900">Appointment Details</h3>
+                </div>
+                <div class="px-6 py-4">
+                    <dl class="space-y-3">
+                        <div>
+                            <dt class="text-sm font-medium text-gray-500">Patient</dt>
+                            <dd class="mt-1">
+                                <div class="flex items-center space-x-3">
+                                    <div class="flex-shrink-0 h-8 w-8">
+                                        <div class="h-8 w-8 rounded-full bg-primary-600 flex items-center justify-center">
+                                            <span class="text-xs font-medium text-white">
+                                                {{ appointment.patient.first_name|first }}{{ appointment.patient.last_name|first }}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div class="text-sm font-medium text-gray-900">
+                                        {{ appointment.patient.full_name }}
+                                    </div>
+                                </div>
+                            </dd>
+                        </div>
+                        <div>
+                            <dt class="text-sm font-medium text-gray-500">Date & Time</dt>
+                            <dd class="mt-1 text-sm text-gray-900">
+                                {{ appointment.appointment_date|date:"F d, Y" }}<br>
+                                <span class="text-gray-600">{{ appointment.get_period_display }}</span>
+                            </dd>
+                        </div>
+                        <div>
+                            <dt class="text-sm font-medium text-gray-500">Service</dt>
+                            <dd class="mt-1 text-sm text-gray-900">{{ appointment.service.name }}</dd>
+                        </div>
+                        {% if appointment.assigned_dentist %}
+                        <div>
+                            <dt class="text-sm font-medium text-gray-500">Assigned Dentist</dt>
+                            <dd class="mt-1 text-sm text-gray-900">{{ appointment.assigned_dentist.full_name }}</dd>
+                        </div>
+                        {% endif %}
+                        <div>
+                            <dt class="text-sm font-medium text-gray-500">Status</dt>
+                            <dd class="mt-1">
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                                    {% if appointment.status == 'pending' %}bg-yellow-100 text-yellow-800
+                                    {% elif appointment.status == 'confirmed' %}bg-green-100 text-green-800
+                                    {% elif appointment.status == 'completed' %}bg-blue-100 text-blue-800
+                                    {% elif appointment.status == 'cancelled' %}bg-red-100 text-red-800
+                                    {% else %}bg-gray-100 text-gray-800{% endif %}">
+                                    {{ appointment.get_status_display }}
+                                </span>
+                            </dd>
+                        </div>
+                    </dl>
+                    
+                    <div class="mt-4 pt-4 border-t border-gray-200">
+                        <a href="{% url 'appointments:appointment_detail' appointment.pk %}" 
+                           class="text-sm text-primary-600 hover:text-primary-500">
+                            View Full Appointment Details →
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Payment Type Information -->
+            <div class="bg-white shadow rounded-lg">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <h3 class="text-lg font-medium text-gray-900">Payment Options</h3>
+                </div>
+                <div class="px-6 py-4">
+                    <div class="space-y-4">
+                        <div class="border-l-4 border-green-400 bg-green-50 p-4">
+                            <div class="flex">
+                                <div class="flex-shrink-0">
+                                    <div class="text-lg">💰</div>
+                                </div>
+                                <div class="ml-3">
+                                    <h3 class="text-sm font-medium text-green-800">Full Payment</h3>
+                                    <p class="mt-2 text-sm text-green-700">
+                                        Patient pays the entire amount at once. Marks payment as completed immediately upon payment.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="border-l-4 border-blue-400 bg-blue-50 p-4">
+                            <div class="flex">
+                                <div class="flex-shrink-0">
+                                    <div class="text-lg">📅</div>
+                                </div>
+                                <div class="ml-3">
+                                    <h3 class="text-sm font-medium text-blue-800">Installment Plan</h3>
+                                    <p class="mt-2 text-sm text-blue-700">
+                                        Split payment over multiple months. System tracks due dates and remaining balance automatically.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Cash Payment Notice -->
+            <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4">
+                <div class="flex">
+                    <div class="flex-shrink-0">
+                        <svg class="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                        </svg>
+                    </div>
+                    <div class="ml-3">
+                        <h3 class="text-sm font-medium text-yellow-800">Cash Only Policy</h3>
+                        <p class="mt-2 text-sm text-yellow-700">
+                            This clinic accepts <strong>cash payments only</strong>. All payment records will be marked as cash transactions.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const paymentTypeRadios = document.querySelectorAll('input[name="payment_type"]');
+    const installmentMonths = document.getElementById('installmentMonths');
+    const nextDueDate = document.getElementById('nextDueDate');
+    
+    // Handle payment type changes
+    paymentTypeRadios.forEach(radio => {
+        radio.addEventListener('change', function() {
+            const dueDateLabel = nextDueDate.querySelector('label');
+            const dueDateHelp = nextDueDate.querySelector('p');
+            
+            if (this.value === 'installment') {
+                installmentMonths.classList.remove('hidden');
+                dueDateLabel.textContent = dueDateLabel.textContent.replace('Payment Due Date', 'First Payment Due Date');
+                dueDateHelp.textContent = dueDateHelp.textContent.replace('When should the  payment', 'When should the first payment');
+            } else {
+                installmentMonths.classList.add('hidden');
+                dueDateLabel.textContent = dueDateLabel.textContent.replace('First Payment Due Date', 'Payment Due Date');
+                dueDateHelp.textContent = dueDateHelp.textContent.replace('When should the first payment', 'When should the  payment');
+            }
+        });
+    });
+    
+    // Initialize visibility based on current selection
+    const checkedRadio = document.querySelector('input[name="payment_type"]:checked');
+    if (checkedRadio && checkedRadio.value === 'installment') {
+        installmentMonths.classList.remove('hidden');
+    }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,258 @@
+{% extends "base.html" %}
+
+{% block title %}
+    {% if object %}Edit Daily Slots{% else %}Create Daily Slots{% endif %} - Dental Clinic
+{% endblock %}
+
+{% block content %}
+<style> 
+    input,
+    select,
+    textarea {
+    padding: 0.5rem 0.75rem;
+}
+</style>
+<div class="container mx-auto px-4 py-6">
+    <!-- Header -->
+    <div class="mb-6">
+        <div class="flex items-center justify-between">
+            <div>
+                <h1 class="text-2xl font-bold text-gray-900">
+                    {% if object %}
+                        Edit Daily Slots for {{ object.date|date:"F d, Y" }}
+                    {% else %}
+                        Create Daily Slots
+                    {% endif %}
+                </h1>
+                <p class="text-gray-600">
+                    {% if object %}
+                        Update AM/PM slot allocations for this date
+                    {% else %}
+                        Set AM/PM slot allocations for a specific date
+                    {% endif %}
+                </p>
+            </div>
+            <div>
+                <a href="{% url 'appointments:daily_slots_list' %}" 
+                   class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
+                    Back to Daily Slots
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Form -->
+    <div class="bg-white shadow rounded-lg">
+        <form method="post">
+            {% csrf_token %}
+            
+            <div class="px-6 py-4 border-b border-gray-200">
+                <h3 class="text-lg font-medium text-gray-900">Slot Configuration</h3>
+            </div>
+
+            <div class="px-6 py-6 space-y-6">
+                <!-- Date Field -->
+                <div>
+                    <label for="{{ form.date.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-2">
+                        Date *
+                    </label>
+                    {{ form.date }}
+                    {% if form.date.errors %}
+                        <div class="mt-1 text-sm text-red-600">
+                            {% for error in form.date.errors %}
+                                <p>{{ error }}</p>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                    <p class="mt-1 text-sm text-gray-500">Select the date for slot allocation. Sundays are not allowed.</p>
+                </div>
+
+                <!-- Slot Configuration -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <!-- AM Slots -->
+                    <div class="bg-blue-50 p-4 rounded-lg">
+                        <div class="flex items-center mb-3">
+                            <div class="text-2xl mr-2">🌅</div>
+                            <div>
+                                <h4 class="font-medium text-gray-900">Morning (AM) Slots</h4>
+                                <p class="text-sm text-gray-500">Typically 8:00 AM - 12:00 PM</p>
+                            </div>
+                        </div>
+                        <div>
+                            <label for="{{ form.am_slots.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-2">
+                                Number of AM Slots *
+                            </label>
+                            {{ form.am_slots }}
+                            {% if form.am_slots.errors %}
+                                <div class="mt-1 text-sm text-red-600">
+                                    {% for error in form.am_slots.errors %}
+                                        <p>{{ error }}</p>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                            <p class="mt-1 text-sm text-gray-500">Maximum 20 slots per period</p>
+                        </div>
+                    </div>
+
+                    <!-- PM Slots -->
+                    <div class="bg-orange-50 p-4 rounded-lg">
+                        <div class="flex items-center mb-3">
+                            <div class="text-2xl mr-2">🌆</div>
+                            <div>
+                                <h4 class="font-medium text-gray-900">Afternoon (PM) Slots</h4>
+                                <p class="text-sm text-gray-500">Typically 1:00 PM - 6:00 PM</p>
+                            </div>
+                        </div>
+                        <div>
+                            <label for="{{ form.pm_slots.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-2">
+                                Number of PM Slots *
+                            </label>
+                            {{ form.pm_slots }}
+                            {% if form.pm_slots.errors %}
+                                <div class="mt-1 text-sm text-red-600">
+                                    {% for error in form.pm_slots.errors %}
+                                        <p>{{ error }}</p>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                            <p class="mt-1 text-sm text-gray-500">Maximum 20 slots per period</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Total Slots Preview -->
+                <div class="bg-gray-50 p-4 rounded-lg">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h4 class="font-medium text-gray-900">Total Daily Slots</h4>
+                            <p class="text-sm text-gray-500">Combined AM + PM capacity</p>
+                        </div>
+                        <div class="text-right">
+                            <div id="totalSlots" class="text-2xl font-bold text-primary-600">
+                                {% with am_value=form.am_slots.value|default:6 pm_value=form.pm_slots.value|default:8 %}
+                                    {{ am_value|add:pm_value }}
+                                {% endwith %}
+                            </div>
+                            <div class="text-sm text-gray-500">appointments per day</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Notes Field -->
+                <div>
+                    <label for="{{ form.notes.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-2">
+                        Notes
+                    </label>
+                    {{ form.notes }}
+                    {% if form.notes.errors %}
+                        <div class="mt-1 text-sm text-red-600">
+                            {% for error in form.notes.errors %}
+                                <p>{{ error }}</p>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                    <p class="mt-1 text-sm text-gray-500">Optional notes for this date (e.g., special hours, reduced capacity, etc.)</p>
+                </div>
+
+                {% if object %}
+                <!-- Current Usage (for existing slots) -->
+                <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                    <div class="flex items-start">
+                        <div class="text-yellow-600 text-lg mr-3">⚠️</div>
+                        <div class="flex-1">
+                            <h4 class="font-medium text-yellow-800">Current Usage</h4>
+                            <div class="mt-2 text-sm text-yellow-700 space-y-1">
+                                {% with available_am=object.get_available_am_slots available_pm=object.get_available_pm_slots %}
+                                    <p>AM: {{ available_am }}/{{ object.am_slots }} available ({{ object.am_slots|add:available_am|add:'-'|add:available_am }} booked)</p>
+                                    <p>PM: {{ available_pm }}/{{ object.pm_slots }} available ({{ object.pm_slots|add:available_pm|add:'-'|add:available_pm }} booked)</p>
+                                    {% if object.am_slots > available_am or object.pm_slots > available_pm %}
+                                        <p class="font-medium">⚠️ Reducing slots below booked appointments may cause conflicts.</p>
+                                    {% endif %}
+                                {% endwith %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- General Form Errors -->
+                {% if form.non_field_errors %}
+                    <div class="bg-red-50 border border-red-200 rounded-lg p-4">
+                        <div class="flex items-start">
+                            <div class="text-red-600 text-lg mr-3">❌</div>
+                            <div>
+                                <h4 class="font-medium text-red-800">Please fix the following errors:</h4>
+                                <ul class="mt-2 text-sm text-red-700 list-disc list-inside">
+                                    {% for error in form.non_field_errors %}
+                                        <li>{{ error }}</li>
+                                    {% endfor %}
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                {% endif %}
+            </div>
+
+            <!-- Form Actions -->
+            <div class="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-between">
+                <div class="flex space-x-3">
+                    <a href="{% url 'appointments:daily_slots_list' %}" 
+                       class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
+                        Cancel
+                    </a>
+                </div>
+                <div class="flex space-x-3">
+                    {% if object %}
+                        <a href="{% url 'appointments:appointment_calendar' %}?date={{ object.date|date:'Y-m-d' }}" 
+                           class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
+                            View Calendar
+                        </a>
+                    {% endif %}
+                    <button type="submit" 
+                            class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
+                        {% if object %}
+                            Update Slots
+                        {% else %}
+                            Create Slots
+                        {% endif %}
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <!-- Help Section -->
+    <div class="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <div class="flex items-start">
+            <div class="text-blue-600 text-lg mr-3">💡</div>
+            <div>
+                <h4 class="font-medium text-blue-900">Tips for Slot Management</h4>
+                <ul class="mt-2 text-sm text-blue-700 space-y-1">
+                    <li>• Default recommendation: 6 AM slots, 8 PM slots for regular days</li>
+                    <li>• Set slots to 0 for days when clinic is closed or unavailable</li>
+                    <li>• Consider reducing slots on days with limited staff</li>
+                    <li>• Slots can be adjusted later, but be mindful of existing bookings</li>
+                    <li>• Sunday appointments are automatically disabled</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Update total slots when AM or PM values change
+    function updateTotalSlots() {
+        const amSlots = parseInt(document.getElementById('{{ form.am_slots.id_for_label }}').value) || 0;
+        const pmSlots = parseInt(document.getElementById('{{ form.pm_slots.id_for_label }}').value) || 0;
+        document.getElementById('totalSlots').textContent = amSlots + pmSlots;
+    }
+
+    // Add event listeners
+    document.getElementById('{{ form.am_slots.id_for_label }}').addEventListener('input', updateTotalSlots);
+    document.getElementById('{{ form.pm_slots.id_for_label }}').addEventListener('input', updateTotalSlots);
+    
+    // Set minimum date to today
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('{{ form.date.id_for_label }}').setAttribute('min', today);
+</script>
+{% endblock %}

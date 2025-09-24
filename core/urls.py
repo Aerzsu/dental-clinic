@@ -15,10 +15,6 @@ urlpatterns = [
     
     # Maintenance module
     path('maintenance/', views.MaintenanceHubView.as_view(), name='maintenance_hub'),
-    path('holidays/', views.HolidayListView.as_view(), name='holiday_list'),
-    path('holidays/create/', views.HolidayCreateView.as_view(), name='holiday_create'),
-    path('holidays/<int:pk>/edit/', views.HolidayUpdateView.as_view(), name='holiday_update'),
-    path('holidays/<int:pk>/delete/', views.HolidayDeleteView.as_view(), name='holiday_delete'),
     
     # Audit logs
     path('audit-logs/', views.AuditLogListView.as_view(), name='audit_logs'),

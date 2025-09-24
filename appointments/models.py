@@ -1,339 +1,177 @@
-# appointments/models.py
-from django.db import models
+# appointments/models.py - Complete model with AM/PM slot system
+from django.db import models, transaction
 from django.core.exceptions import ValidationError
 from django.utils import timezone
-from datetime import datetime, time, timedelta
-
-class AppointmentSlot(models.Model):
-    """
-    Renamed from Schedule - Represents a specific time slot for appointments
-    """
-    dentist = models.ForeignKey('users.User', on_delete=models.CASCADE, related_name='appointment_slots')
-    date = models.DateField()
-    start_time = models.TimeField()
-    end_time = models.TimeField()
-    is_available = models.BooleanField(default=True)
-    buffer_minutes = models.PositiveIntegerField(default=15, help_text="Buffer time after appointment for cleaning/prep")
-    notes = models.TextField(blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    
-    class Meta:
-        ordering = ['date', 'start_time']
-        unique_together = ['dentist', 'date', 'start_time', 'end_time']
-        indexes = [
-            models.Index(fields=['dentist', 'date'], name='appt_slot_dentist_date_idx'),
-            models.Index(fields=['date', 'start_time'], name='appt_slot_date_time_idx'),
-        ]
-        constraints = [
-            models.CheckConstraint(
-                check=models.Q(end_time__gt=models.F('start_time')), 
-                name='appointmentslot_end_after_start'
-            ),
-            models.CheckConstraint(
-                check=models.Q(buffer_minutes__gte=0), 
-                name='appointmentslot_non_negative_buffer'
-            ),
-        ]
-    
-    def __str__(self):
-        return f"{self.dentist.full_name} - {self.date} {self.start_time}-{self.end_time}"
-    
-    @property
-    def effective_end_time(self):
-        """End time including buffer"""
-        end_datetime = datetime.combine(self.date, self.end_time)
-        buffered_end = end_datetime + timedelta(minutes=self.buffer_minutes)
-        return buffered_end.time()
-    
-    def clean(self):
-        if self.end_time <= self.start_time:
-            raise ValidationError('End time must be after start time.')
-        
-        # Check for overlapping slots for the same dentist on the same date
-        overlapping = AppointmentSlot.objects.filter(
-            dentist=self.dentist,
-            date=self.date
-        ).exclude(pk=self.pk)
-        
-        for slot in overlapping:
-            if self._slots_overlap(slot):
-                raise ValidationError(
-                    f'This time slot overlaps with existing slot: '
-                    f'{slot.start_time}-{slot.end_time}'
-                )
-    
-    def _slots_overlap(self, other_slot):
-        """Check if this slot overlaps with another slot (including buffer)"""
-        self_effective_end = self.effective_end_time
-        other_effective_end = other_slot.effective_end_time
-        
-        return (self.start_time < other_effective_end and 
-                self_effective_end > other_slot.start_time)
+from datetime import datetime, date, timedelta, time
+from decimal import Decimal
 
 
-class DentistScheduleSettings(models.Model):
+class DailySlots(models.Model):
     """
-    Individual working hours and settings for each dentist
+    Simple daily slot allocation model for AM/PM appointments
+    Stores available AM/PM slots for each date (shared pool across all dentists)
     """
-    WEEKDAY_CHOICES = [
-        (0, 'Monday'),
-        (1, 'Tuesday'), 
-        (2, 'Wednesday'),
-        (3, 'Thursday'),
-        (4, 'Friday'),
-        (5, 'Saturday'),
-        (6, 'Sunday'),
-    ]
+    date = models.DateField(unique=True)
+    am_slots = models.PositiveIntegerField(default=6, help_text="Available morning slots (AM)")
+    pm_slots = models.PositiveIntegerField(default=8, help_text="Available afternoon slots (PM)")
     
-    dentist = models.ForeignKey('users.User', on_delete=models.CASCADE, related_name='schedule_settings')
-    weekday = models.IntegerField(choices=WEEKDAY_CHOICES)
-    is_working = models.BooleanField(default=True)
-    start_time = models.TimeField(default=time(10, 0))  # 10:00 AM
-    end_time = models.TimeField(default=time(18, 0))    # 6:00 PM
-    
-    # Lunch break settings
-    has_lunch_break = models.BooleanField(default=True)
-    lunch_start = models.TimeField(default=time(12, 0))  # 12:00 PM
-    lunch_end = models.TimeField(default=time(13, 0))    # 1:00 PM
-    
-    # Buffer and slot settings
-    default_buffer_minutes = models.PositiveIntegerField(default=15, help_text="Default buffer time between appointments")
-    slot_duration_minutes = models.PositiveIntegerField(default=30, help_text="Duration of each appointment slot")
-    
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    
-    class Meta:
-        unique_together = ['dentist', 'weekday']
-        ordering = ['dentist', 'weekday']
-        indexes = [
-            models.Index(fields=['dentist', 'weekday'], name='dentist_sched_weekday_idx'),
-        ]
-        constraints = [
-            models.CheckConstraint(
-                check=models.Q(end_time__gt=models.F('start_time')), 
-                name='dentist_settings_end_after_start'
-            ),
-            models.CheckConstraint(
-                check=models.Q(lunch_end__gt=models.F('lunch_start')), 
-                name='dentist_settings_lunch_end_after_start'
-            ),
-            models.CheckConstraint(
-                check=models.Q(default_buffer_minutes__gte=0), 
-                name='dentist_settings_non_negative_buffer'
-            ),
-            models.CheckConstraint(
-                check=models.Q(slot_duration_minutes__gt=0), 
-                name='dentist_settings_positive_slot_duration'
-            ),
-        ]
-    
-    def __str__(self):
-        weekday_name = self.get_weekday_display()
-        if self.is_working:
-            return f"{self.dentist.full_name} - {weekday_name} ({self.start_time}-{self.end_time})"
-        else:
-            return f"{self.dentist.full_name} - {weekday_name} (Not Working)"
-    
-    def clean(self):
-        if self.is_working:
-            if self.end_time <= self.start_time:
-                raise ValidationError('End time must be after start time.')
-            
-            if self.has_lunch_break:
-                if self.lunch_end <= self.lunch_start:
-                    raise ValidationError('Lunch end time must be after lunch start time.')
-                
-                # Check lunch break is within working hours
-                if self.lunch_start < self.start_time or self.lunch_end > self.end_time:
-                    raise ValidationError('Lunch break must be within working hours.')
-                
-                # Check lunch break duration (max 2 hours)
-                lunch_duration = datetime.combine(datetime.today(), self.lunch_end) - \
-                               datetime.combine(datetime.today(), self.lunch_start)
-                if lunch_duration.total_seconds() > 7200:  # 2 hours in seconds
-                    raise ValidationError('Lunch break cannot exceed 2 hours.')
-    
-    @property
-    def working_hours_display(self):
-        """Display working hours in readable format"""
-        if not self.is_working:
-            return "Not Working"
-        
-        hours = f"{self.start_time.strftime('%I:%M %p')} - {self.end_time.strftime('%I:%M %p')}"
-        if self.has_lunch_break:
-            lunch = f"{self.lunch_start.strftime('%I:%M %p')}-{self.lunch_end.strftime('%I:%M %p')}"
-            hours += f" (Lunch: {lunch})"
-        return hours
-    
-    @classmethod
-    def create_default_schedule(cls, dentist):
-        """Create default Mon-Fri working schedule for a dentist"""
-        schedules = []
-        for weekday in range(7):  # 0=Monday, 6=Sunday
-            is_working = weekday < 5  # Monday to Friday only (Saturday optional)
-            
-            # Saturday gets shorter hours
-            if weekday == 5:  # Saturday
-                start_time = time(10, 0)
-                end_time = time(14, 0)  # 2:00 PM
-                has_lunch_break = False
-            else:
-                start_time = time(10, 0)
-                end_time = time(18, 0)
-                has_lunch_break = True
-            
-            schedule = cls.objects.get_or_create(
-                dentist=dentist,
-                weekday=weekday,
-                defaults={
-                    'is_working': is_working,
-                    'start_time': start_time,
-                    'end_time': end_time,
-                    'has_lunch_break': has_lunch_break,
-                    'lunch_start': time(12, 0),
-                    'lunch_end': time(13, 0),
-                    'default_buffer_minutes': 15,
-                    'slot_duration_minutes': 30,
-                }
-            )[0]
-            schedules.append(schedule)
-        return schedules
-    
-    @classmethod
-    def get_dentist_settings_for_date(cls, dentist, date):
-        """Get schedule settings for a dentist on a specific date"""
-        weekday = date.weekday()
-        try:
-            return cls.objects.get(dentist=dentist, weekday=weekday, is_working=True)
-        except cls.DoesNotExist:
-            return None
-    
-    def is_time_within_working_hours(self, time_obj):
-        """Check if a time is within working hours (excluding lunch)"""
-        if not self.is_working:
-            return False
-        
-        if time_obj < self.start_time or time_obj >= self.end_time:
-            return False
-        
-        # Check if time falls during lunch break
-        if self.has_lunch_break:
-            if self.lunch_start <= time_obj < self.lunch_end:
-                return False
-        
-        return True
-
-
-class TimeBlock(models.Model):
-    """
-    Blocks specific time ranges for dentists (vacations, meetings, etc.)
-    """
-    BLOCK_TYPE_CHOICES = [
-        ('vacation', 'Vacation'),
-        ('sick_leave', 'Sick Leave'),
-        ('meeting', 'Meeting'),
-        ('training', 'Training'),
-        ('maintenance', 'Equipment Maintenance'),
-        ('personal', 'Personal Time'),
-        ('other', 'Other'),
-    ]
-    
-    dentist = models.ForeignKey('users.User', on_delete=models.CASCADE, related_name='time_blocks')
-    date = models.DateField()
-    start_time = models.TimeField(null=True, blank=True, help_text="Leave empty to block entire day")
-    end_time = models.TimeField(null=True, blank=True, help_text="Leave empty to block entire day")
-    block_type = models.CharField(max_length=20, choices=BLOCK_TYPE_CHOICES, default='other')
-    reason = models.CharField(max_length=255)
-    notes = models.TextField(blank=True)
+    # Optional notes for special days
+    notes = models.TextField(blank=True, help_text="Optional notes for this date")
     
     # Metadata
     created_at = models.DateTimeField(auto_now_add=True)
-    created_by = models.ForeignKey('users.User', on_delete=models.PROTECT, related_name='created_time_blocks')
+    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey('users.User', on_delete=models.SET_NULL, null=True, blank=True, related_name='created_daily_slots')
     
     class Meta:
-        ordering = ['date', 'start_time']
+        ordering = ['date']
+        verbose_name = 'Daily Slot'
+        verbose_name_plural = 'Daily Slots'
         indexes = [
-            models.Index(fields=['dentist', 'date'], name='time_block_dentist_date_idx'),
-            models.Index(fields=['date', 'start_time'], name='time_block_date_time_idx'),
+            models.Index(fields=['date'], name='daily_slots_date_idx'),
         ]
         constraints = [
             models.CheckConstraint(
-                check=models.Q(end_time__gt=models.F('start_time')) | 
-                      (models.Q(start_time__isnull=True) & models.Q(end_time__isnull=True)),
-                name='timeblock_valid_times'
+                check=models.Q(am_slots__gte=0), 
+                name='daily_slots_non_negative_am'
+            ),
+            models.CheckConstraint(
+                check=models.Q(pm_slots__gte=0), 
+                name='daily_slots_non_negative_pm'
             ),
         ]
     
     def __str__(self):
-        if self.is_full_day:
-            return f"{self.dentist.full_name} - {self.date} (Full Day) - {self.reason}"
-        else:
-            return f"{self.dentist.full_name} - {self.date} {self.start_time}-{self.end_time} - {self.reason}"
+        return f"{self.date} - AM: {self.am_slots}, PM: {self.pm_slots}"
     
     @property
-    def is_full_day(self):
-        """Check if this is a full-day block"""
-        return self.start_time is None and self.end_time is None
+    def total_slots(self):
+        """Total available slots for the day"""
+        return self.am_slots + self.pm_slots
+    
+    def get_available_am_slots(self):
+        """Get available AM slots (total - booked)"""
+        booked_am = Appointment.objects.filter(
+            appointment_date=self.date,
+            period='AM',
+            status__in=Appointment.BLOCKING_STATUSES
+        ).count()
+        return max(0, self.am_slots - booked_am)
+    
+    def get_available_pm_slots(self):
+        """Get available PM slots (total - booked)"""
+        booked_pm = Appointment.objects.filter(
+            appointment_date=self.date,
+            period='PM',
+            status__in=Appointment.BLOCKING_STATUSES
+        ).count()
+        return max(0, self.pm_slots - booked_pm)
+    
+    def has_available_slots(self, period):
+        """Check if period has available slots"""
+        if period == 'AM':
+            return self.get_available_am_slots() > 0
+        elif period == 'PM':
+            return self.get_available_pm_slots() > 0
+        return False
     
     def clean(self):
-        # Full day blocks don't need time validation
-        if self.is_full_day:
-            return
+        # Validate date is not in the past (except for today)
+        if self.date and self.date < timezone.now().date():
+            raise ValidationError('Cannot create slots for past dates.')
         
-        if not self.start_time or not self.end_time:
-            raise ValidationError('Both start_time and end_time are required for partial day blocks.')
-        
-        if self.end_time <= self.start_time:
-            raise ValidationError('End time must be after start time.')
-        
-        # Check for overlapping blocks for the same dentist on the same date
-        overlapping = TimeBlock.objects.filter(
-            dentist=self.dentist,
-            date=self.date
-        ).exclude(pk=self.pk)
-        
-        for block in overlapping:
-            if self._blocks_overlap(block):
-                raise ValidationError(
-                    f'This time block overlaps with existing block: {block}'
-                )
-    
-    def _blocks_overlap(self, other_block):
-        """Check if this block overlaps with another block"""
-        # If either block is full day, they overlap
-        if self.is_full_day or other_block.is_full_day:
-            return True
-        
-        # Check time overlap
-        return (self.start_time < other_block.end_time and 
-                self.end_time > other_block.start_time)
-    
-    def blocks_time(self, time_obj):
-        """Check if this block covers a specific time"""
-        if self.is_full_day:
-            return True
-        
-        return self.start_time <= time_obj < self.end_time
+        # Don't allow Sunday slots unless explicitly set to 0
+        if self.date and self.date.weekday() == 6:  # Sunday
+            if self.am_slots > 0 or self.pm_slots > 0:
+                raise ValidationError('Sunday slots should be set to 0 (no appointments on Sundays).')
     
     @classmethod
-    def get_blocks_for_date(cls, dentist, date):
-        """Get all active blocks for a dentist on a specific date"""
-        return cls.objects.filter(dentist=dentist, date=date)
+    def get_or_create_for_date(cls, date_obj, created_by=None):
+        """Get existing or create default slots for a date"""
+        try:
+            return cls.objects.get(date=date_obj), False
+        except cls.DoesNotExist:
+            # Don't create for Sundays or past dates
+            if date_obj.weekday() == 6:  # Sunday
+                return None, False
+            if date_obj < timezone.now().date():
+                return None, False
+            
+            # Get default values from system settings
+            from core.models import SystemSetting
+            default_am = SystemSetting.get_int_setting('default_am_slots', 6)
+            default_pm = SystemSetting.get_int_setting('default_pm_slots', 8)
+            
+            # Create with default slots
+            daily_slots = cls.objects.create(
+                date=date_obj,
+                am_slots=default_am,
+                pm_slots=default_pm,
+                created_by=created_by
+            )
+            return daily_slots, True
     
     @classmethod
-    def is_time_blocked(cls, dentist, date, time_obj):
-        """Check if a specific time is blocked for a dentist"""
-        blocks = cls.get_blocks_for_date(dentist, date)
-        return any(block.blocks_time(time_obj) for block in blocks)
+    def get_availability_for_range(cls, start_date, end_date):
+        """
+        Get availability data for a date range
+        This is the missing method that was causing the API error!
+        """
+        availability = {}
+        
+        # Get existing slots
+        existing_slots = cls.objects.filter(
+            date__gte=start_date,
+            date__lte=end_date
+        )
+        
+        slots_dict = {slot.date: slot for slot in existing_slots}
+        
+        # Check each date in range
+        current_date = start_date
+        while current_date <= end_date:
+            # Skip Sundays and past dates
+            if current_date.weekday() != 6 and current_date >= timezone.now().date():
+                if current_date in slots_dict:
+                    slot = slots_dict[current_date]
+                    availability[current_date] = {
+                        'am_available': slot.get_available_am_slots(),
+                        'pm_available': slot.get_available_pm_slots(),
+                        'am_total': slot.am_slots,
+                        'pm_total': slot.pm_slots
+                    }
+                else:
+                    # Default availability for dates without slots (auto-create)
+                    daily_slots, created = cls.get_or_create_for_date(current_date)
+                    if daily_slots:
+                        availability[current_date] = {
+                            'am_available': daily_slots.get_available_am_slots(),
+                            'pm_available': daily_slots.get_available_pm_slots(),
+                            'am_total': daily_slots.am_slots,
+                            'pm_total': daily_slots.pm_slots
+                        }
+                    else:
+                        # Fallback if creation fails
+                        availability[current_date] = {
+                            'am_available': 0,
+                            'pm_available': 0,
+                            'am_total': 0,
+                            'pm_total': 0
+                        }
+            
+            current_date += timedelta(days=1)
+        
+        return availability
 
 
 class Appointment(models.Model):
+    """
+    AM/PM slot-based appointment model with temporary patient data for pending requests
+    """
     STATUS_CHOICES = [
         ('pending', 'Pending'),
-        ('approved', 'Approved'),
+        ('confirmed', 'Confirmed'),
         ('rejected', 'Rejected'),
-        ('reassigned', 'Reassigned'),
         ('cancelled', 'Cancelled'),
         ('did_not_arrive', 'Did Not Arrive'),
         ('completed', 'Completed'),
@@ -344,65 +182,243 @@ class Appointment(models.Model):
         ('returning', 'Returning Patient'),
     ]
     
-    # Define blocking statuses as a class attribute
-    BLOCKING_STATUSES = ['pending', 'approved', 'completed']
-    NON_BLOCKING_STATUSES = ['rejected', 'reassigned', 'cancelled', 'did_not_arrive']
+    PERIOD_CHOICES = [
+        ('AM', 'Morning'),
+        ('PM', 'Afternoon'),
+    ]
     
-    patient = models.ForeignKey('patients.Patient', on_delete=models.CASCADE, related_name='appointments')
-    dentist = models.ForeignKey('users.User', on_delete=models.PROTECT, related_name='appointments')
+    # Define blocking statuses as a class attribute
+    BLOCKING_STATUSES = ['pending', 'confirmed', 'completed']
+    NON_BLOCKING_STATUSES = ['rejected', 'cancelled', 'did_not_arrive']
+    
+    # Core appointment data
+    patient = models.ForeignKey('patients.Patient', on_delete=models.CASCADE, 
+                               related_name='appointments', null=True, blank=True,
+                               help_text="Linked patient record (set after approval)")
     service = models.ForeignKey('services.Service', on_delete=models.PROTECT)
-    appointment_slot = models.ForeignKey(AppointmentSlot, on_delete=models.PROTECT, related_name='appointments')  # Updated reference
+    
+    # Date and period (AM/PM) system
+    appointment_date = models.DateField(help_text="Date of appointment")
+    period = models.CharField(max_length=2, choices=PERIOD_CHOICES, help_text="Morning or Afternoon")
+    
+    # Dentist assignment (set when approved)
+    assigned_dentist = models.ForeignKey('users.User', on_delete=models.PROTECT, null=True, blank=True, 
+                                       related_name='assigned_appointments', 
+                                       help_text="Dentist assigned when appointment is confirmed")
+    
+    # Status and patient info
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     patient_type = models.CharField(max_length=10, choices=PATIENT_TYPE_CHOICES, default='returning')
     reason = models.TextField(blank=True)
     
-    # Booking details
-    requested_at = models.DateTimeField(auto_now_add=True)
-    approved_at = models.DateTimeField(null=True, blank=True)
-    approved_by = models.ForeignKey('users.User', on_delete=models.SET_NULL, null=True, blank=True, related_name='approved_appointments')
+    # Temporary patient data for pending appointments
+    temp_first_name = models.CharField(max_length=100, blank=True, help_text="Temporary storage for pending requests")
+    temp_last_name = models.CharField(max_length=100, blank=True, help_text="Temporary storage for pending requests")
+    temp_email = models.EmailField(blank=True, help_text="Temporary storage for pending requests")
+    temp_contact_number = models.CharField(max_length=20, blank=True, help_text="Temporary storage for pending requests")
+    temp_address = models.TextField(blank=True, help_text="Temporary storage for pending requests")
     
+    # Booking and approval tracking
+    requested_at = models.DateTimeField(auto_now_add=True)
+    confirmed_at = models.DateTimeField(null=True, blank=True)
+    confirmed_by = models.ForeignKey('users.User', on_delete=models.SET_NULL, null=True, blank=True, 
+                                   related_name='confirmed_appointments')
+    
+    # Clinical Notes
+    symptoms = models.TextField(blank=True, help_text="Patient symptoms and complaints")
+    procedures = models.TextField(blank=True, help_text="Procedures performed during appointment")
+    diagnosis = models.TextField(blank=True, help_text="Diagnosis and treatment notes")
+
     # Notes
     staff_notes = models.TextField(blank=True)
     
     class Meta:
-        ordering = ['requested_at']
+        ordering = ['-requested_at']
         indexes = [
             models.Index(fields=['status'], name='appt_status_idx'),
             models.Index(fields=['patient'], name='appt_patient_idx'),
-            models.Index(fields=['dentist'], name='appt_dentist_idx'),
+            models.Index(fields=['assigned_dentist'], name='appt_assigned_dentist_idx'),
+            models.Index(fields=['appointment_date', 'period'], name='appt_date_period_idx'),
             models.Index(fields=['requested_at'], name='appt_requested_idx'),
-            models.Index(fields=['dentist', 'status'], name='appt_dentist_status_idx'),
+            models.Index(fields=['temp_email'], name='appt_temp_email_idx'),
+            models.Index(fields=['temp_contact_number'], name='appt_temp_contact_idx'),
         ]
         constraints = [
-            models.UniqueConstraint(
-                fields=['appointment_slot'],
-                condition=models.Q(status__in=['pending', 'approved', 'completed']),
-                name='unique_active_appointment_per_slot'
-            )
+            models.CheckConstraint(
+                check=models.Q(period__in=['AM', 'PM']), 
+                name='appointment_valid_period'
+            ),
         ]
     
     def __str__(self):
-        return f"{self.patient.full_name} - {self.appointment_slot.date} {self.appointment_slot.start_time}"
+        if self.patient:
+            return f"{self.patient.full_name} - {self.appointment_date} {self.period}"
+        else:
+            return f"{self.temp_first_name} {self.temp_last_name} - {self.appointment_date} {self.period} (Pending)"
     
+    @property
+    def patient_name(self):
+        """Get patient name whether from linked patient or temp data"""
+        if self.patient:
+            return self.patient.full_name
+        else:
+            return f"{self.temp_first_name} {self.temp_last_name}".strip()
+    
+    @property
+    def patient_email(self):
+        """Get patient email whether from linked patient or temp data"""
+        if self.patient:
+            return self.patient.email
+        else:
+            return self.temp_email
+    
+    @property
+    def patient_phone(self):
+        """Get patient phone whether from linked patient or temp data"""
+        if self.patient:
+            return self.patient.contact_number
+        else:
+            return self.temp_contact_number
+    
+    def find_existing_patient(self):
+        """
+        Try to find an existing patient record using email and phone matching
+        Returns Patient instance if found, None otherwise
+        """
+        from patients.models import Patient
+        
+        # Primary match: email (exact, case-insensitive)
+        if self.temp_email:
+            patient = Patient.objects.filter(
+                email__iexact=self.temp_email.strip(),
+                is_active=True
+            ).first()
+            if patient:
+                return patient
+        
+        # Secondary match: phone number (cleaned format)
+        if self.temp_contact_number:
+            # Clean the phone number (remove spaces, dashes, plus signs)
+            clean_temp_phone = self.temp_contact_number.replace(' ', '').replace('-', '').replace('+', '')
+            
+            # Try exact match first
+            patient = Patient.objects.filter(
+                contact_number=self.temp_contact_number,
+                is_active=True
+            ).first()
+            if patient:
+                return patient
+            
+            # Try cleaned match
+            patients = Patient.objects.filter(is_active=True)
+            for patient in patients:
+                if patient.contact_number:
+                    clean_patient_phone = patient.contact_number.replace(' ', '').replace('-', '').replace('+', '')
+                    if clean_patient_phone and clean_temp_phone and clean_patient_phone == clean_temp_phone:
+                        return patient
+        
+        return None
+    
+    def create_or_update_patient(self):
+        """
+        Create new patient or update existing patient with temp data
+        Returns the Patient instance
+        """
+        from patients.models import Patient
+        
+        # Try to find existing patient
+        existing_patient = self.find_existing_patient()
+        
+        if existing_patient:
+            # Update existing patient with new information
+            updated = False
+            
+            # Update fields if temp data has values
+            if self.temp_first_name and existing_patient.first_name != self.temp_first_name:
+                existing_patient.first_name = self.temp_first_name
+                updated = True
+            
+            if self.temp_last_name and existing_patient.last_name != self.temp_last_name:
+                existing_patient.last_name = self.temp_last_name
+                updated = True
+            
+            if self.temp_email and existing_patient.email != self.temp_email:
+                existing_patient.email = self.temp_email
+                updated = True
+            
+            if self.temp_contact_number and existing_patient.contact_number != self.temp_contact_number:
+                existing_patient.contact_number = self.temp_contact_number
+                updated = True
+            
+            if self.temp_address and existing_patient.address != self.temp_address:
+                existing_patient.address = self.temp_address
+                updated = True
+            
+            if updated:
+                existing_patient.save()
+            
+            return existing_patient
+        
+        else:
+            # Create new patient
+            patient = Patient.objects.create(
+                first_name=self.temp_first_name,
+                last_name=self.temp_last_name,
+                email=self.temp_email,
+                contact_number=self.temp_contact_number,
+                address=self.temp_address,
+            )
+            return patient
+    
+    def approve(self, approved_by_user, assigned_dentist=None):
+        """Approve/Confirm the appointment, create/update patient record, and assign a dentist"""
+        from django.db import transaction
+        
+        with transaction.atomic():
+            # Create or update patient record from temp data
+            if not self.patient:  # Only if not already linked
+                self.patient = self.create_or_update_patient()
+            
+            # Update appointment status
+            self.status = 'confirmed'
+            self.confirmed_at = timezone.now()
+            self.confirmed_by = approved_by_user
+            
+            if assigned_dentist:
+                self.assigned_dentist = assigned_dentist
+            
+            self.save()
+            
+            # Clear temp data after successful approval (optional, for cleanliness)
+            self.clear_temp_data()
+    
+    def clear_temp_data(self):
+        """Clear temporary patient data fields"""
+        self.temp_first_name = ''
+        self.temp_last_name = ''
+        self.temp_email = ''
+        self.temp_contact_number = ''
+        self.temp_address = ''
+        self.save(update_fields=['temp_first_name', 'temp_last_name', 'temp_email', 'temp_contact_number', 'temp_address'])
+    
+    # Rest of the methods remain the same
     @property
     def appointment_datetime(self):
         """Returns timezone-aware datetime for appointment"""
-        naive_dt = datetime.combine(self.appointment_slot.date, self.appointment_slot.start_time)
-        return timezone.make_aware(naive_dt) if timezone.is_naive(naive_dt) else naive_dt
-    
-    @property
-    def appointment_end_datetime(self):
-        """Returns timezone-aware datetime for appointment end (including buffer)"""
-        naive_dt = datetime.combine(self.appointment_slot.date, self.appointment_slot.effective_end_time)
+        if self.period == 'AM':
+            naive_dt = datetime.combine(self.appointment_date, time(8, 0))
+        else:
+            naive_dt = datetime.combine(self.appointment_date, time(13, 0))
+        
         return timezone.make_aware(naive_dt) if timezone.is_naive(naive_dt) else naive_dt
     
     @property
     def is_today(self):
-        return self.appointment_slot.date == timezone.now().date()
+        return self.appointment_date == timezone.now().date()
     
     @property
     def is_upcoming(self):
-        return self.appointment_datetime > timezone.now()
+        return self.appointment_date > timezone.now().date()
     
     @property
     def can_be_cancelled(self):
@@ -410,23 +426,12 @@ class Appointment(models.Model):
         if self.status in ['cancelled', 'completed', 'did_not_arrive']:
             return False
         
-        current_time = timezone.now()
-        appointment_time = self.appointment_datetime
-        cutoff_time = current_time + timedelta(hours=24)
-        
-        return appointment_time > cutoff_time
+        return self.appointment_date > timezone.now().date() + timedelta(days=1)
     
     @property
     def blocks_time_slot(self):
         """Whether this appointment blocks its time slot"""
         return self.status in self.BLOCKING_STATUSES
-    
-    def approve(self, approved_by_user):
-        """Approve the appointment"""
-        self.status = 'approved'
-        self.approved_at = timezone.now()
-        self.approved_by = approved_by_user
-        self.save()
     
     def reject(self):
         """Reject the appointment"""
@@ -443,125 +448,336 @@ class Appointment(models.Model):
         self.status = 'completed'
         self.save()
     
-    @classmethod
-    def get_conflicting_appointments(cls, dentist, start_datetime, end_datetime, exclude_appointment_id=None):
-        """
-        Get appointments that conflict with the given time range
-        FIXED VERSION with proper timezone handling
-        """
-        # Ensure we have timezone-aware datetimes
-        if timezone.is_naive(start_datetime):
-            start_datetime = timezone.make_aware(start_datetime)
-        if timezone.is_naive(end_datetime):
-            end_datetime = timezone.make_aware(end_datetime)
+    def clean(self):
+        # Validate appointment date is not in the past
+        if self.appointment_date and self.appointment_date < timezone.now().date():
+            raise ValidationError('Appointment date cannot be in the past.')
         
+        # Validate no Sundays
+        if self.appointment_date and self.appointment_date.weekday() == 6:
+            raise ValidationError('No appointments available on Sundays.')
+        
+        # Validate that either patient is linked OR temp data is provided
+        if not self.patient and not (self.temp_first_name and self.temp_last_name and self.temp_email):
+            raise ValidationError('Either patient must be linked or temporary patient data must be provided.')
+    
+    # Keep all the existing class methods unchanged
+    @classmethod
+    def check_slot_availability(cls, appointment_date, period):
+        """Check if slots are available for a specific date and period"""
+        daily_slots, _ = DailySlots.get_or_create_for_date(appointment_date)
+        
+        if not daily_slots:
+            return False, "No slots available for this date"
+        
+        if period == 'AM':
+            available = daily_slots.get_available_am_slots()
+            total = daily_slots.am_slots
+        elif period == 'PM':
+            available = daily_slots.get_available_pm_slots()
+            total = daily_slots.pm_slots
+        else:
+            return False, "Invalid period"
+        
+        if available <= 0:
+            return False, f"No {period} slots available ({total} total slots)"
+        
+        return True, f"{available} {period} slots available"
+    
+    @classmethod
+    def get_conflicting_appointments(cls, appointment_date, period, exclude_appointment_id=None):
+        """Get appointments that would conflict with the given date/period"""
         conflicts = cls.objects.filter(
-            dentist=dentist,
-            appointment_slot__date=start_datetime.date(),
+            appointment_date=appointment_date,
+            period=period,
             status__in=cls.BLOCKING_STATUSES
-        ).select_related('appointment_slot', 'service')
+        )
         
         if exclude_appointment_id:
             conflicts = conflicts.exclude(id=exclude_appointment_id)
         
-        # Filter for time conflicts
-        conflicting_appointments = []
-        for appointment in conflicts:
-            # Get timezone-aware datetimes for this appointment
-            app_naive_start = datetime.combine(
-                appointment.appointment_slot.date, 
-                appointment.appointment_slot.start_time
-            )
-            app_naive_end = app_naive_start + timedelta(minutes=appointment.service.duration_minutes)
-            app_naive_end_with_buffer = app_naive_end + timedelta(minutes=appointment.appointment_slot.buffer_minutes)
-            
-            # Make timezone-aware
-            app_start = timezone.make_aware(app_naive_start) if timezone.is_naive(app_naive_start) else app_naive_start
-            app_end = timezone.make_aware(app_naive_end_with_buffer) if timezone.is_naive(app_naive_end_with_buffer) else app_naive_end_with_buffer
-            
-            # Check for overlap - now both are timezone-aware
-            if app_start < end_datetime and app_end > start_datetime:
-                conflicting_appointments.append(appointment)
+        return conflicts
+    
+    @classmethod
+    def can_book_appointment(cls, appointment_date, period, exclude_appointment_id=None):
+        """Check if an appointment can be booked for the given date/period"""
+        # Get or create daily slots
+        daily_slots, created = DailySlots.get_or_create_for_date(appointment_date)
         
-        return conflicting_appointments
+        if not daily_slots:
+            return False, "Date not available for booking (Sundays not allowed)"
+        
+        # Check availability
+        if period == 'AM':
+            available_slots = daily_slots.get_available_am_slots()
+            if exclude_appointment_id:
+                existing = cls.objects.filter(
+                    id=exclude_appointment_id,
+                    appointment_date=appointment_date,
+                    period='AM',
+                    status__in=cls.BLOCKING_STATUSES
+                ).exists()
+                if existing:
+                    available_slots += 1
+                    
+        elif period == 'PM':
+            available_slots = daily_slots.get_available_pm_slots()
+            if exclude_appointment_id:
+                existing = cls.objects.filter(
+                    id=exclude_appointment_id,
+                    appointment_date=appointment_date,
+                    period='PM',
+                    status__in=cls.BLOCKING_STATUSES
+                ).exists()
+                if existing:
+                    available_slots += 1
+        else:
+            return False, "Invalid period specified. Use 'AM' or 'PM'"
+        
+        if available_slots <= 0:
+            return False, f"No {period} slots available for {appointment_date}"
+        
+        return True, f"{available_slots} {period} slots available for {appointment_date}"
 
 
 class Payment(models.Model):
+    """Enhanced Payment model for cash-only dental clinic billing"""
     STATUS_CHOICES = [
-        ('unpaid', 'Unpaid'),
+        ('pending', 'Pending'),
         ('partially_paid', 'Partially Paid'),
-        ('fully_paid', 'Fully Paid'),
+        ('completed', 'Completed'),
+        ('cancelled', 'Cancelled'),
     ]
     
+    PAYMENT_TYPE_CHOICES = [
+        ('full', 'Full Payment'),
+        ('installment', 'Installment'),
+    ]
+    
+    # Core payment data
     patient = models.ForeignKey('patients.Patient', on_delete=models.CASCADE, related_name='payments')
     appointment = models.ForeignKey(Appointment, on_delete=models.CASCADE, related_name='payments')
-    amount_paid = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    payment_datetime = models.DateTimeField(auto_now_add=True)
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='unpaid')
+    
+    # Payment details
+    total_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0, 
+                                     help_text="Total bill amount")
+    amount_paid = models.DecimalField(max_digits=10, decimal_places=2, default=0,
+                                    help_text="Total amount paid so far")
+    payment_type = models.CharField(max_length=20, choices=PAYMENT_TYPE_CHOICES, default='full')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    
+    # Installment details
+    installment_months = models.PositiveIntegerField(null=True, blank=True, 
+                                                   help_text="Number of months for installment")
+    monthly_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0,
+                                       help_text="Monthly installment amount")
     next_due_date = models.DateField(null=True, blank=True)
-    notes = models.TextField(blank=True)
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    # Notes
+    notes = models.TextField(blank=True, help_text="Optional notes about payment")
     
     class Meta:
-        ordering = ['-payment_datetime']
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['status'], name='payment_status_idx'),
+            models.Index(fields=['patient'], name='payment_patient_idx'),
+            models.Index(fields=['next_due_date'], name='payment_due_date_idx'),
+            models.Index(fields=['created_at'], name='payment_created_idx'),
+        ]
     
     def __str__(self):
-        return f"{self.patient.full_name} - ₱{self.amount_paid} ({self.status})"
+        return f"Payment #{self.id} - {self.patient.full_name} - ₱{self.amount_paid}/{self.total_amount}"
+    
+    @property
+    def outstanding_balance(self):
+        """Calculate remaining balance"""
+        return max(Decimal('0'), self.total_amount - self.amount_paid)
+    
+    @property
+    def payment_progress_percentage(self):
+        """Calculate payment progress as percentage"""
+        if self.total_amount == 0:
+            return 0
+        return min(100, (self.amount_paid / self.total_amount) * 100)
+    
+    @property
+    def is_fully_paid(self):
+        """Check if payment is fully paid"""
+        return self.outstanding_balance == 0
+    
+    @property
+    def is_overdue(self):
+        """Check if payment is overdue"""
+        if not self.next_due_date:
+            return False
+        return self.next_due_date < date.today() and not self.is_fully_paid
+    
+    def calculate_total_from_items(self):
+        """Calculate total amount from payment items"""
+        total = Decimal('0')
+        for item in self.items.all():
+            total += item.total
+        return total
+    
+    def update_status(self):
+        """Update payment status based on amount paid"""
+        if self.amount_paid == 0:
+            self.status = 'pending'
+        elif self.is_fully_paid:
+            self.status = 'completed'
+            self.next_due_date = None  # Clear due date when completed
+        else:
+            self.status = 'partially_paid'
+        
+        self.save(update_fields=['status', 'next_due_date'])
+    
+    def setup_installment(self, months):
+        """Setup installment payment plan"""
+        if months <= 0:
+            raise ValidationError("Installment months must be greater than 0")
+        
+        self.payment_type = 'installment'
+        self.installment_months = months
+        self.monthly_amount = self.outstanding_balance / months
+        
+        # Set next due date to next month if not already set
+        if not self.next_due_date:
+            self.next_due_date = date.today() + timedelta(days=30)
+        
+        self.save()
+    
+    def add_payment(self, amount, payment_date=None):
+        """Add a payment and update status"""
+        if amount <= 0:
+            raise ValidationError("Payment amount must be greater than 0")
+        
+        if amount > self.outstanding_balance:
+            raise ValidationError("Payment amount cannot exceed outstanding balance")
+        
+        with transaction.atomic():
+            # Create payment transaction record
+            PaymentTransaction.objects.create(
+                payment=self,
+                amount=amount,
+                payment_date=payment_date or date.today(),
+                notes=f"Cash payment - ₱{amount}"
+            )
+            
+            # Update total paid amount
+            self.amount_paid += amount
+            
+            # Update next due date for installments
+            if self.payment_type == 'installment' and not self.is_fully_paid:
+                if self.next_due_date and self.next_due_date <= date.today():
+                    # Move to next month
+                    self.next_due_date = self.next_due_date + timedelta(days=30)
+            
+            self.save()
+            self.update_status()
+    
+    def clean(self):
+        # Validate amounts
+        if self.amount_paid > self.total_amount:
+            raise ValidationError("Amount paid cannot exceed total amount")
+        
+        # Validate installment settings
+        if self.payment_type == 'installment':
+            if not self.installment_months or self.installment_months <= 0:
+                raise ValidationError("Installment months must be specified for installment payments")
 
 
 class PaymentItem(models.Model):
+    """Enhanced Payment item model with price validation"""
     payment = models.ForeignKey(Payment, on_delete=models.CASCADE, related_name='items')
     service = models.ForeignKey('services.Service', on_delete=models.PROTECT)
     quantity = models.PositiveIntegerField(default=1)
-    unit_price = models.DecimalField(max_digits=10, decimal_places=2)
+    unit_price = models.DecimalField(max_digits=10, decimal_places=2,
+                                   help_text="Price per unit (must be within service price range)")
     discount = models.ForeignKey('services.Discount', on_delete=models.SET_NULL, null=True, blank=True)
     notes = models.TextField(blank=True)
     
+    class Meta:
+        indexes = [
+            models.Index(fields=['payment'], name='payment_item_payment_idx'),
+            models.Index(fields=['service'], name='payment_item_service_idx'),
+        ]
+    
     def __str__(self):
-        return f"{self.service.name} x{self.quantity}"
+        return f"{self.service.name} x{self.quantity} - ₱{self.unit_price}"
     
     @property
     def subtotal(self):
+        """Calculate subtotal before discount"""
         return self.unit_price * self.quantity
     
     @property
     def discount_amount(self):
+        """Calculate discount amount"""
         if not self.discount:
-            return 0
+            return Decimal('0')
         return self.discount.calculate_discount(self.subtotal)
     
     @property
     def total(self):
+        """Calculate total after discount"""
         return self.subtotal - self.discount_amount
+    
+    def clean(self):
+        """Validate unit price against service price range"""
+        if self.service and hasattr(self.service, 'min_price') and hasattr(self.service, 'max_price'):
+            if self.unit_price < self.service.min_price:
+                raise ValidationError(
+                    f"Price ₱{self.unit_price} is below minimum price ₱{self.service.min_price} for {self.service.name}"
+                )
+            if self.unit_price > self.service.max_price:
+                raise ValidationError(
+                    f"Price ₱{self.unit_price} is above maximum price ₱{self.service.max_price} for {self.service.name}"
+                )
 
 
-# Keep the old DentistSchedule model for backward compatibility during migration
-# This can be removed after all data is migrated to DentistScheduleSettings
-# class DentistSchedule(models.Model):
-#     """
-#     DEPRECATED: Use DentistScheduleSettings instead
-#     Kept for backward compatibility during migration
-#     """
-#     WEEKDAY_CHOICES = [
-#         (0, 'Monday'),
-#         (1, 'Tuesday'), 
-#         (2, 'Wednesday'),
-#         (3, 'Thursday'),
-#         (4, 'Friday'),
-#         (5, 'Saturday'),
-#         (6, 'Sunday'),
-#     ]
+class PaymentTransaction(models.Model):
+    """Track individual payment transactions for audit trail"""
+    payment = models.ForeignKey(Payment, on_delete=models.CASCADE, related_name='transactions')
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    payment_date = models.DateField()
+    payment_datetime = models.DateTimeField(auto_now_add=True)
+    notes = models.TextField(blank=True)
     
-#     dentist = models.ForeignKey('users.User', on_delete=models.CASCADE, related_name='working_schedules')
-#     weekday = models.IntegerField(choices=WEEKDAY_CHOICES)
-#     is_working = models.BooleanField(default=True)
-#     start_time = models.TimeField(default=time(10, 0))
-#     end_time = models.TimeField(default=time(18, 0))
-#     lunch_start = models.TimeField(default=time(12, 0))
-#     lunch_end = models.TimeField(default=time(13, 0))
-#     has_lunch_break = models.BooleanField(default=True)
-#     created_at = models.DateTimeField(auto_now_add=True)
-#     updated_at = models.DateTimeField(auto_now=True)
+    # Receipt tracking
+    receipt_number = models.CharField(max_length=50, blank=True, unique=True)
     
-#     class Meta:
-#         unique_together = ['dentist', 'weekday']
-#         ordering = ['dentist', 'weekday']
+    class Meta:
+        ordering = ['-payment_datetime']
+        indexes = [
+            models.Index(fields=['payment'], name='payment_transac_payment_idx'),
+            models.Index(fields=['payment_date'], name='payment_transac_date_idx'),
+            models.Index(fields=['receipt_number'], name='payment_transac_receipt_idx'),
+        ]
+    
+    def __str__(self):
+        return f"₱{self.amount} - {self.payment_date} - {self.payment.patient.full_name}"
+    
+    def save(self, *args, **kwargs):
+        if not self.receipt_number:
+            # Generate receipt number: RCP-YYYYMMDD-XXXX
+            today = date.today()
+            date_str = today.strftime('%Y%m%d')
+            
+            # Get next sequence number for today
+            last_receipt = PaymentTransaction.objects.filter(
+                receipt_number__startswith=f'RCP-{date_str}-'
+            ).order_by('-receipt_number').first()
+            
+            if last_receipt:
+                last_seq = int(last_receipt.receipt_number.split('-')[-1])
+                next_seq = last_seq + 1
+            else:
+                next_seq = 1
+            
+            self.receipt_number = f'RCP-{date_str}-{next_seq:04d}'
+        
+        super().save(*args, **kwargs)

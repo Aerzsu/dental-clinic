@@ -1,0 +1,665 @@
+[
+{
+  "model": "appointments.dailyslots",
+  "pk": 1,
+  "fields": {
+    "date": "2025-09-22",
+    "am_slots": 7,
+    "pm_slots": 9,
+    "notes": "",
+    "created_at": "2025-09-20T16:31:51.355Z",
+    "updated_at": "2025-09-20T16:32:36.371Z",
+    "created_by": 2
+  }
+},
+{
+  "model": "appointments.dailyslots",
+  "pk": 2,
+  "fields": {
+    "date": "2025-09-23",
+    "am_slots": 6,
+    "pm_slots": 8,
+    "notes": "",
+    "created_at": "2025-09-20T16:32:10.528Z",
+    "updated_at": "2025-09-20T16:32:10.528Z",
+    "created_by": 2
+  }
+},
+{
+  "model": "appointments.dailyslots",
+  "pk": 3,
+  "fields": {
+    "date": "2025-09-24",
+    "am_slots": 6,
+    "pm_slots": 8,
+    "notes": "",
+    "created_at": "2025-09-20T16:32:10.530Z",
+    "updated_at": "2025-09-20T16:32:10.530Z",
+    "created_by": 2
+  }
+},
+{
+  "model": "appointments.dailyslots",
+  "pk": 4,
+  "fields": {
+    "date": "2025-09-25",
+    "am_slots": 6,
+    "pm_slots": 8,
+    "notes": "",
+    "created_at": "2025-09-20T16:32:10.531Z",
+    "updated_at": "2025-09-20T16:32:10.531Z",
+    "created_by": 2
+  }
+},
+{
+  "model": "appointments.dailyslots",
+  "pk": 5,
+  "fields": {
+    "date": "2025-09-26",
+    "am_slots": 6,
+    "pm_slots": 8,
+    "notes": "",
+    "created_at": "2025-09-20T16:32:10.532Z",
+    "updated_at": "2025-09-20T16:32:10.532Z",
+    "created_by": 2
+  }
+},
+{
+  "model": "appointments.dailyslots",
+  "pk": 6,
+  "fields": {
+    "date": "2025-09-27",
+    "am_slots": 6,
+    "pm_slots": 8,
+    "notes": "",
+    "created_at": "2025-09-20T16:32:10.533Z",
+    "updated_at": "2025-09-20T16:32:10.533Z",
+    "created_by": 2
+  }
+},
+{
+  "model": "appointments.dailyslots",
+  "pk": 7,
+  "fields": {
+    "date": "2025-09-29",
+    "am_slots": 6,
+    "pm_slots": 8,
+    "notes": "",
+    "created_at": "2025-09-20T16:32:10.534Z",
+    "updated_at": "2025-09-20T16:32:10.534Z",
+    "created_by": 2
+  }
+},
+{
+  "model": "appointments.dailyslots",
+  "pk": 8,
+  "fields": {
+    "date": "2025-09-30",
+    "am_slots": 6,
+    "pm_slots": 8,
+    "notes": "",
+    "created_at": "2025-09-20T16:32:10.535Z",
+    "updated_at": "2025-09-20T16:32:10.535Z",
+    "created_by": 2
+  }
+},
+{
+  "model": "appointments.dailyslots",
+  "pk": 9,
+  "fields": {
+    "date": "2025-10-01",
+    "am_slots": 6,
+    "pm_slots": 8,
+    "notes": "",
+    "created_at": "2025-09-20T16:32:10.536Z",
+    "updated_at": "2025-09-20T16:32:10.536Z",
+    "created_by": 2
+  }
+},
+{
+  "model": "appointments.dailyslots",
+  "pk": 10,
+  "fields": {
+    "date": "2025-10-02",
+    "am_slots": 6,
+    "pm_slots": 8,
+    "notes": "",
+    "created_at": "2025-09-20T16:32:10.536Z",
+    "updated_at": "2025-09-20T16:32:10.536Z",
+    "created_by": 2
+  }
+},
+{
+  "model": "appointments.dailyslots",
+  "pk": 11,
+  "fields": {
+    "date": "2025-10-03",
+    "am_slots": 6,
+    "pm_slots": 8,
+    "notes": "",
+    "created_at": "2025-09-20T16:32:10.537Z",
+    "updated_at": "2025-09-20T16:32:10.537Z",
+    "created_by": 2
+  }
+},
+{
+  "model": "appointments.dailyslots",
+  "pk": 12,
+  "fields": {
+    "date": "2025-10-04",
+    "am_slots": 6,
+    "pm_slots": 8,
+    "notes": "",
+    "created_at": "2025-09-20T16:32:10.538Z",
+    "updated_at": "2025-09-20T16:32:10.538Z",
+    "created_by": 2
+  }
+},
+{
+  "model": "appointments.dailyslots",
+  "pk": 13,
+  "fields": {
+    "date": "2025-10-06",
+    "am_slots": 6,
+    "pm_slots": 8,
+    "notes": "",
+    "created_at": "2025-09-20T16:32:10.539Z",
+    "updated_at": "2025-09-20T16:32:10.539Z",
+    "created_by": 2
+  }
+},
+{
+  "model": "appointments.dailyslots",
+  "pk": 14,
+  "fields": {
+    "date": "2025-10-07",
+    "am_slots": 6,
+    "pm_slots": 8,
+    "notes": "",
+    "created_at": "2025-09-20T16:32:10.541Z",
+    "updated_at": "2025-09-20T16:32:10.541Z",
+    "created_by": 2
+  }
+},
+{
+  "model": "appointments.dailyslots",
+  "pk": 15,
+  "fields": {
+    "date": "2025-10-08",
+    "am_slots": 6,
+    "pm_slots": 8,
+    "notes": "",
+    "created_at": "2025-09-20T16:32:10.542Z",
+    "updated_at": "2025-09-20T16:32:10.542Z",
+    "created_by": 2
+  }
+},
+{
+  "model": "appointments.dailyslots",
+  "pk": 16,
+  "fields": {
+    "date": "2025-10-09",
+    "am_slots": 6,
+    "pm_slots": 8,
+    "notes": "",
+    "created_at": "2025-09-20T16:32:10.543Z",
+    "updated_at": "2025-09-20T16:32:10.543Z",
+    "created_by": 2
+  }
+},
+{
+  "model": "appointments.dailyslots",
+  "pk": 17,
+  "fields": {
+    "date": "2025-10-10",
+    "am_slots": 6,
+    "pm_slots": 8,
+    "notes": "",
+    "created_at": "2025-09-20T16:32:10.544Z",
+    "updated_at": "2025-09-20T16:32:10.544Z",
+    "created_by": 2
+  }
+},
+{
+  "model": "appointments.dailyslots",
+  "pk": 18,
+  "fields": {
+    "date": "2025-10-11",
+    "am_slots": 6,
+    "pm_slots": 8,
+    "notes": "",
+    "created_at": "2025-09-20T16:32:10.545Z",
+    "updated_at": "2025-09-20T16:32:10.545Z",
+    "created_by": 2
+  }
+},
+{
+  "model": "appointments.dailyslots",
+  "pk": 19,
+  "fields": {
+    "date": "2025-10-13",
+    "am_slots": 6,
+    "pm_slots": 8,
+    "notes": "",
+    "created_at": "2025-09-20T16:32:10.546Z",
+    "updated_at": "2025-09-20T16:32:10.546Z",
+    "created_by": 2
+  }
+},
+{
+  "model": "appointments.dailyslots",
+  "pk": 20,
+  "fields": {
+    "date": "2025-10-14",
+    "am_slots": 6,
+    "pm_slots": 8,
+    "notes": "",
+    "created_at": "2025-09-20T16:32:10.547Z",
+    "updated_at": "2025-09-20T16:32:10.547Z",
+    "created_by": 2
+  }
+},
+{
+  "model": "appointments.dailyslots",
+  "pk": 21,
+  "fields": {
+    "date": "2025-10-15",
+    "am_slots": 6,
+    "pm_slots": 8,
+    "notes": "",
+    "created_at": "2025-09-20T16:32:10.548Z",
+    "updated_at": "2025-09-20T16:32:10.548Z",
+    "created_by": 2
+  }
+},
+{
+  "model": "appointments.dailyslots",
+  "pk": 22,
+  "fields": {
+    "date": "2025-10-16",
+    "am_slots": 6,
+    "pm_slots": 8,
+    "notes": "",
+    "created_at": "2025-09-20T16:32:10.549Z",
+    "updated_at": "2025-09-20T16:32:10.549Z",
+    "created_by": 2
+  }
+},
+{
+  "model": "appointments.dailyslots",
+  "pk": 23,
+  "fields": {
+    "date": "2025-10-17",
+    "am_slots": 6,
+    "pm_slots": 8,
+    "notes": "",
+    "created_at": "2025-09-20T16:32:10.550Z",
+    "updated_at": "2025-09-20T16:32:10.550Z",
+    "created_by": 2
+  }
+},
+{
+  "model": "appointments.dailyslots",
+  "pk": 24,
+  "fields": {
+    "date": "2025-10-18",
+    "am_slots": 6,
+    "pm_slots": 8,
+    "notes": "",
+    "created_at": "2025-09-20T16:32:10.550Z",
+    "updated_at": "2025-09-20T16:32:10.550Z",
+    "created_by": 2
+  }
+},
+{
+  "model": "appointments.dailyslots",
+  "pk": 25,
+  "fields": {
+    "date": "2025-10-20",
+    "am_slots": 6,
+    "pm_slots": 8,
+    "notes": "",
+    "created_at": "2025-09-20T16:32:10.551Z",
+    "updated_at": "2025-09-20T16:32:10.551Z",
+    "created_by": 2
+  }
+},
+{
+  "model": "appointments.dailyslots",
+  "pk": 26,
+  "fields": {
+    "date": "2025-10-21",
+    "am_slots": 6,
+    "pm_slots": 8,
+    "notes": "",
+    "created_at": "2025-09-20T16:32:10.552Z",
+    "updated_at": "2025-09-20T16:32:10.552Z",
+    "created_by": 2
+  }
+},
+{
+  "model": "appointments.dailyslots",
+  "pk": 27,
+  "fields": {
+    "date": "2025-10-22",
+    "am_slots": 6,
+    "pm_slots": 8,
+    "notes": "",
+    "created_at": "2025-09-20T16:32:10.553Z",
+    "updated_at": "2025-09-20T16:32:10.553Z",
+    "created_by": 2
+  }
+},
+{
+  "model": "appointments.dailyslots",
+  "pk": 28,
+  "fields": {
+    "date": "2025-10-23",
+    "am_slots": 6,
+    "pm_slots": 8,
+    "notes": "",
+    "created_at": "2025-09-20T16:32:10.554Z",
+    "updated_at": "2025-09-20T16:32:10.554Z",
+    "created_by": 2
+  }
+},
+{
+  "model": "appointments.dailyslots",
+  "pk": 29,
+  "fields": {
+    "date": "2025-10-24",
+    "am_slots": 6,
+    "pm_slots": 8,
+    "notes": "",
+    "created_at": "2025-09-20T16:32:10.554Z",
+    "updated_at": "2025-09-20T16:32:10.554Z",
+    "created_by": 2
+  }
+},
+{
+  "model": "appointments.dailyslots",
+  "pk": 30,
+  "fields": {
+    "date": "2025-10-25",
+    "am_slots": 6,
+    "pm_slots": 8,
+    "notes": "",
+    "created_at": "2025-09-20T16:32:10.555Z",
+    "updated_at": "2025-09-20T16:32:10.555Z",
+    "created_by": 2
+  }
+},
+{
+  "model": "appointments.dailyslots",
+  "pk": 31,
+  "fields": {
+    "date": "2025-10-27",
+    "am_slots": 6,
+    "pm_slots": 8,
+    "notes": "",
+    "created_at": "2025-09-20T16:32:10.556Z",
+    "updated_at": "2025-09-20T16:32:10.556Z",
+    "created_by": 2
+  }
+},
+{
+  "model": "appointments.dailyslots",
+  "pk": 32,
+  "fields": {
+    "date": "2025-10-28",
+    "am_slots": 6,
+    "pm_slots": 8,
+    "notes": "",
+    "created_at": "2025-09-20T16:32:10.557Z",
+    "updated_at": "2025-09-20T16:32:10.557Z",
+    "created_by": 2
+  }
+},
+{
+  "model": "appointments.dailyslots",
+  "pk": 33,
+  "fields": {
+    "date": "2025-10-29",
+    "am_slots": 6,
+    "pm_slots": 8,
+    "notes": "",
+    "created_at": "2025-09-20T16:32:10.559Z",
+    "updated_at": "2025-09-20T16:32:10.559Z",
+    "created_by": 2
+  }
+},
+{
+  "model": "appointments.dailyslots",
+  "pk": 34,
+  "fields": {
+    "date": "2025-10-30",
+    "am_slots": 6,
+    "pm_slots": 8,
+    "notes": "",
+    "created_at": "2025-09-20T16:32:10.560Z",
+    "updated_at": "2025-09-20T16:32:10.560Z",
+    "created_by": 2
+  }
+},
+{
+  "model": "appointments.dailyslots",
+  "pk": 35,
+  "fields": {
+    "date": "2025-10-31",
+    "am_slots": 6,
+    "pm_slots": 8,
+    "notes": "",
+    "created_at": "2025-09-20T16:32:10.561Z",
+    "updated_at": "2025-09-20T16:32:10.561Z",
+    "created_by": 2
+  }
+},
+{
+  "model": "appointments.dailyslots",
+  "pk": 36,
+  "fields": {
+    "date": "2025-11-01",
+    "am_slots": 6,
+    "pm_slots": 8,
+    "notes": "",
+    "created_at": "2025-09-20T16:32:10.562Z",
+    "updated_at": "2025-09-20T16:32:10.562Z",
+    "created_by": 2
+  }
+},
+{
+  "model": "appointments.dailyslots",
+  "pk": 37,
+  "fields": {
+    "date": "2025-11-03",
+    "am_slots": 6,
+    "pm_slots": 8,
+    "notes": "",
+    "created_at": "2025-09-20T16:32:10.563Z",
+    "updated_at": "2025-09-20T16:32:10.563Z",
+    "created_by": 2
+  }
+},
+{
+  "model": "appointments.dailyslots",
+  "pk": 38,
+  "fields": {
+    "date": "2025-11-04",
+    "am_slots": 6,
+    "pm_slots": 8,
+    "notes": "",
+    "created_at": "2025-09-20T16:32:10.564Z",
+    "updated_at": "2025-09-20T16:32:10.564Z",
+    "created_by": 2
+  }
+},
+{
+  "model": "appointments.dailyslots",
+  "pk": 39,
+  "fields": {
+    "date": "2025-11-05",
+    "am_slots": 6,
+    "pm_slots": 8,
+    "notes": "",
+    "created_at": "2025-09-20T16:32:10.565Z",
+    "updated_at": "2025-09-20T16:32:10.565Z",
+    "created_by": 2
+  }
+},
+{
+  "model": "appointments.dailyslots",
+  "pk": 40,
+  "fields": {
+    "date": "2025-11-06",
+    "am_slots": 6,
+    "pm_slots": 8,
+    "notes": "",
+    "created_at": "2025-09-20T16:32:10.565Z",
+    "updated_at": "2025-09-20T16:32:10.565Z",
+    "created_by": 2
+  }
+},
+{
+  "model": "appointments.dailyslots",
+  "pk": 41,
+  "fields": {
+    "date": "2025-11-07",
+    "am_slots": 6,
+    "pm_slots": 8,
+    "notes": "",
+    "created_at": "2025-09-20T16:32:10.566Z",
+    "updated_at": "2025-09-20T16:32:10.566Z",
+    "created_by": 2
+  }
+},
+{
+  "model": "appointments.dailyslots",
+  "pk": 42,
+  "fields": {
+    "date": "2025-11-08",
+    "am_slots": 6,
+    "pm_slots": 8,
+    "notes": "",
+    "created_at": "2025-09-20T16:32:10.567Z",
+    "updated_at": "2025-09-20T16:32:10.567Z",
+    "created_by": 2
+  }
+},
+{
+  "model": "appointments.dailyslots",
+  "pk": 43,
+  "fields": {
+    "date": "2025-11-10",
+    "am_slots": 6,
+    "pm_slots": 8,
+    "notes": "",
+    "created_at": "2025-09-20T16:32:10.568Z",
+    "updated_at": "2025-09-20T16:32:10.568Z",
+    "created_by": 2
+  }
+},
+{
+  "model": "appointments.dailyslots",
+  "pk": 44,
+  "fields": {
+    "date": "2025-11-11",
+    "am_slots": 6,
+    "pm_slots": 8,
+    "notes": "",
+    "created_at": "2025-09-20T16:32:10.569Z",
+    "updated_at": "2025-09-20T16:32:10.569Z",
+    "created_by": 2
+  }
+},
+{
+  "model": "appointments.dailyslots",
+  "pk": 45,
+  "fields": {
+    "date": "2025-11-12",
+    "am_slots": 6,
+    "pm_slots": 8,
+    "notes": "",
+    "created_at": "2025-09-20T16:32:10.570Z",
+    "updated_at": "2025-09-20T16:32:10.570Z",
+    "created_by": 2
+  }
+},
+{
+  "model": "appointments.dailyslots",
+  "pk": 46,
+  "fields": {
+    "date": "2025-11-13",
+    "am_slots": 6,
+    "pm_slots": 8,
+    "notes": "",
+    "created_at": "2025-09-20T16:32:10.570Z",
+    "updated_at": "2025-09-20T16:32:10.570Z",
+    "created_by": 2
+  }
+},
+{
+  "model": "appointments.dailyslots",
+  "pk": 47,
+  "fields": {
+    "date": "2025-11-14",
+    "am_slots": 6,
+    "pm_slots": 8,
+    "notes": "",
+    "created_at": "2025-09-20T16:32:10.571Z",
+    "updated_at": "2025-09-20T16:32:10.571Z",
+    "created_by": 2
+  }
+},
+{
+  "model": "appointments.dailyslots",
+  "pk": 48,
+  "fields": {
+    "date": "2025-11-15",
+    "am_slots": 6,
+    "pm_slots": 8,
+    "notes": "",
+    "created_at": "2025-09-20T16:32:10.572Z",
+    "updated_at": "2025-09-20T16:32:10.572Z",
+    "created_by": 2
+  }
+},
+{
+  "model": "appointments.dailyslots",
+  "pk": 49,
+  "fields": {
+    "date": "2025-11-17",
+    "am_slots": 6,
+    "pm_slots": 8,
+    "notes": "",
+    "created_at": "2025-09-20T16:32:10.573Z",
+    "updated_at": "2025-09-20T16:32:10.573Z",
+    "created_by": 2
+  }
+},
+{
+  "model": "appointments.dailyslots",
+  "pk": 50,
+  "fields": {
+    "date": "2025-11-18",
+    "am_slots": 6,
+    "pm_slots": 8,
+    "notes": "",
+    "created_at": "2025-09-20T16:32:10.574Z",
+    "updated_at": "2025-09-20T16:32:10.574Z",
+    "created_by": 2
+  }
+},
+{
+  "model": "appointments.dailyslots",
+  "pk": 51,
+  "fields": {
+    "date": "2025-11-19",
+    "am_slots": 6,
+    "pm_slots": 8,
+    "notes": "",
+    "created_at": "2025-09-20T16:32:10.575Z",
+    "updated_at": "2025-09-20T16:32:10.575Z",
+    "created_by": 2
+  }
+}
+]

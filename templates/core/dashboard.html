@@ -1,4 +1,4 @@
-<!-- templates/core/dashboard.html -->
+<!-- templates/core/dashboard.html - UPDATED for AM/PM appointment system -->
 {% extends 'base.html' %}
 {% load user_tags %}
 
@@ -76,7 +76,6 @@
             <div class="px-6 py-4 border-b border-gray-200">
                 <div class="flex items-center justify-between">
                     <h2 class="text-lg font-semibold text-gray-900">Today's Appointments</h2>
-                    {% load user_tags %}
                     {% if user|has_permission:'appointments' %}
                     <a href="{% url 'appointments:appointment_calendar' %}" 
                        class="text-primary-600 hover:text-primary-700 text-sm font-medium">
@@ -94,21 +93,39 @@
                                 <div class="flex-shrink-0">
                                     <div class="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center">
                                         <span class="text-primary-600 font-medium text-sm">
-                                            {{ appointment.patient.first_name|first }}{{ appointment.patient.last_name|first }}
+                                            {% if appointment.patient %}
+                                                {{ appointment.patient.first_name|first }}{{ appointment.patient.last_name|first }}
+                                            {% else %}
+                                                {{ appointment.temp_first_name|first }}{{ appointment.temp_last_name|first }}
+                                            {% endif %}
                                         </span>
                                     </div>
                                 </div>
                                 <div>
-                                    <p class="text-sm font-medium text-gray-900">{{ appointment.patient.full_name }}</p>
+                                    <p class="text-sm font-medium text-gray-900">{{ appointment.patient_name }}</p>
                                     <p class="text-sm text-gray-500">{{ appointment.service.name }}</p>
                                 </div>
                             </div>
                             <div class="text-right">
-                                <p class="text-sm font-medium text-gray-900">{{ appointment.schedule.start_time|time:"g:i A" }}</p>
-                                <p class="text-sm text-gray-500">Dr. {{ appointment.dentist.get_full_name }}</p>
+                                <p class="text-sm font-medium text-gray-900">
+                                    {{ appointment.period }}
+                                    {% if appointment.period == 'AM' %}
+                                        (8:00 AM - 12:00 PM)
+                                    {% else %}
+                                        (1:00 PM - 5:00 PM)
+                                    {% endif %}
+                                </p>
+                                <p class="text-sm text-gray-500">
+                                    {% if appointment.assigned_dentist %}
+                                        Dr. {{ appointment.assigned_dentist.get_full_name }}
+                                    {% else %}
+                                        <span class="text-yellow-600">Unassigned</span>
+                                    {% endif %}
+                                </p>
                                 <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-                                    {% if appointment.status == 'approved' %}bg-green-100 text-green-800
+                                    {% if appointment.status == 'confirmed' %}bg-green-100 text-green-800
                                     {% elif appointment.status == 'pending' %}bg-yellow-100 text-yellow-800
+                                    {% elif appointment.status == 'completed' %}bg-blue-100 text-blue-800
                                     {% else %}bg-gray-100 text-gray-800{% endif %}">
                                     {{ appointment.get_status_display }}
                                 </span>
@@ -130,28 +147,39 @@
 
     <!-- Quick Actions & Recent Patients -->
     <div class="space-y-8">
-        <!-- Quick Actions -->
+        <!-- Today's Slot Availability -->
+        {% if todays_slot_summary %}
         <div class="bg-white rounded-lg shadow">
             <div class="px-6 py-4 border-b border-gray-200">
-                <h2 class="text-lg font-semibold text-gray-900">Quick Actions</h2>
+                <h2 class="text-lg font-semibold text-gray-900">Today's Availability</h2>
             </div>
             <div class="px-6 py-4">
                 <div class="space-y-3">
-                    {% for action in quick_actions %}
-                    <a href="{% url action.url %}" 
-                       class="flex items-center p-3 text-sm font-medium text-gray-700 rounded-lg hover:bg-gray-100 transition duration-150">
-                        <div class="flex-shrink-0 w-6 h-6 text-gray-400 mr-3">
-                            <!-- Icon placeholder -->
-                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
-                            </svg>
-                        </div>
-                        {{ action.name }}
-                    </a>
-                    {% endfor %}
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-medium text-gray-700">Morning (AM)</span>
+                        <span class="text-sm text-gray-600">
+                            {{ todays_slot_summary.am_available }}/{{ todays_slot_summary.am_total }} available
+                        </span>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-2">
+                        <div class="bg-green-600 h-2 rounded-full" 
+                             style="width: {{ todays_slot_summary.am_percentage }}%"></div>
+                    </div>
+                    
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-medium text-gray-700">Afternoon (PM)</span>
+                        <span class="text-sm text-gray-600">
+                            {{ todays_slot_summary.pm_available }}/{{ todays_slot_summary.pm_total }} available
+                        </span>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-2">
+                        <div class="bg-blue-600 h-2 rounded-full" 
+                             style="width: {{ todays_slot_summary.pm_percentage }}%"></div>
+                    </div>
                 </div>
             </div>
         </div>
+        {% endif %}
 
         <!-- Recent Patients -->
         {% if user|has_permission:'patients' %}

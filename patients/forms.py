@@ -51,8 +51,7 @@ class PatientForm(forms.ModelForm):
         model = Patient
         fields = [
             'first_name', 'last_name', 'email', 'contact_number', 'address',
-            'date_of_birth', 'emergency_contact_name', 'emergency_contact_phone', 
-            'medical_notes'
+            'date_of_birth'
         ]
         widgets = {
             'first_name': forms.TextInput(attrs={
@@ -81,19 +80,6 @@ class PatientForm(forms.ModelForm):
                 'type': 'date',
                 'max': date.today().strftime('%Y-%m-%d')
             }),
-            'emergency_contact_name': forms.TextInput(attrs={
-                'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
-                'placeholder': 'Emergency contact full name'
-            }),
-            'emergency_contact_phone': forms.TextInput(attrs={
-                'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
-                'placeholder': '+639123456789'
-            }),
-            'medical_notes': forms.Textarea(attrs={
-                'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
-                'rows': 4,
-                'placeholder': 'Include any allergies, medical conditions, medications, or special instructions'
-            }),
         }
     
     def __init__(self, *args, **kwargs):
@@ -111,9 +97,6 @@ class PatientForm(forms.ModelForm):
         self.fields['contact_number'].label = 'Contact Number'
         self.fields['address'].label = 'Address'
         self.fields['date_of_birth'].label = 'Date of Birth'
-        self.fields['emergency_contact_name'].label = 'Emergency Contact Name'
-        self.fields['emergency_contact_phone'].label = 'Emergency Contact Phone'
-        self.fields['medical_notes'].label = 'Medical Notes'
     
     def clean_email(self):
         """Validate email uniqueness"""
@@ -145,11 +128,7 @@ class PatientForm(forms.ModelForm):
                 raise ValidationError('Please enter a valid date of birth.')
         
         return dob
-    
-    def clean_emergency_contact_phone(self):
-        """Clean emergency contact phone using utility function"""
-        phone = self.cleaned_data.get('emergency_contact_phone')
-        return clean_philippine_phone_number(phone, "emergency contact phone number")
+
     
     def clean(self):
         """Cross-field validation"""

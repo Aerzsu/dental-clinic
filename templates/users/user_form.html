@@ -227,40 +227,30 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    const roleSelect = document.querySelector('#{{ form.role.id_for_label }}');
-    const isDentistCheckbox = document.querySelector('#{{ form.is_active_dentist.id_for_label }}');
-    const isDentistContainer = document.querySelector('#is-active-dentist-container');
+    // Simplified approach - no restrictions on is_active_dentist checkbox
+    // Let any role potentially be a dentist, backend will handle business logic if needed
     
-    if (roleSelect && isDentistCheckbox && isDentistContainer) {
-        function toggleDentistCheckbox() {
-            const selectedOption = roleSelect.options[roleSelect.selectedIndex];
-            if (!selectedOption || !selectedOption.value) {
-                // No role selected, disable the checkbox
-                isDentistCheckbox.disabled = true;
-                isDentistCheckbox.checked = false;
-                isDentistContainer.style.opacity = '0.5';
-                return;
-            }
-            
-            // Get the selected role text to check if it's admin or dentist
-            const selectedRoleText = selectedOption.text.toLowerCase();
-            const isAdminOrDentist = selectedRoleText.includes('admin') || selectedRoleText.includes('dentist');
-            
-            if (!isAdminOrDentist) {
-                isDentistCheckbox.disabled = true;
-                isDentistCheckbox.checked = false;
-                isDentistContainer.style.opacity = '0.5';
+    const isDentistCheckbox = document.querySelector('#{{ form.is_active_dentist.id_for_label }}');
+    
+    if (isDentistCheckbox) {
+        // Ensure checkbox is always enabled and visible
+        isDentistCheckbox.disabled = false;
+        
+        // Optional: Add visual feedback when checkbox is changed
+        isDentistCheckbox.addEventListener('change', function() {
+            if (this.checked) {
+                console.log('User can now accept appointments');
             } else {
-                isDentistCheckbox.disabled = false;
-                isDentistContainer.style.opacity = '1';
+                console.log('User cannot accept appointments');
             }
-        }
-        
-        // Run on page load
-        toggleDentistCheckbox();
-        
-        // Run when role changes
-        roleSelect.addEventListener('change', toggleDentistCheckbox);
+        });
+    }
+    
+    // Remove any existing opacity restrictions
+    const isDentistContainer = document.querySelector('#is-active-dentist-container');
+    if (isDentistContainer) {
+        isDentistContainer.style.opacity = '1';
+        isDentistContainer.style.display = 'block';
     }
 });
 </script>

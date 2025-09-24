@@ -1,47 +1,24 @@
-# core/views.py
+# core/views.py - Updated for AM/PM slot system
 import json
-from django.shortcuts import render, redirect
+from django.shortcuts import redirect
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib import messages
-from django.urls import reverse_lazy
-from django.views.generic import TemplateView, ListView, CreateView, UpdateView, DeleteView
+from django.views.generic import TemplateView, ListView
 from django.utils import timezone
 from django.db.models import Q
 from django.http import JsonResponse
-from datetime import datetime, timedelta, time
-from django import forms
-from django.db import transaction, IntegrityError
-from django.core.exceptions import ValidationError
+from datetime import datetime
+from django.db import transaction
+from django.core.validators import validate_email
+from django.core.exceptions import ValidationError as DjangoValidationError
 import re
+import pytz
 
-from .models import AuditLog, Holiday, SystemSetting
-from appointments.models import Appointment
+from .models import AuditLog, SystemSetting
+from appointments.models import Appointment, DailySlots
 from patients.models import Patient
 from services.models import Service
 from users.models import User
-from appointments.forms import AppointmentRequestForm
-from appointments.utils import create_appointment_atomic
-
-class HolidayForm(forms.ModelForm):
-    """Form for creating and updating holidays"""
-    
-    class Meta:
-        model = Holiday
-        fields = ['name', 'date', 'is_recurring']
-        widgets = {
-            'name': forms.TextInput(attrs={'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500'}),
-            'date': forms.DateInput(attrs={'type': 'date', 'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500'}),
-            'is_recurring': forms.CheckboxInput(attrs={'class': 'rounded border-gray-300 text-primary-600 shadow-sm focus:border-primary-500 focus:ring-primary-500'}),
-        }
-        help_texts = {
-            'is_recurring': 'Check if this holiday occurs every year on the same date',
-        }
-    
-    def clean_date(self):
-        date = self.cleaned_data['date']
-        if date < timezone.now().date():
-            raise forms.ValidationError('Holiday date cannot be in the past.')
-        return date
 
 class HomeView(TemplateView):
     """Public landing page"""
@@ -53,52 +30,46 @@ class HomeView(TemplateView):
         context['dentists'] = User.objects.filter(is_active_dentist=True)
         return context
 
-    
 class BookAppointmentView(TemplateView):
-    """Public appointment booking form with race condition prevention"""
+    """
+    PUBLIC VIEW: Simplified appointment booking using AM/PM slots (NO dentist selection)
+    """
     template_name = 'core/book_appointment.html'
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         
-        # Format services data
+        # Get services for booking form
         services = []
-        for service in Service.objects.filter(is_archived=False):
+        for service in Service.objects.filter(is_archived=False).order_by('name'):
             services.append({
                 'id': service.id,
                 'name': service.name,
-                'duration': f"{service.duration_minutes} minutes",
-                'duration_minutes': service.duration_minutes,
-                'price_range': f"₱{service.min_price:,.0f} - ₱{service.max_price:,.0f}",
+                'duration_minutes': service.duration_minutes if hasattr(service, 'duration_minutes') else 30,
+                'price_range': f"₱{service.min_price:,.0f} - ₱{service.max_price:,.0f}" if hasattr(service, 'min_price') else "Contact clinic for pricing",
                 'description': service.description or "Professional dental service"
             })
         
-        # Format dentists data  
-        dentists = []
-        for dentist in User.objects.filter(is_active_dentist=True):
-            dentists.append({
-                'id': dentist.id,
-                'name': f"Dr. {dentist.first_name} {dentist.last_name}",
-                'initials': f"{dentist.first_name[0]}{dentist.last_name[0]}",
-                'specialization': getattr(dentist, 'specialization', 'General Dentist')
-            })
+        # Get period descriptions (configurable in future)
+        am_period_display = SystemSetting.get_setting('am_period_display', '8:00 AM - 12:00 PM')
+        pm_period_display = SystemSetting.get_setting('pm_period_display', '1:00 PM - 6:00 PM')
         
         context.update({
             'services_json': json.dumps(services),
-            'dentists_json': json.dumps(dentists),
+            'am_period_display': am_period_display,
+            'pm_period_display': pm_period_display,
         })
         
         return context
     
     def post(self, request, *args, **kwargs):
-        """Handle appointment request submission with enhanced validation and race condition prevention"""
+        """Handle appointment booking submission - UPDATED for AM/PM slots"""
         try:
             # Check if request is JSON
             if request.content_type == 'application/json':
                 data = json.loads(request.body)
                 return self._handle_json_request(data)
             else:
-                # Handle regular form submission (fallback)
                 return self._handle_form_request(request)
                 
         except json.JSONDecodeError:
@@ -114,9 +85,9 @@ class BookAppointmentView(TemplateView):
             }, status=500)
     
     def _handle_json_request(self, data):
-        """Handle JSON appointment request with atomic transactions"""
+        """Handle JSON appointment request - UPDATED to store in temp fields"""
         # Validate required fields
-        required_fields = ['patient_type', 'service', 'dentist', 'selected_date', 'selected_time']
+        required_fields = ['patient_type', 'service', 'appointment_date', 'period']
         for field in required_fields:
             if not data.get(field):
                 return JsonResponse({'success': False, 'error': f'{field} is required'}, status=400)
@@ -126,65 +97,81 @@ class BookAppointmentView(TemplateView):
             return JsonResponse({'success': False, 'error': 'You must agree to the terms and conditions'}, status=400)
         
         try:
-            # Use atomic transaction with database locking to prevent race conditions
             with transaction.atomic():
-                # Get and validate service and dentist with locking
+                # Get and validate service
                 try:
-                    service = Service.objects.select_for_update().get(id=data['service'], is_archived=False)
-                    dentist = User.objects.select_for_update().get(id=data['dentist'], is_active_dentist=True)
-                except (Service.DoesNotExist, User.DoesNotExist):
-                    return JsonResponse({'success': False, 'error': 'Invalid service or dentist'}, status=400)
+                    service = Service.objects.get(id=data['service'], is_archived=False)
+                except Service.DoesNotExist:
+                    return JsonResponse({'success': False, 'error': 'Invalid service selected'}, status=400)
                 
-                # Parse and validate date/time
+                # Parse and validate appointment date
                 try:
-                    appointment_date = datetime.strptime(data['selected_date'], '%Y-%m-%d').date()
-                    appointment_time = datetime.strptime(data['selected_time'], '%H:%M').time()
+                    appointment_date = datetime.strptime(data['appointment_date'], '%Y-%m-%d').date()
                 except ValueError:
-                    return JsonResponse({'success': False, 'error': 'Invalid date or time format'}, status=400)
+                    return JsonResponse({'success': False, 'error': 'Invalid date format'}, status=400)
                 
-                # Validate appointment date/time constraints
-                validation_error = self._validate_appointment_datetime(appointment_date, appointment_time, service)
+                # Validate period
+                period = data.get('period')
+                if period not in ['AM', 'PM']:
+                    return JsonResponse({'success': False, 'error': 'Invalid period. Must be AM or PM'}, status=400)
+                
+                # Validate appointment date/period constraints
+                validation_error = self._validate_appointment_datetime(appointment_date, period)
                 if validation_error:
                     return JsonResponse({'success': False, 'error': validation_error}, status=400)
                 
-                # Handle patient creation/finding
-                patient, patient_type = self._handle_patient_data(data)
-                if isinstance(patient, JsonResponse):  # Error response
-                    return patient
+                # Check slot availability
+                can_book, availability_message = Appointment.can_book_appointment(appointment_date, period)
+                if not can_book:
+                    return JsonResponse({'success': False, 'error': availability_message}, status=400)
                 
-                # Get buffer time (simplified)
-                buffer_minutes = self._get_buffer_time()
+                # Handle patient data - UPDATED to store in temp fields
+                patient_data, patient_type = self._prepare_patient_data(data)
+                if isinstance(patient_data, JsonResponse):  # Error response
+                    return patient_data
                 
-                # Create appointment atomically with conflict checking
-                try:
-                    from appointments.utils import create_appointment_atomic
-                    appointment = create_appointment_atomic(
-                        patient=patient,
-                        dentist=dentist,
-                        service=service,
-                        appointment_date=appointment_date,
-                        appointment_time=appointment_time,
-                        patient_type=patient_type,
-                        reason=data.get('reason', '').strip(),
-                        buffer_minutes=buffer_minutes
-                    )[0]
-                    
-                    # Generate reference number
-                    reference_number = f'APT-{appointment.id:06d}'
-                    
-                    return JsonResponse({
-                        'success': True,
-                        'reference_number': reference_number,
-                        'appointment_id': appointment.id
-                    })
-                    
-                except ValidationError as e:
-                    return JsonResponse({'success': False, 'error': str(e)}, status=400)
-                except IntegrityError:
-                    return JsonResponse({
-                        'success': False, 
-                        'error': 'This time slot has been booked by another patient. Please select a different time.'
-                    }, status=400)
+                # Create appointment with temp patient data - NO patient FK linking yet
+                appointment = Appointment.objects.create(
+                    patient=patient_data.get('existing_patient'),  # Only set if existing patient
+                    service=service,
+                    appointment_date=appointment_date,
+                    period=period,
+                    patient_type=patient_type,
+                    reason=data.get('reason', '').strip(),
+                    status='pending',
+                    # Store patient data in temp fields
+                    temp_first_name=patient_data.get('first_name', ''),
+                    temp_last_name=patient_data.get('last_name', ''),
+                    temp_email=patient_data.get('email', ''),
+                    temp_contact_number=patient_data.get('contact_number', ''),
+                    temp_address=patient_data.get('address', ''),
+                )
+                
+                # Log the booking
+                AuditLog.log_action(
+                    user=None,  # Public booking
+                    action='create',
+                    model_instance=appointment,
+                    changes={
+                        'source': 'public_booking', 
+                        'period': period,
+                        'patient_type': patient_type
+                    },
+                    request=self.request
+                )
+                
+                # Generate reference number
+                reference_number = f'APT-{appointment.id:06d}'
+                
+                return JsonResponse({
+                    'success': True,
+                    'reference_number': reference_number,
+                    'appointment_id': appointment.id,
+                    'appointment_date': appointment_date.strftime('%Y-%m-%d'),
+                    'period': period,
+                    'period_display': 'Morning' if period == 'AM' else 'Afternoon',
+                    'patient_name': appointment.patient_name
+                })
                 
         except Exception as e:
             import logging
@@ -195,9 +182,115 @@ class BookAppointmentView(TemplateView):
                 'success': False, 
                 'error': 'An error occurred while processing your request. Please try again.'
             }, status=500)
+        
+    def _prepare_patient_data(self, data):
+        """Prepare patient data for temp storage - UPDATED logic"""
+        patient_type_raw = data['patient_type']
+        
+        if patient_type_raw == 'new':
+            return self._prepare_new_patient_data(data)
+        elif patient_type_raw == 'existing':
+            return self._prepare_existing_patient_data(data)
+        else:
+            return JsonResponse({'success': False, 'error': 'Invalid patient type'}, status=400), None
+
+    def _prepare_new_patient_data(self, data):
+        """Prepare new patient data for temp storage"""
+        required_new_fields = ['first_name', 'last_name', 'email']
+        for field in required_new_fields:
+            if not data.get(field, '').strip():
+                field_label = field.replace('_', ' ').title()
+                return JsonResponse({
+                    'success': False, 
+                    'error': f'{field_label} is required for new patients'
+                }, status=400), None
+        
+        # Extract and validate data
+        first_name = data.get('first_name', '').strip()
+        last_name = data.get('last_name', '').strip()
+        email = data.get('email', '').strip()
+        contact_number = data.get('contact_number', '').strip()
+        address = data.get('address', '').strip()
+        
+        # Validate name fields
+        name_pattern = re.compile(r'^[a-zA-Z\s\-\']+$')
+        
+        if not name_pattern.match(first_name):
+            return JsonResponse({
+                'success': False,
+                'error': 'First name should only contain letters, spaces, hyphens, and apostrophes'
+            }, status=400), None
+        
+        if not name_pattern.match(last_name):
+            return JsonResponse({
+                'success': False,
+                'error': 'Last name should only contain letters, spaces, hyphens, and apostrophes'
+            }, status=400), None
+        
+        # Validate email format
+        try:
+            validate_email(email)
+        except DjangoValidationError:
+            return JsonResponse({
+                'success': False,
+                'error': 'Please enter a valid email address'
+            }, status=400), None
+        
+        # Validate contact number if provided
+        if contact_number:
+            phone_pattern = re.compile(r'^(\+63|0)?9\d{9}$')
+            clean_contact = contact_number.replace(' ', '').replace('-', '')
+            if not phone_pattern.match(clean_contact):
+                return JsonResponse({
+                    'success': False,
+                    'error': 'Please enter a valid Philippine mobile number (e.g., +639123456789)'
+                }, status=400), None
+            contact_number = clean_contact
+        
+        return {
+            'first_name': first_name,
+            'last_name': last_name,
+            'email': email,
+            'contact_number': contact_number,
+            'address': address,
+            'existing_patient': None  # No existing patient to link
+        }, 'new'
+
+    def _prepare_existing_patient_data(self, data):
+        """Prepare existing patient data - find and link existing patient"""
+        identifier = data.get('patient_identifier', '').strip()
+        if not identifier:
+            return JsonResponse({'success': False, 'error': 'Patient identifier is required'}, status=400), None
+        
+        # Search logic
+        query = Q(is_active=True)
+        if '@' in identifier:
+            query &= Q(email__iexact=identifier)
+        else:
+            clean_identifier = identifier.replace(' ', '').replace('-', '')
+            query &= (Q(contact_number=identifier) | Q(contact_number=clean_identifier))
+        
+        patient = Patient.objects.filter(query).first()
+        
+        if not patient:
+            return JsonResponse({
+                'success': False, 
+                'error': 'No patient found with the provided information. Please check your details or register as a new patient.'
+            }, status=400), None
+        
+        # For existing patients, we still store temp data in case there are updates
+        # but we also link to the existing patient record
+        return {
+            'first_name': patient.first_name,
+            'last_name': patient.last_name,
+            'email': patient.email,
+            'contact_number': patient.contact_number,
+            'address': patient.address,
+            'existing_patient': patient  # Link to existing patient
+        }, 'returning'
     
-    def _validate_appointment_datetime(self, appointment_date, appointment_time, service):
-        """Validate appointment date and time constraints - SIMPLIFIED"""
+    def _validate_appointment_datetime(self, appointment_date, period):
+        """Validate appointment date and period constraints - SIMPLIFIED (removed holiday check)"""
         # Check past dates
         if appointment_date <= timezone.now().date():
             return 'Appointment date must be in the future'
@@ -206,41 +299,9 @@ class BookAppointmentView(TemplateView):
         if appointment_date.weekday() == 6:  # Sunday
             return 'Appointments are not available on Sundays'
         
-        # Check holidays - SIMPLIFIED error handling
-        try:
-            holiday = Holiday.objects.filter(date=appointment_date, is_active=True).first()
-            if holiday:
-                return f'Appointments are not available on this date ({holiday.name})'
-        except Exception as e:
-            # If Holiday model has issues, just log and continue
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.warning(f'Holiday check failed: {str(e)}')
-            # Don't block the appointment, just continue
-        
-        # Check clinic hours - HARDCODED for simplicity
-        clinic_start = time(10, 0)  # 10:00 AM
-        clinic_end = time(18, 0)    # 6:00 PM
-        lunch_start = time(12, 0)   # 12:00 PM
-        lunch_end = time(13, 0)     # 1:00 PM
-        
-        if appointment_time < clinic_start or appointment_time >= clinic_end:
-            return 'Appointments are available Monday to Saturday, 10:00 AM to 6:00 PM'
-        
-        # Check if appointment would extend past clinic hours or into lunch
-        start_datetime = datetime.combine(appointment_date, appointment_time)
-        service_end = start_datetime + timedelta(minutes=service.duration_minutes)
-        service_end_time = service_end.time()
-        
-        if service_end_time > clinic_end:
-            return f'Selected time is too late. Service duration is {service.duration_minutes} minutes and clinic closes at 6:00 PM'
-        
-        # Check lunch break conflict
-        lunch_start_datetime = datetime.combine(appointment_date, lunch_start)
-        lunch_end_datetime = datetime.combine(appointment_date, lunch_end)
-        
-        if not (service_end <= lunch_start_datetime or start_datetime >= lunch_end_datetime):
-            return 'Appointment cannot be scheduled during lunch break (12:00 PM - 1:00 PM)'
+        # Basic period validation
+        if period not in ['AM', 'PM']:
+            return 'Invalid period selected'
         
         return None  # No validation errors
     
@@ -289,9 +350,6 @@ class BookAppointmentView(TemplateView):
             }, status=400), None
         
         # Validate email format
-        from django.core.validators import validate_email
-        from django.core.exceptions import ValidationError as DjangoValidationError
-        
         try:
             validate_email(email)
         except DjangoValidationError:
@@ -300,7 +358,7 @@ class BookAppointmentView(TemplateView):
                 'error': 'Please enter a valid email address'
             }, status=400), None
         
-        # Validate contact number if provided (optional)
+        # Validate contact number if provided
         if contact_number:
             phone_pattern = re.compile(r'^(\+63|0)?9\d{9}$')
             clean_contact = contact_number.replace(' ', '').replace('-', '')
@@ -309,9 +367,9 @@ class BookAppointmentView(TemplateView):
                     'success': False,
                     'error': 'Please enter a valid Philippine mobile number (e.g., +639123456789)'
                 }, status=400), None
-            contact_number = clean_contact  # Use cleaned version
+            contact_number = clean_contact
         
-        # Check for existing patient - using select_for_update to prevent race conditions
+        # Check for existing patient
         existing_query = Q()
         if email:
             existing_query |= Q(email__iexact=email, is_active=True)
@@ -319,8 +377,7 @@ class BookAppointmentView(TemplateView):
             existing_query |= Q(contact_number=contact_number, is_active=True)
         
         if existing_query:
-            existing = Patient.objects.select_for_update().filter(existing_query).first()
-            
+            existing = Patient.objects.filter(existing_query).first()
             if existing:
                 return JsonResponse({
                     'success': False, 
@@ -332,7 +389,7 @@ class BookAppointmentView(TemplateView):
             first_name=first_name,
             last_name=last_name,
             email=email,
-            contact_number=contact_number or '',  # Allow empty string
+            contact_number=contact_number or '',
             address=address,
         )
         
@@ -344,7 +401,7 @@ class BookAppointmentView(TemplateView):
         if not identifier:
             return JsonResponse({'success': False, 'error': 'Patient identifier is required'}, status=400), None
         
-        # Search with select_for_update to prevent race conditions
+        # Search logic
         query = Q(is_active=True)
         if '@' in identifier:
             query &= Q(email__iexact=identifier)
@@ -352,7 +409,7 @@ class BookAppointmentView(TemplateView):
             clean_identifier = identifier.replace(' ', '').replace('-', '')
             query &= (Q(contact_number=identifier) | Q(contact_number=clean_identifier))
         
-        patient = Patient.objects.select_for_update().filter(query).first()
+        patient = Patient.objects.filter(query).first()
         
         if not patient:
             return JsonResponse({
@@ -362,37 +419,142 @@ class BookAppointmentView(TemplateView):
         
         return patient, 'returning'
     
-    def _get_buffer_time(self):
-        """Get buffer time from system settings or default - SIMPLIFIED"""
-        try:
-            buffer_setting = SystemSetting.objects.get(key='appointment_buffer_minutes')
-            return int(buffer_setting.value)
-        except (SystemSetting.DoesNotExist, ValueError):
-            return 15  # Default 15 minutes
-    
     def _handle_form_request(self, request):
         """Handle regular form submission (fallback)"""
-        # For simplicity, just redirect to the JSON version
         messages.info(request, 'Please use the appointment booking form.')
         return redirect('core:book_appointment')
 
+
+# Add new API endpoints for AM/PM slot availability
+from django.http import JsonResponse
+from django.views.decorators.http import require_http_methods
+from django.views.decorators.csrf import csrf_exempt
+
+
+@require_http_methods(["GET"])
+def get_slot_availability_api(request):
+    """
+    API ENDPOINT: Get AM/PM slot availability for date range
+    Used by the booking calendar
+    """
+    start_date_str = request.GET.get('start_date')
+    end_date_str = request.GET.get('end_date', start_date_str)  # Default to same date if not provided
+    
+    if not start_date_str:
+        return JsonResponse({'error': 'start_date is required'}, status=400)
+    
+    try:
+        start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+        end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+    except ValueError:
+        return JsonResponse({'error': 'Invalid date format. Use YYYY-MM-DD'}, status=400)
+    
+    # Validate date range
+    today = timezone.now().date()
+    if start_date <= today:
+        return JsonResponse({'error': 'Start date must be in the future'}, status=400)
+    
+    if end_date < start_date:
+        return JsonResponse({'error': 'End date must be after start date'}, status=400)
+    
+    # Limit range to prevent excessive queries
+    if (end_date - start_date).days > 90:
+        return JsonResponse({'error': 'Date range too large. Maximum 90 days.'}, status=400)
+    
+    # Get availability for date range
+    availability = DailySlots.get_availability_for_range(start_date, end_date)
+    
+    # Format for frontend
+    formatted_availability = {}
+    for date_obj, slots in availability.items():
+        date_str = date_obj.strftime('%Y-%m-%d')
+        
+        # Skip Sundays and past dates
+        if date_obj.weekday() == 6 or date_obj <= today:
+            continue
+        
+        formatted_availability[date_str] = {
+            'date': date_str,
+            'weekday': date_obj.strftime('%A'),
+            'am_slots': {
+                'available': slots['am_available'],
+                'total': slots['am_total'],
+                'is_available': slots['am_available'] > 0
+            },
+            'pm_slots': {
+                'available': slots['pm_available'],
+                'total': slots['pm_total'],
+                'is_available': slots['pm_available'] > 0
+            },
+            'has_availability': (slots['am_available'] > 0 or slots['pm_available'] > 0)
+        }
+    
+    return JsonResponse({
+        'availability': formatted_availability,
+        'date_range': {
+            'start': start_date_str,
+            'end': end_date_str
+        }
+    })
+
+
+@require_http_methods(["GET"])
+def find_patient_api(request):
+    """
+    API ENDPOINT: Find existing patient by email or contact number
+    """
+    identifier = request.GET.get('identifier', '').strip()
+    if not identifier or len(identifier) < 3:
+        return JsonResponse({'found': False})
+    
+    # Search logic
+    query = Q(is_active=True)
+    
+    if '@' in identifier:
+        query &= Q(email__iexact=identifier)
+    else:
+        # Handle contact number with flexible formatting
+        clean_identifier = identifier.replace(' ', '').replace('-', '').replace('+', '')
+        query &= (
+            Q(contact_number=identifier) | 
+            Q(contact_number=clean_identifier) |
+            (Q(contact_number__endswith=clean_identifier[-10:]) if len(clean_identifier) >= 10 else Q())
+        )
+    
+    patient = Patient.objects.filter(query).first()
+    
+    if patient:
+        return JsonResponse({
+            'found': True,
+            'patient': {
+                'id': patient.id,
+                'name': patient.full_name,
+                'email': patient.email or '',
+                'contact_number': patient.contact_number or ''
+            }
+        })
+    else:
+        return JsonResponse({'found': False})
+
 class DashboardView(LoginRequiredMixin, TemplateView):
-    """Main dashboard for authenticated users"""
+    """Main dashboard for authenticated users - UPDATED for AM/PM system with Manila timezone"""
     template_name = 'core/dashboard.html'
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        today = timezone.now().date()
         
-        # Today's appointments - updated to use appointment_slot instead of schedule
-        all_appointments = Appointment.objects.filter(
-            status__in=['approved', 'pending']
-        ).select_related('patient', 'dentist', 'service', 'appointment_slot')
+        # Get today's date in Manila timezone
+        manila_tz = pytz.timezone('Asia/Manila')
+        manila_now = timezone.now().astimezone(manila_tz)
+        today = manila_now.date()
         
-        # Filter for today's appointments using appointment_slot
-        context['todays_appointments'] = [
-            apt for apt in all_appointments if apt.appointment_slot.date == today
-        ]
+        # Today's appointments - Use BLOCKING_STATUSES for consistency
+        todays_appointments = Appointment.objects.filter(
+            appointment_date=today,
+            status__in=Appointment.BLOCKING_STATUSES
+        ).select_related('patient', 'assigned_dentist', 'service').order_by('period', 'requested_at')
+        
+        context['todays_appointments'] = todays_appointments
         
         # Pending appointment requests
         context['pending_requests'] = Appointment.objects.filter(
@@ -407,13 +569,63 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         # Statistics
         context['stats'] = {
             'total_patients': Patient.objects.filter(is_active=True).count(),
-            'todays_appointments_count': len(context['todays_appointments']),
+            'todays_appointments_count': todays_appointments.count(),
             'pending_requests_count': context['pending_requests'],
             'active_dentists': User.objects.filter(is_active_dentist=True).count(),
         }
         
-        # Quick actions based on user role
-        context['quick_actions'] = self.get_quick_actions()
+        # Today's slot availability summary with percentage calculations
+        try:
+            daily_slots = DailySlots.objects.get(date=today)
+            
+            # Calculate availability
+            am_available = daily_slots.get_available_am_slots()
+            am_total = daily_slots.am_slots
+            pm_available = daily_slots.get_available_pm_slots()
+            pm_total = daily_slots.pm_slots
+            
+            # Calculate percentages
+            am_percentage = (am_available / am_total * 100) if am_total > 0 else 0
+            pm_percentage = (pm_available / pm_total * 100) if pm_total > 0 else 0
+            
+            context['todays_slot_summary'] = {
+                'am_available': am_available,
+                'am_total': am_total,
+                'am_percentage': round(am_percentage, 1),
+                'pm_available': pm_available,
+                'pm_total': pm_total,
+                'pm_percentage': round(pm_percentage, 1),
+            }
+            
+        except DailySlots.DoesNotExist:
+            # Try to create default slots for today
+            daily_slots, created = DailySlots.get_or_create_for_date(today)
+            if daily_slots:
+                am_available = daily_slots.get_available_am_slots()
+                am_total = daily_slots.am_slots
+                pm_available = daily_slots.get_available_pm_slots()
+                pm_total = daily_slots.pm_slots
+                
+                am_percentage = (am_available / am_total * 100) if am_total > 0 else 0
+                pm_percentage = (pm_available / pm_total * 100) if pm_total > 0 else 0
+                
+                context['todays_slot_summary'] = {
+                    'am_available': am_available,
+                    'am_total': am_total,
+                    'am_percentage': round(am_percentage, 1),
+                    'pm_available': pm_available,
+                    'pm_total': pm_total,
+                    'pm_percentage': round(pm_percentage, 1),
+                }
+            else:
+                context['todays_slot_summary'] = {
+                    'am_available': 0,
+                    'am_total': 0,
+                    'am_percentage': 0,
+                    'pm_available': 0,
+                    'pm_total': 0,
+                    'pm_percentage': 0,
+                }
         
         return context
     
@@ -437,80 +649,10 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         if user.has_permission('maintenance'):
             actions.extend([
                 {'name': 'Manage Users', 'url': 'users:user_list', 'icon': 'users'},
-                {'name': 'System Settings', 'url': 'core:holiday_list', 'icon': 'settings'},
+                {'name': 'System Settings', 'url': 'core:system_settings', 'icon': 'settings'},
             ])
         
         return actions
-
-class HolidayListView(LoginRequiredMixin, ListView):
-    """Manage holidays that affect appointment availability"""
-    model = Holiday
-    template_name = 'core/holiday_list.html'
-    context_object_name = 'holidays'
-    paginate_by = 20
-    
-    def dispatch(self, request, *args, **kwargs):
-        if not request.user.has_permission('maintenance'):
-            messages.error(request, 'You do not have permission to access this page.')
-            return redirect('core:dashboard')
-        return super().dispatch(request, *args, **kwargs)
-    
-    def get_queryset(self):
-        return Holiday.objects.filter(is_active=True).order_by('date')
-
-class HolidayCreateView(LoginRequiredMixin, CreateView):
-    """Create new holiday"""
-    model = Holiday
-    form_class = HolidayForm
-    template_name = 'core/holiday_form.html'
-    success_url = reverse_lazy('core:holiday_list')
-    
-    def dispatch(self, request, *args, **kwargs):
-        if not request.user.has_permission('maintenance'):
-            messages.error(request, 'You do not have permission to access this page.')
-            return redirect('core:dashboard')
-        return super().dispatch(request, *args, **kwargs)
-    
-    def form_valid(self, form):
-        messages.success(self.request, 'Holiday created successfully.')
-        return super().form_valid(form)
-
-class HolidayUpdateView(LoginRequiredMixin, UpdateView):
-    """Update holiday"""
-    model = Holiday
-    form_class = HolidayForm
-    template_name = 'core/holiday_form.html'
-    success_url = reverse_lazy('core:holiday_list')
-    
-    def dispatch(self, request, *args, **kwargs):
-        if not request.user.has_permission('maintenance'):
-            messages.error(request, 'You do not have permission to access this page.')
-            return redirect('core:dashboard')
-        return super().dispatch(request, *args, **kwargs)
-    
-    def form_valid(self, form):
-        messages.success(self.request, 'Holiday updated successfully.')
-        return super().form_valid(form)
-
-class HolidayDeleteView(LoginRequiredMixin, DeleteView):
-    """Delete holiday"""
-    model = Holiday
-    template_name = 'core/holiday_confirm_delete.html'
-    success_url = reverse_lazy('core:holiday_list')
-    
-    def dispatch(self, request, *args, **kwargs):
-        if not request.user.has_permission('maintenance'):
-            messages.error(request, 'You do not have permission to access this page.')
-            return redirect('core:dashboard')
-        return super().dispatch(request, *args, **kwargs)
-    
-    def delete(self, request, *args, **kwargs):
-        self.object = self.get_object()
-        # Soft delete by setting is_active to False
-        self.object.is_active = False
-        self.object.save()
-        messages.success(request, f'Holiday "{self.object.name}" deleted successfully.')
-        return redirect(self.success_url)
 
 class AuditLogListView(LoginRequiredMixin, ListView):
     """View audit logs for system activities"""
@@ -570,15 +712,24 @@ class AuditLogListView(LoginRequiredMixin, ListView):
         }
         return context
 
-class MaintenanceHubView(TemplateView):
+class MaintenanceHubView(LoginRequiredMixin, TemplateView):
+    """Maintenance hub for admin functions"""
     template_name = 'core/maintenance_hub.html'
+    
+    def dispatch(self, request, *args, **kwargs):
+        if not request.user.has_permission('maintenance'):
+            messages.error(request, 'You do not have permission to access this page.')
+            return redirect('core:dashboard')
+        return super().dispatch(request, *args, **kwargs)
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        # Optional: Add counts for the stats section
-        # context['users_count'] = User.objects.count()
-        # context['services_count'] = Service.objects.count()
-        # etc.
+        context['stats'] = {
+            'users_count': User.objects.count(),
+            'services_count': Service.objects.count(),
+            'patients_count': Patient.objects.count(),
+            'appointments_count': Appointment.objects.count(),
+        }
         return context
 
 class SystemSettingsView(LoginRequiredMixin, TemplateView):

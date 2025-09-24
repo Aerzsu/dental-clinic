@@ -1,0 +1,200 @@
+[
+{
+  "model": "appointments.appointment",
+  "pk": 6,
+  "fields": {
+    "patient": 1,
+    "service": 4,
+    "appointment_date": "2025-08-12",
+    "period": "AM",
+    "assigned_dentist": 3,
+    "status": "approved",
+    "patient_type": "new",
+    "reason": "",
+    "requested_at": "2025-08-11T00:36:56.623Z",
+    "approved_at": "2025-08-11T00:37:20.960Z",
+    "approved_by": 2,
+    "staff_notes": ""
+  }
+},
+{
+  "model": "appointments.appointment",
+  "pk": 7,
+  "fields": {
+    "patient": 3,
+    "service": 4,
+    "appointment_date": "2025-08-13",
+    "period": "AM",
+    "assigned_dentist": 3,
+    "status": "approved",
+    "patient_type": "new",
+    "reason": "",
+    "requested_at": "2025-08-12T19:09:38.723Z",
+    "approved_at": "2025-08-12T19:10:19.378Z",
+    "approved_by": 2,
+    "staff_notes": ""
+  }
+},
+{
+  "model": "appointments.appointment",
+  "pk": 8,
+  "fields": {
+    "patient": 2,
+    "service": 6,
+    "appointment_date": "2025-08-15",
+    "period": "PM",
+    "assigned_dentist": 1,
+    "status": "completed",
+    "patient_type": "returning",
+    "reason": "",
+    "requested_at": "2025-08-12T19:13:11.866Z",
+    "approved_at": "2025-08-12T19:32:37.303Z",
+    "approved_by": 2,
+    "staff_notes": ""
+  }
+},
+{
+  "model": "appointments.appointment",
+  "pk": 9,
+  "fields": {
+    "patient": 4,
+    "service": 11,
+    "appointment_date": "2025-09-03",
+    "period": "PM",
+    "assigned_dentist": 1,
+    "status": "approved",
+    "patient_type": "new",
+    "reason": "",
+    "requested_at": "2025-09-02T13:00:43.580Z",
+    "approved_at": "2025-09-02T13:02:24.359Z",
+    "approved_by": 2,
+    "staff_notes": ""
+  }
+},
+{
+  "model": "appointments.appointment",
+  "pk": 10,
+  "fields": {
+    "patient": 5,
+    "service": 3,
+    "appointment_date": "2025-09-03",
+    "period": "PM",
+    "assigned_dentist": null,
+    "status": "rejected",
+    "patient_type": "new",
+    "reason": "",
+    "requested_at": "2025-09-02T13:06:21.812Z",
+    "approved_at": null,
+    "approved_by": null,
+    "staff_notes": ""
+  }
+},
+{
+  "model": "appointments.appointment",
+  "pk": 11,
+  "fields": {
+    "patient": 6,
+    "service": 9,
+    "appointment_date": "2025-09-03",
+    "period": "PM",
+    "assigned_dentist": null,
+    "status": "rejected",
+    "patient_type": "new",
+    "reason": "aa",
+    "requested_at": "2025-09-02T13:16:02.402Z",
+    "approved_at": null,
+    "approved_by": null,
+    "staff_notes": ""
+  }
+},
+{
+  "model": "appointments.appointment",
+  "pk": 12,
+  "fields": {
+    "patient": 7,
+    "service": 8,
+    "appointment_date": "2025-09-03",
+    "period": "PM",
+    "assigned_dentist": 4,
+    "status": "approved",
+    "patient_type": "new",
+    "reason": "",
+    "requested_at": "2025-09-02T13:17:57.172Z",
+    "approved_at": "2025-09-02T13:20:21.851Z",
+    "approved_by": 2,
+    "staff_notes": ""
+  }
+},
+{
+  "model": "appointments.appointment",
+  "pk": 13,
+  "fields": {
+    "patient": 8,
+    "service": 7,
+    "appointment_date": "2025-09-19",
+    "period": "AM",
+    "assigned_dentist": 2,
+    "status": "approved",
+    "patient_type": "new",
+    "reason": "",
+    "requested_at": "2025-09-18T01:38:55.091Z",
+    "approved_at": "2025-09-18T01:43:00.577Z",
+    "approved_by": 2,
+    "staff_notes": ""
+  }
+},
+{
+  "model": "appointments.appointment",
+  "pk": 14,
+  "fields": {
+    "patient": 9,
+    "service": 3,
+    "appointment_date": "2025-09-19",
+    "period": "PM",
+    "assigned_dentist": null,
+    "status": "rejected",
+    "patient_type": "new",
+    "reason": "",
+    "requested_at": "2025-09-18T01:50:12.870Z",
+    "approved_at": null,
+    "approved_by": null,
+    "staff_notes": ""
+  }
+},
+{
+  "model": "appointments.appointment",
+  "pk": 15,
+  "fields": {
+    "patient": 10,
+    "service": 3,
+    "appointment_date": "2025-09-22",
+    "period": "AM",
+    "assigned_dentist": 2,
+    "status": "approved",
+    "patient_type": "new",
+    "reason": "",
+    "requested_at": "2025-09-18T01:54:02.376Z",
+    "approved_at": "2025-09-18T01:54:44.281Z",
+    "approved_by": 2,
+    "staff_notes": ""
+  }
+},
+{
+  "model": "appointments.appointment",
+  "pk": 16,
+  "fields": {
+    "patient": 11,
+    "service": 11,
+    "appointment_date": "2025-09-23",
+    "period": "AM",
+    "assigned_dentist": null,
+    "status": "pending",
+    "patient_type": "new",
+    "reason": "",
+    "requested_at": "2025-09-18T02:21:24.156Z",
+    "approved_at": null,
+    "approved_by": null,
+    "staff_notes": ""
+  }
+}
+]

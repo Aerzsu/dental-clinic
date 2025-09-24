@@ -55,35 +55,6 @@
                     class="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
                         List View
                     </a>
-                    
-                    <!-- Schedule Management Links - Commented out until implemented -->
-                    {% comment %}
-                    {% if user.has_permission_appointments and user.is_active_dentist %}
-                    <a href="{% url 'appointments:dentist_schedule' %}" 
-                    class="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium
-                           {% if request.resolver_match.url_name == 'dentist_schedule' %}
-                           bg-primary-100 text-primary-700 border-primary-300
-                           {% else %}
-                           text-gray-700 bg-white hover:bg-gray-50
-                           {% endif %}">
-                        <span class="mr-2">⏰</span>
-                        My Schedule
-                    </a>
-                    {% endif %}
-
-                    {% if user.has_permission_appointments %}
-                    <a href="{% url 'appointments:schedule_overview' %}" 
-                    class="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium
-                           {% if request.resolver_match.url_name == 'schedule_overview' %}
-                           bg-primary-100 text-primary-700 border-primary-300
-                           {% else %}
-                           text-gray-700 bg-white hover:bg-gray-50
-                           {% endif %}">
-                        <span class="mr-2">📋</span>
-                        Schedule Overview
-                    </a>
-                    {% endif %}
-                    {% endcomment %}
                 </div>
             </div>
         </div>
@@ -118,7 +89,7 @@
             </div>
             <div class="flex items-center">
                 <div class="w-3 h-3 bg-green-500 rounded mr-2"></div>
-                <span class="text-sm text-gray-700">Approved</span>
+                <span class="text-sm text-gray-700">Confirmed</span>
             </div>
             <div class="flex items-center">
                 <div class="w-3 h-3 bg-blue-500 rounded mr-2"></div>
@@ -150,13 +121,15 @@
 </div>
 
 <script>
-// Calendar data from Django
+// Calendar data from Django - FIXED FOR AM/PM SYSTEM
 const appointmentsByDate = {{ appointments_by_date|safe }};
+const slotsByDate = {{ slots_by_date|safe }};
 const currentMonth = {{ current_month }};
 const currentYear = {{ current_year }};
 const today = "{{ today }}";
 
-console.log('Appointments data:', appointmentsByDate); // Debug log
+console.log('Appointments data:', appointmentsByDate);
+console.log('Slots data:', slotsByDate);
 
 // Generate calendar
 function generateCalendar() {
@@ -193,15 +166,31 @@ function generateCalendar() {
         dayNumber.textContent = day;
         dayCell.appendChild(dayNumber);
         
-        // Appointments for this day
-        const appointments = appointmentsByDate[dateStr] || [];
-        console.log(`Appointments for ${dateStr}:`, appointments); // Debug log
+        // Get appointments for this day - FIXED TO USE CORRECT STRUCTURE
+        const dayAppointments = appointmentsByDate[dateStr] || {AM: [], PM: []};
+        const amAppointments = dayAppointments.AM || [];
+        const pmAppointments = dayAppointments.PM || [];
+        const allAppointments = [...amAppointments, ...pmAppointments];
         
-        appointments.forEach((appointment, index) => {
-            if (index < 3) { // Show max 3 appointments
+        // Show AM/PM slots info if available
+        const daySlots = slotsByDate[dateStr];
+        if (daySlots) {
+            const slotsInfo = document.createElement('div');
+            slotsInfo.className = 'text-xs text-gray-500 mb-1';
+            slotsInfo.textContent = `AM: ${daySlots.am_available}/${daySlots.am_total} | PM: ${daySlots.pm_available}/${daySlots.pm_total}`;
+            dayCell.appendChild(slotsInfo);
+        }
+        
+        // Show appointments (max 3)
+        allAppointments.forEach((appointment, index) => {
+            if (index < 3) {
                 const appointmentDiv = document.createElement('div');
                 appointmentDiv.className = `text-xs p-1 mb-1 rounded cursor-pointer border ${getStatusColor(appointment.status)}`;
-                appointmentDiv.textContent = `${appointment.appointment_slot__start_time} - ${appointment.patient__first_name} ${appointment.patient__last_name}`;
+                
+                // FIXED: Use correct field names for AM/PM system
+                const period = appointment.period || 'AM'; // Default to AM if not specified
+                appointmentDiv.textContent = `${period} - ${appointment.patient_name}`;
+                
                 appointmentDiv.onclick = (e) => {
                     e.stopPropagation();
                     showAppointmentDetails(appointment);
@@ -211,14 +200,14 @@ function generateCalendar() {
         });
         
         // Show "more" indicator if there are more than 3 appointments
-        if (appointments.length > 3) {
+        if (allAppointments.length > 3) {
             const moreDiv = document.createElement('div');
             moreDiv.className = 'text-xs text-gray-500 font-medium';
-            moreDiv.textContent = `+${appointments.length - 3} more`;
+            moreDiv.textContent = `+${allAppointments.length - 3} more`;
             dayCell.appendChild(moreDiv);
         }
         
-        dayCell.onclick = () => showDayAppointments(dateStr, appointments);
+        dayCell.onclick = () => showDayAppointments(dateStr, dayAppointments);
         calendarGrid.appendChild(dayCell);
     }
 }
@@ -226,7 +215,7 @@ function generateCalendar() {
 function getStatusColor(status) {
     const colors = {
         'pending': 'bg-yellow-100 text-yellow-800 border-yellow-200',
-        'approved': 'bg-green-100 text-green-800 border-green-200',
+        'confirmed': 'bg-green-100 text-green-800 border-green-200',
         'completed': 'bg-blue-100 text-blue-800 border-blue-200',
         'cancelled': 'bg-red-100 text-red-800 border-red-200',
         'rejected': 'bg-red-100 text-red-800 border-red-200'
@@ -234,38 +223,83 @@ function getStatusColor(status) {
     return colors[status] || 'bg-gray-100 text-gray-800 border-gray-200';
 }
 
-function showDayAppointments(dateStr, appointments) {
+function showDayAppointments(dateStr, dayAppointments) {
     const modal = document.getElementById('appointmentModal');
     const modalTitle = document.getElementById('modalTitle');
     const modalContent = document.getElementById('modalContent');
     
-    const date = new Date(dateStr);
-    modalTitle.textContent = `Appointments - ${date.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}`;
+    // FIXED: Validate and safely parse the date string
+    let date;
+    try {
+        // Ensure dateStr is in YYYY-MM-DD format
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+            console.error('Invalid date format:', dateStr);
+            modalTitle.textContent = 'Appointments - Invalid Date';
+            modalContent.innerHTML = '<p class="text-red-500">Error: Invalid date format</p>';
+            modal.classList.remove('hidden');
+            return;
+        }
+        
+        // Create date object safely (avoid timezone issues)
+        const [year, month, day] = dateStr.split('-').map(Number);
+        date = new Date(year, month - 1, day); // month is 0-indexed
+        
+        // Double-check the date is valid
+        if (isNaN(date.getTime())) {
+            throw new Error('Invalid date created');
+        }
+        
+    } catch (error) {
+        console.error('Date parsing error:', error, 'for dateStr:', dateStr);
+        modalTitle.textContent = 'Appointments - Date Error';
+        modalContent.innerHTML = '<p class="text-red-500">Error loading appointment date</p>';
+        modal.classList.remove('hidden');
+        return;
+    }
     
-    if (appointments.length === 0) {
+    // Format the date for display
+    modalTitle.textContent = `Appointments - ${date.toLocaleDateString('en-US', { 
+        weekday: 'long', 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+    })}`;
+    
+    // FIXED: Validate dayAppointments structure
+    if (!dayAppointments || typeof dayAppointments !== 'object') {
+        console.error('Invalid dayAppointments structure:', dayAppointments);
+        modalContent.innerHTML = '<p class="text-gray-500">Error loading appointments for this day.</p>';
+        modal.classList.remove('hidden');
+        return;
+    }
+    
+    const amAppointments = Array.isArray(dayAppointments.AM) ? dayAppointments.AM : [];
+    const pmAppointments = Array.isArray(dayAppointments.PM) ? dayAppointments.PM : [];
+    const allAppointments = [...amAppointments, ...pmAppointments];
+    
+    if (allAppointments.length === 0) {
         modalContent.innerHTML = '<p class="text-gray-500">No appointments scheduled for this day.</p>';
     } else {
-        let content = '<div class="space-y-3">';
-        appointments.forEach(appointment => {
-            content += `
-                <div class="border border-gray-200 rounded-lg p-3">
-                    <div class="flex items-center justify-between mb-2">
-                        <span class="font-medium">${appointment.patient__first_name} ${appointment.patient__last_name}</span>
-                        <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(appointment.status).replace('border-', 'border ')}">${appointment.status}</span>
-                    </div>
-                    <div class="text-sm text-gray-600">
-                        <p><strong>Time:</strong> ${appointment.appointment_slot__start_time} - ${appointment.appointment_slot__end_time}</p>
-                        <p><strong>Service:</strong> ${appointment.service__name}</p>
-                        <p><strong>Dentist:</strong> Dr. ${appointment.dentist__first_name} ${appointment.dentist__last_name}</p>
-                        ${appointment.reason ? `<p><strong>Reason:</strong> ${appointment.reason}</p>` : ''}
-                    </div>
-                    <div class="mt-2 flex space-x-2">
-                        <a href="/appointments/${appointment.id}/" class="text-primary-600 hover:text-primary-500 text-sm font-medium">View Details</a>
-                        ${appointment.status === 'pending' ? `<a href="/appointments/${appointment.id}/approve/" class="text-green-600 hover:text-green-500 text-sm font-medium">Approve</a>` : ''}
-                    </div>
-                </div>
-            `;
-        });
+        let content = '<div class="space-y-4">';
+        
+        // Show AM appointments
+        if (amAppointments.length > 0) {
+            content += '<div><h4 class="font-medium text-gray-900 mb-2">Morning (AM)</h4>';
+            amAppointments.forEach(appointment => {
+                content += createAppointmentCard(appointment);
+            });
+            content += '</div>';
+        }
+        
+        // Show PM appointments
+        if (pmAppointments.length > 0) {
+            content += '<div><h4 class="font-medium text-gray-900 mb-2">Afternoon (PM)</h4>';
+            pmAppointments.forEach(appointment => {
+                content += createAppointmentCard(appointment);
+            });
+            content += '</div>';
+        }
+        
         content += '</div>';
         modalContent.innerHTML = content;
     }
@@ -273,9 +307,31 @@ function showDayAppointments(dateStr, appointments) {
     modal.classList.remove('hidden');
 }
 
+function createAppointmentCard(appointment) {
+    return `
+        <div class="border border-gray-200 rounded-lg p-3 mb-3">
+            <div class="flex items-center justify-between mb-2">
+                <span class="font-medium">${appointment.patient_name}</span>
+                <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(appointment.status).replace('border-', 'border ')}">${appointment.status}</span>
+            </div>
+            <div class="text-sm text-gray-600">
+                <p><strong>Service:</strong> ${appointment.service_name}</p>
+                ${appointment.dentist_name && appointment.dentist_name !== 'Unassigned' ? `<p><strong>Dentist:</strong> ${appointment.dentist_name}</p>` : '<p><strong>Dentist:</strong> <span class="italic text-gray-400">Unassigned</span></p>'}
+                ${appointment.reason ? `<p><strong>Reason:</strong> ${appointment.reason}</p>` : ''}
+            </div>
+            <div class="mt-2 flex space-x-2">
+                <a href="/appointments/${appointment.id}/" class="text-primary-600 hover:text-primary-500 text-sm font-medium">View Details</a>
+                ${appointment.status === 'pending' ? `<a href="/appointments/${appointment.id}/approve/" class="text-green-600 hover:text-green-500 text-sm font-medium" onclick="return confirm('Approve this appointment?')">Approve</a>` : ''}
+            </div>
+        </div>
+    `;
+}
+
 function showAppointmentDetails(appointment) {
-    // This would show detailed info for a single appointment
-    showDayAppointments(appointment.appointment_slot__date, [appointment]);
+    // Show detailed info for a single appointment
+    const dayAppointments = {AM: [], PM: []};
+    dayAppointments[appointment.period || 'AM'] = [appointment];
+    showDayAppointments(appointment.appointment_date, dayAppointments);
 }
 
 function closeModal() {

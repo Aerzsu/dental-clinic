@@ -14,9 +14,6 @@ class Patient(models.Model):
     contact_number = models.CharField(validators=[phone_regex], max_length=17, blank=True, null=True)
     address = models.TextField(blank=True)
     date_of_birth = models.DateField(null=True, blank=True)
-    emergency_contact_name = models.CharField(max_length=100, blank=True)
-    emergency_contact_phone = models.CharField(validators=[phone_regex], max_length=17, blank=True, null=True)
-    medical_notes = models.TextField(blank=True, help_text="Allergies, medical conditions, etc.")
     
     # System fields
     created_at = models.DateTimeField(auto_now_add=True)

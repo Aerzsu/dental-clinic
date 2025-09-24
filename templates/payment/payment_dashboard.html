@@ -1,0 +1,308 @@
+{% extends "base.html" %}
+{% load user_tags %}
+
+{% block title %}Payment Dashboard - Dental Clinic{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="sm:flex sm:items-center sm:justify-between">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900">Payment Dashboard</h1>
+            <p class="mt-2 text-sm text-gray-700">Financial overview and payment tracking</p>
+        </div>
+        <div class="mt-4 sm:mt-0 sm:flex sm:space-x-3">
+            <a href="{% url 'appointments:payment_list' %}" 
+               class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
+                View All Payments
+            </a>
+        </div>
+    </div>
+
+    <!-- Key Metrics -->
+    <div class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-5">
+        <!-- Total Outstanding -->
+        <div class="bg-white overflow-hidden shadow rounded-lg">
+            <div class="p-5">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <div class="text-3xl">💰</div>
+                    </div>
+                    <div class="ml-5 w-0 flex-1">
+                        <dl>
+                            <dt class="text-sm font-medium text-gray-500 truncate">Total Outstanding</dt>
+                            <dd class="text-lg font-medium {% if metrics.overdue_payments > 0 %}text-red-600{% else %}text-green-600{% endif %}">
+                                {{ metrics.overdue_payments }}
+                            </dd>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- This Month Revenue -->
+        <div class="bg-white overflow-hidden shadow rounded-lg">
+            <div class="p-5">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <div class="text-3xl">📈</div>
+                    </div>
+                    <div class="ml-5 w-0 flex-1">
+                        <dl>
+                            <dt class="text-sm font-medium text-gray-500 truncate">This Month Revenue</dt>
+                            <dd class="text-lg font-medium text-green-600">
+                                ₱{{ metrics.this_month_revenue|floatformat:2 }}
+                            </dd>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Pending Payments -->
+        <div class="bg-white overflow-hidden shadow rounded-lg">
+            <div class="p-5">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <div class="text-3xl">📋</div>
+                    </div>
+                    <div class="ml-5 w-0 flex-1">
+                        <dl>
+                            <dt class="text-sm font-medium text-gray-500 truncate">Pending Payments</dt>
+                            <dd class="text-lg font-medium text-yellow-600">
+                                {{ metrics.pending_payments }}
+                            </dd>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Completed This Month -->
+        <div class="bg-white overflow-hidden shadow rounded-lg">
+            <div class="p-5">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <div class="text-3xl">✅</div>
+                    </div>
+                    <div class="ml-5 w-0 flex-1">
+                        <dl>
+                            <dt class="text-sm font-medium text-gray-500 truncate">Completed This Month</dt>
+                            <dd class="text-lg font-medium text-green-600">
+                                {{ metrics.completed_this_month }}
+                            </dd>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Financial Health Overview -->
+    <div class="bg-white shadow rounded-lg">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h3 class="text-lg font-medium text-gray-900">Financial Health</h3>
+        </div>
+        <div class="px-6 py-4">
+            {% if metrics.total_outstanding == 0 %}
+                <div class="flex items-center p-4 bg-green-50 rounded-lg">
+                    <div class="flex-shrink-0">
+                        <svg class="h-8 w-8 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                    </div>
+                    <div class="ml-3">
+                        <h3 class="text-sm font-medium text-green-800">All Payments Current</h3>
+                        <p class="mt-1 text-sm text-green-700">
+                            No outstanding balances or overdue payments. All patient accounts are up to date.
+                        </p>
+                    </div>
+                </div>
+            {% elif metrics.overdue_payments == 0 %}
+                <div class="flex items-center p-4 bg-blue-50 rounded-lg">
+                    <div class="flex-shrink-0">
+                        <svg class="h-8 w-8 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                    </div>
+                    <div class="ml-3">
+                        <h3 class="text-sm font-medium text-blue-800">Good Payment Status</h3>
+                        <p class="mt-1 text-sm text-blue-700">
+                            Outstanding balance of ₱{{ metrics.total_outstanding|floatformat:2 }}, but no overdue payments. All patients are current with their payment schedules.
+                        </p>
+                    </div>
+                </div>
+            {% else %}
+                <div class="flex items-center p-4 bg-red-50 rounded-lg">
+                    <div class="flex-shrink-0">
+                        <svg class="h-8 w-8 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5C3.312 18.333 4.852 20 6.082 20z"></path>
+                        </svg>
+                    </div>
+                    <div class="ml-3">
+                        <h3 class="text-sm font-medium text-red-800">Attention Required</h3>
+                        <p class="mt-1 text-sm text-red-700">
+                            {{ metrics.overdue_payments }} payment{{ metrics.overdue_payments|pluralize }} overdue with total outstanding of ₱{{ metrics.total_outstanding|floatformat:2 }}. Follow up needed.
+                        </p>
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <!-- Recent Transactions -->
+        <div class="bg-white shadow rounded-lg">
+            <div class="px-6 py-4 border-b border-gray-200">
+                <div class="flex justify-between items-center">
+                    <h3 class="text-lg font-medium text-gray-900">Recent Transactions</h3>
+                    <a href="{% url 'appointments:payment_list' %}" class="text-sm text-primary-600 hover:text-primary-500">
+                        View all
+                    </a>
+                </div>
+            </div>
+            <div class="px-6 py-4">
+                {% if recent_transactions %}
+                    <div class="space-y-3">
+                        {% for transaction in recent_transactions %}
+                        <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                            <div class="flex items-center space-x-3">
+                                <div class="flex-shrink-0 h-8 w-8">
+                                    <div class="h-8 w-8 rounded-full bg-green-100 flex items-center justify-center">
+                                        <span class="text-xs font-medium text-green-800">₱</span>
+                                    </div>
+                                </div>
+                                <div>
+                                    <div class="text-sm font-medium text-gray-900">
+                                        {{ transaction.payment.patient.full_name }}
+                                    </div>
+                                    <div class="text-sm text-gray-500">
+                                        {{ transaction.payment_date|date:"M d, Y" }} • {{ transaction.receipt_number }}
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="text-sm font-medium text-green-600">
+                                +₱{{ transaction.amount|floatformat:2 }}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="text-center py-6 text-gray-500">
+                        <div class="text-4xl mb-2">💳</div>
+                        <p class="text-sm">No recent transactions</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Overdue Payments -->
+        <div class="bg-white shadow rounded-lg">
+            <div class="px-6 py-4 border-b border-gray-200">
+                <div class="flex justify-between items-center">
+                    <h3 class="text-lg font-medium text-gray-900">Overdue Payments</h3>
+                    <a href="{% url 'appointments:payment_list' %}?overdue=yes" class="text-sm text-red-600 hover:text-red-500">
+                        View all
+                    </a>
+                </div>
+            </div>
+            <div class="px-6 py-4">
+                {% if overdue_payments %}
+                    <div class="space-y-3">
+                        {% for payment in overdue_payments %}
+                        <div class="flex items-center justify-between p-3 bg-red-50 rounded-lg border-l-4 border-red-400">
+                            <div class="flex items-center space-x-3">
+                                <div class="flex-shrink-0 h-8 w-8">
+                                    <div class="h-8 w-8 rounded-full bg-red-100 flex items-center justify-center">
+                                        <span class="text-xs font-medium text-red-800">!</span>
+                                    </div>
+                                </div>
+                                <div>
+                                    <div class="text-sm font-medium text-gray-900">
+                                        <a href="{% url 'appointments:payment_detail' payment.pk %}" 
+                                           class="hover:text-primary-600">
+                                            {{ payment.patient.full_name }}
+                                        </a>
+                                    </div>
+                                    <div class="text-sm text-red-600">
+                                        Due: {{ payment.next_due_date|date:"M d, Y" }}
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <div class="text-sm font-medium text-red-600">
+                                    ₱{{ payment.outstanding_balance|floatformat:2 }}
+                                </div>
+                                <div class="text-xs text-red-500">
+                                    {{ payment.next_due_date|timesince }} overdue
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="text-center py-6 text-gray-500">
+                        <div class="text-4xl mb-2">✅</div>
+                        <p class="text-sm">No overdue payments</p>
+                        <p class="text-xs text-gray-400 mt-1">All patients are current with their payments</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="bg-white shadow rounded-lg">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h3 class="text-lg font-medium text-gray-900">Quick Actions</h3>
+        </div>
+        <div class="px-6 py-4">
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <a href="{% url 'appointments:payment_list' %}?status=pending" 
+                   class="flex items-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                    <div class="flex-shrink-0">
+                        <div class="text-2xl">📋</div>
+                    </div>
+                    <div class="ml-3">
+                        <div class="text-sm font-medium text-gray-900">Review Pending</div>
+                        <div class="text-sm text-gray-500">{{ metrics.pending_payments }} pending</div>
+                    </div>
+                </a>
+
+                <a href="{% url 'appointments:payment_list' %}?overdue=yes" 
+                   class="flex items-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                    <div class="flex-shrink-0">
+                        <div class="text-2xl">⚠️</div>
+                    </div>
+                    <div class="ml-3">
+                        <div class="text-sm font-medium text-gray-900">Follow Up Overdue</div>
+                        <div class="text-sm text-gray-500">{{ metrics.overdue_payments }} overdue</div>
+                    </div>
+                </a>
+
+                <a href="{% url 'appointments:payment_list' %}?balance=has_balance" 
+                   class="flex items-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                    <div class="flex-shrink-0">
+                        <div class="text-2xl">💰</div>
+                    </div>
+                    <div class="ml-3">
+                        <div class="text-sm font-medium text-gray-900">Outstanding Balances</div>
+                        <div class="text-sm text-gray-500">₱{{ metrics.total_outstanding|floatformat:0 }}</div>
+                    </div>
+                </a>
+
+                <a href="{% url 'appointments:appointment_list' %}?status=completed" 
+                   class="flex items-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                    <div class="flex-shrink-0">
+                        <div class="text-2xl">🏥</div>
+                    </div>
+                    <div class="ml-3">
+                        <div class="text-sm font-medium text-gray-900">Completed Appointments</div>
+                        <div class="text-sm text-gray-500">Create payment records</div>
+                    </div>
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

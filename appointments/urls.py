@@ -39,6 +39,9 @@ urlpatterns = [
     path('payments/<int:payment_pk>/add-payment/', payment_views.add_payment_transaction, name='add_payment_transaction'),
     path('receipts/<int:transaction_pk>/pdf/', payment_views.generate_receipt_pdf, name='receipt_pdf'),
     path('payments/dashboard/', payment_views.payment_dashboard, name='payment_dashboard'),
+    
+    # Admin verification for price overrides
+    path('admin/verify-password/', payment_views.verify_admin_password, name='verify_admin_password'),
 
     # API endpoints for AM/PM slot system (PUBLIC + BACKEND)
     path('api/slot-availability/', views.get_slot_availability_api, name='slot_availability_api'),

@@ -38,15 +38,96 @@
     <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <!-- Main Form -->
         <div class="lg:col-span-2">
-            <form method="post" class="space-y-6">
+            <form method="post" id="paymentForm" class="space-y-6">
                 {% csrf_token %}
                 
+                <!-- Hidden field for service items data -->
+                {{ form.service_items_data }}
+                
+                <!-- Service Items Section -->
+                <div class="bg-white shadow rounded-lg">
+                    <div class="px-6 py-4 border-b border-gray-200">
+                        <h3 class="text-lg font-medium text-gray-900">Service Items</h3>
+                        <p class="mt-1 text-sm text-gray-500">Configure services and pricing for this payment</p>
+                    </div>
+                    <div class="px-6 py-4">
+                        <!-- Service Items Container -->
+                        <div id="serviceItemsContainer" class="space-y-4">
+                            <!-- Service items will be dynamically added here -->
+                        </div>
+                        
+                        <!-- Add Service Button -->
+                        <div class="mt-4 pt-4 border-t border-gray-200">
+                            <button type="button" id="addServiceBtn" 
+                                    class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
+                                <svg class="-ml-0.5 mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                                </svg>
+                                Add Another Service
+                            </button>
+                        </div>
+                        
+                        <!-- Discount Application -->
+                        <div class="mt-6 pt-4 border-t border-gray-200">
+                            <fieldset>
+                                <legend class="text-sm font-medium text-gray-900 mb-4">Discount Application</legend>
+                                <div class="space-y-4">
+                                    <div class="flex items-center">
+                                        {{ form.discount_application.0 }}
+                                        <label for="{{ form.discount_application.0.id_for_label }}" class="ml-3 text-sm font-medium text-gray-900">
+                                            {{ form.discount_application.0.choice_label }}
+                                        </label>
+                                    </div>
+                                    <div class="flex items-center">
+                                        {{ form.discount_application.1 }}
+                                        <label for="{{ form.discount_application.1.id_for_label }}" class="ml-3 text-sm font-medium text-gray-900">
+                                            {{ form.discount_application.1.choice_label }}
+                                        </label>
+                                    </div>
+                                </div>
+                                {% if form.discount_application.errors %}
+                                    <p class="mt-2 text-sm text-red-600">{{ form.discount_application.errors.0 }}</p>
+                                {% endif %}
+                            </fieldset>
+                            
+                            <!-- Total Discount Selection (shown when discount_application is 'total') -->
+                            <div id="totalDiscountSection" class="mt-4 hidden">
+                                <label for="{{ form.total_discount.id_for_label }}" class="block text-sm font-medium text-gray-700">
+                                    Discount to Apply to Total
+                                </label>
+                                {{ form.total_discount }}
+                                {% if form.total_discount.errors %}
+                                    <p class="mt-2 text-sm text-red-600">{{ form.total_discount.errors.0 }}</p>
+                                {% endif %}
+                            </div>
+                        </div>
+                        
+                        <!-- Payment Summary -->
+                        <div class="mt-6 pt-4 border-t border-gray-200 bg-gray-50 rounded-lg p-4">
+                            <h4 class="text-sm font-medium text-gray-900 mb-3">Payment Summary</h4>
+                            <dl class="space-y-2 text-sm">
+                                <div class="flex justify-between">
+                                    <dt class="text-gray-600">Subtotal:</dt>
+                                    <dd class="font-medium" id="summarySubtotal">₱0.00</dd>
+                                </div>
+                                <div class="flex justify-between">
+                                    <dt class="text-gray-600">Total Discount:</dt>
+                                    <dd class="font-medium text-green-600" id="summaryDiscount">₱0.00</dd>
+                                </div>
+                                <div class="flex justify-between font-semibold text-lg pt-2 border-t border-gray-300">
+                                    <dt>Total Amount:</dt>
+                                    <dd id="summaryTotal">₱0.00</dd>
+                                </div>
+                            </dl>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Payment Configuration -->
                 <div class="bg-white shadow rounded-lg">
                     <div class="px-6 py-4 border-b border-gray-200">
                         <h3 class="text-lg font-medium text-gray-900">Payment Configuration</h3>
                         <p class="mt-1 text-sm text-gray-500">Set up the payment plan for this appointment</p>
-                        <p class="mt-1 text-sm text-gray-500">TODO: able to add/remove more services and set prices manually for each service + add discount option + auto compute balance</p>
                     </div>
                     <div class="px-6 py-4">
                         <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
@@ -89,13 +170,13 @@
                             <!-- Next Due Date -->
                             <div id="nextDueDate">
                                 <label for="{{ form.next_due_date.id_for_label }}" class="block text-sm font-medium text-gray-700">
-                                    {% if form.payment_type.value == 'installment' %}First Payment Due Date{% else %}Payment Due Date{% endif %}
+                                    <span id="dueDateLabel">Payment Due Date</span>
                                 </label>
                                 {{ form.next_due_date }}
                                 {% if form.next_due_date.errors %}
                                     <p class="mt-2 text-sm text-red-600">{{ form.next_due_date.errors.0 }}</p>
                                 {% endif %}
-                                <p class="mt-2 text-sm text-gray-500">When should the {% if form.payment_type.value == 'installment' %}first{% endif %} payment be due</p>
+                                <p class="mt-2 text-sm text-gray-500" id="dueDateHelp">When should the payment be due</p>
                             </div>
                         </div>
 
@@ -109,34 +190,6 @@
                                 <p class="mt-2 text-sm text-red-600">{{ form.notes.errors.0 }}</p>
                             {% endif %}
                             <p class="mt-2 text-sm text-gray-500">Optional notes about this payment arrangement</p>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Default Service Item -->
-                <div class="bg-white shadow rounded-lg">
-                    <div class="px-6 py-4 border-b border-gray-200">
-                        <h3 class="text-lg font-medium text-gray-900">Initial Service</h3>
-                        <p class="mt-1 text-sm text-gray-500">The appointment service will be automatically added</p>
-                    </div>
-                    <div class="px-6 py-4">
-                        <div class="bg-blue-50 border-l-4 border-blue-400 p-4">
-                            <div class="flex">
-                                <div class="flex-shrink-0">
-                                    <svg class="h-5 w-5 text-blue-400" viewBox="0 0 20 20" fill="currentColor">
-                                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
-                                    </svg>
-                                </div>
-                                <div class="ml-3">
-                                    <h3 class="text-sm font-medium text-blue-800">
-                                        Default Service Item
-                                    </h3>
-                                    <div class="mt-2 text-sm text-blue-700">
-                                        <p><strong>{{ appointment.service.name }}</strong> will be automatically added to this payment.</p>
-                                        <p class="mt-1">You can modify the price and add more services after creating the payment record.</p>
-                                    </div>
-                                </div>
-                            </div>
                         </div>
                     </div>
                 </div>
@@ -221,40 +274,541 @@
                     </div>
                 </div>
             </div>
+        </div>
+    </div>
+</div>
 
+<!-- Admin Override Modal -->
+<div id="adminOverrideModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
+    <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+        <div class="mt-3 text-center">
+            <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-yellow-100">
+                <svg class="h-6 w-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                </svg>
+            </div>
+            <h3 class="text-lg leading-6 font-medium text-gray-900 mt-4">Admin Override Required</h3>
+            <div class="mt-2 px-7 py-3">
+                <p class="text-sm text-gray-500" id="overrideMessage">
+                    Some service prices are outside the allowed range. Admin password required to proceed.
+                </p>
+                <div id="priceViolations" class="mt-3 text-left bg-yellow-50 p-3 rounded text-sm">
+                    <!-- Price violations will be listed here -->
+                </div>
+                <div class="mt-4">
+                    <input type="password" id="adminPassword" placeholder="Enter admin password" 
+                           class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500" />
+                    <p class="text-xs text-red-600 mt-1 hidden" id="passwordError">Invalid admin password</p>
+                </div>
+            </div>
+            <div class="flex items-center px-4 py-3 space-x-3">
+                <button id="cancelOverride" 
+                        class="px-4 py-2 bg-gray-300 text-gray-900 text-base font-medium rounded-md shadow-sm hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-300">
+                    Cancel
+                </button>
+                <button id="confirmOverride" 
+                        class="px-4 py-2 bg-yellow-600 text-white text-base font-medium rounded-md shadow-sm hover:bg-yellow-700 focus:outline-none focus:ring-2 focus:ring-yellow-500">
+                    Override Prices
+                </button>
+            </div>
         </div>
     </div>
 </div>
 
 <script>
+// Available services and discounts data (populated from Django context)
+const availableServices = {{ services_json|safe }};
+const availableDiscounts = {{ discounts_json|safe }};
+
+// Current service items data
+let serviceItems = [];
+
 document.addEventListener('DOMContentLoaded', function() {
-    const paymentTypeRadios = document.querySelectorAll('input[name="payment_type"]');
-    const installmentMonths = document.getElementById('installmentMonths');
-    const nextDueDate = document.getElementById('nextDueDate');
+    // Initialize service items from form data
+    const initialData = document.getElementById('id_service_items_data').value;
+    if (initialData) {
+        try {
+            serviceItems = JSON.parse(initialData);
+        } catch (e) {
+            console.error('Failed to parse initial service items:', e);
+            serviceItems = [];
+        }
+    }
     
-    // Handle payment type changes
+    // Render initial service items
+    renderServiceItems();
+    
+    // Set up event listeners
+    setupEventListeners();
+    
+    // Update summary
+    updatePaymentSummary();
+});
+
+function setupEventListeners() {
+    // Payment type changes
+    const paymentTypeRadios = document.querySelectorAll('input[name="payment_type"]');
     paymentTypeRadios.forEach(radio => {
-        radio.addEventListener('change', function() {
-            const dueDateLabel = nextDueDate.querySelector('label');
-            const dueDateHelp = nextDueDate.querySelector('p');
-            
-            if (this.value === 'installment') {
-                installmentMonths.classList.remove('hidden');
-                dueDateLabel.textContent = dueDateLabel.textContent.replace('Payment Due Date', 'First Payment Due Date');
-                dueDateHelp.textContent = dueDateHelp.textContent.replace('When should the  payment', 'When should the first payment');
-            } else {
-                installmentMonths.classList.add('hidden');
-                dueDateLabel.textContent = dueDateLabel.textContent.replace('First Payment Due Date', 'Payment Due Date');
-                dueDateHelp.textContent = dueDateHelp.textContent.replace('When should the first payment', 'When should the  payment');
-            }
-        });
+        radio.addEventListener('change', handlePaymentTypeChange);
     });
     
+    // Discount application changes
+    const discountAppRadios = document.querySelectorAll('input[name="discount_application"]');
+    discountAppRadios.forEach(radio => {
+        radio.addEventListener('change', handleDiscountApplicationChange);
+    });
+    
+    // Add service button
+    document.getElementById('addServiceBtn').addEventListener('click', addServiceItem);
+    
+    // Form submission
+    document.getElementById('paymentForm').addEventListener('submit', handleFormSubmission);
+    
+    // Admin override modal
+    document.getElementById('cancelOverride').addEventListener('click', closeAdminModal);
+    document.getElementById('confirmOverride').addEventListener('click', confirmAdminOverride);
+    
+    // Total discount change
+    document.getElementById('id_total_discount').addEventListener('change', updatePaymentSummary);
+    
     // Initialize visibility based on current selection
-    const checkedRadio = document.querySelector('input[name="payment_type"]:checked');
-    if (checkedRadio && checkedRadio.value === 'installment') {
-        installmentMonths.classList.remove('hidden');
+    const checkedPaymentType = document.querySelector('input[name="payment_type"]:checked');
+    if (checkedPaymentType) {
+        handlePaymentTypeChange.call(checkedPaymentType);
     }
-});
+    
+    const checkedDiscountApp = document.querySelector('input[name="discount_application"]:checked');
+    if (checkedDiscountApp) {
+        handleDiscountApplicationChange.call(checkedDiscountApp);
+    }
+}
+
+function handlePaymentTypeChange() {
+    const installmentMonths = document.getElementById('installmentMonths');
+    const dueDateLabel = document.getElementById('dueDateLabel');
+    const dueDateHelp = document.getElementById('dueDateHelp');
+    
+    if (this.value === 'installment') {
+        installmentMonths.classList.remove('hidden');
+        dueDateLabel.textContent = 'First Payment Due Date';
+        dueDateHelp.textContent = 'When should the first payment be due';
+    } else {
+        installmentMonths.classList.add('hidden');
+        dueDateLabel.textContent = 'Payment Due Date';
+        dueDateHelp.textContent = 'When should the payment be due';
+    }
+}
+
+function handleDiscountApplicationChange() {
+    const totalDiscountSection = document.getElementById('totalDiscountSection');
+    
+    if (this.value === 'total') {
+        totalDiscountSection.classList.remove('hidden');
+    } else {
+        totalDiscountSection.classList.add('hidden');
+        // Clear total discount selection
+        document.getElementById('id_total_discount').value = '';
+    }
+    updatePaymentSummary();
+}
+
+function renderServiceItems() {
+    const container = document.getElementById('serviceItemsContainer');
+    container.innerHTML = '';
+    
+    serviceItems.forEach((item, index) => {
+        const itemHtml = createServiceItemHtml(item, index);
+        container.insertAdjacentHTML('beforeend', itemHtml);
+    });
+    
+    // Attach event listeners to the rendered items
+    serviceItems.forEach((item, index) => {
+        attachServiceItemListeners(index);
+    });
+}
+
+function createServiceItemHtml(item, index) {
+    const serviceOptions = availableServices.map(service => 
+        `<option value="${service.id}" ${service.id == item.service_id ? 'selected' : ''}>${service.name}</option>`
+    ).join('');
+    
+    const discountOptions = availableDiscounts.map(discount => 
+        `<option value="${discount.id}" ${discount.id == item.discount_id ? 'selected' : ''}>${discount.name}</option>`
+    ).join('');
+    
+    return `
+        <div class="service-item border border-gray-200 rounded-lg p-4" data-index="${index}">
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <div class="sm:col-span-2">
+                    <label class="block text-sm font-medium text-gray-700">Service</label>
+                    <select class="service-select mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500" data-index="${index}">
+                        <option value="">Select a service</option>
+                        ${serviceOptions}
+                    </select>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Quantity</label>
+                    <input type="number" class="quantity-input mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500" 
+                           value="${item.quantity || 1}" min="1" data-index="${index}">
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Unit Price (₱)</label>
+                    <input type="number" class="price-input mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500" 
+                           value="${item.unit_price || ''}" step="0.01" min="0.01" data-index="${index}" placeholder="0.00">
+                    <p class="text-xs text-gray-500 mt-1">Range: ₱<span class="min-price">${item.min_price || 0}</span> - ₱<span class="max-price">${item.max_price || 999999}</span></p>
+                </div>
+                
+                <div class="discount-section ${document.querySelector('input[name="discount_application"]:checked')?.value === 'per_item' ? '' : 'hidden'}">
+                    <label class="block text-sm font-medium text-gray-700">Discount</label>
+                    <select class="discount-select mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500" data-index="${index}">
+                        <option value="">No discount</option>
+                        ${discountOptions}
+                    </select>
+                </div>
+                
+                <div class="sm:col-span-2 lg:col-span-3">
+                    <label class="block text-sm font-medium text-gray-700">Notes</label>
+                    <input type="text" class="notes-input mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500" 
+                           value="${item.notes || ''}" data-index="${index}" placeholder="Optional notes...">
+                </div>
+                
+                <div class="sm:col-span-2 lg:col-span-3 flex justify-between items-center pt-2 border-t border-gray-200">
+                    <div class="text-sm">
+                        <span class="text-gray-600">Subtotal: ₱</span><span class="subtotal font-medium">0.00</span>
+                        <span class="discount-amount text-green-600 ml-4 hidden">Discount: ₱0.00</span>
+                        <span class="total font-semibold ml-4">Total: ₱0.00</span>
+                    </div>
+                    ${serviceItems.length > 1 ? `
+                        <button type="button" class="remove-item text-red-600 hover:text-red-800 text-sm font-medium" data-index="${index}">
+                            Remove
+                        </button>
+                    ` : ''}
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function attachServiceItemListeners(index) {
+    const item = document.querySelector(`[data-index="${index}"]`);
+    
+    // Service selection change
+    const serviceSelect = item.querySelector('.service-select');
+    serviceSelect.addEventListener('change', function() {
+        updateServiceItem(index, 'service_id', this.value);
+        updateServicePriceRange(index);
+    });
+    
+    // Quantity change
+    const quantityInput = item.querySelector('.quantity-input');
+    quantityInput.addEventListener('input', function() {
+        updateServiceItem(index, 'quantity', parseInt(this.value) || 1);
+        updateItemCalculations(index);
+    });
+    
+    // Price change
+    const priceInput = item.querySelector('.price-input');
+    priceInput.addEventListener('input', function() {
+        updateServiceItem(index, 'unit_price', parseFloat(this.value) || 0);
+        updateItemCalculations(index);
+    });
+    
+    // Discount change
+    const discountSelect = item.querySelector('.discount-select');
+    discountSelect.addEventListener('change', function() {
+        updateServiceItem(index, 'discount_id', this.value);
+        updateItemCalculations(index);
+    });
+    
+    // Notes change
+    const notesInput = item.querySelector('.notes-input');
+    notesInput.addEventListener('input', function() {
+        updateServiceItem(index, 'notes', this.value);
+    });
+    
+    // Remove item
+    const removeBtn = item.querySelector('.remove-item');
+    if (removeBtn) {
+        removeBtn.addEventListener('click', function() {
+            removeServiceItem(index);
+        });
+    }
+    
+    // Update calculations initially
+    updateItemCalculations(index);
+}
+
+function updateServiceItem(index, field, value) {
+    if (!serviceItems[index]) return;
+    
+    serviceItems[index][field] = value;
+    
+    // Update hidden form field
+    document.getElementById('id_service_items_data').value = JSON.stringify(serviceItems);
+}
+
+function updateServicePriceRange(index) {
+    const serviceId = serviceItems[index].service_id;
+    const service = availableServices.find(s => s.id == serviceId);
+    
+    if (service) {
+        serviceItems[index].service_name = service.name;
+        serviceItems[index].min_price = service.min_price || 0;
+        serviceItems[index].max_price = service.max_price || 999999;
+        
+        // Update UI
+        const item = document.querySelector(`[data-index="${index}"]`);
+        const minPriceSpan = item.querySelector('.min-price');
+        const maxPriceSpan = item.querySelector('.max-price');
+        
+        minPriceSpan.textContent = service.min_price || 0;
+        maxPriceSpan.textContent = service.max_price || 999999;
+        
+        // Update hidden form field
+        document.getElementById('id_service_items_data').value = JSON.stringify(serviceItems);
+        
+        updateItemCalculations(index);
+    }
+}
+
+function updateItemCalculations(index) {
+    const item = serviceItems[index];
+    const itemElement = document.querySelector(`[data-index="${index}"]`);
+    
+    if (!item || !itemElement) return;
+    
+    const quantity = parseInt(item.quantity) || 0;
+    const unitPrice = parseFloat(item.unit_price) || 0;
+    const subtotal = quantity * unitPrice;
+    
+    let discountAmount = 0;
+    const discountApplicationType = document.querySelector('input[name="discount_application"]:checked')?.value;
+    
+    if (discountApplicationType === 'per_item' && item.discount_id) {
+        const discount = availableDiscounts.find(d => d.id == item.discount_id);
+        if (discount) {
+            if (discount.discount_type === 'percentage') {
+                discountAmount = subtotal * (discount.value / 100);
+            } else {
+                discountAmount = discount.value;
+            }
+            discountAmount = Math.min(discountAmount, subtotal);
+        }
+    }
+    
+    const total = subtotal - discountAmount;
+    
+    // Update display
+    itemElement.querySelector('.subtotal').textContent = subtotal.toFixed(2);
+    itemElement.querySelector('.total').textContent = total.toFixed(2);
+    
+    const discountElement = itemElement.querySelector('.discount-amount');
+    if (discountAmount > 0) {
+        discountElement.textContent = `Discount: ₱${discountAmount.toFixed(2)}`;
+        discountElement.classList.remove('hidden');
+    } else {
+        discountElement.classList.add('hidden');
+    }
+    
+    updatePaymentSummary();
+}
+
+function addServiceItem() {
+    const newItem = {
+        service_id: '',
+        service_name: '',
+        quantity: 1,
+        unit_price: '',
+        discount_id: '',
+        notes: '',
+        min_price: 0,
+        max_price: 999999
+    };
+    
+    serviceItems.push(newItem);
+    renderServiceItems();
+    updatePaymentSummary();
+}
+
+function removeServiceItem(index) {
+    serviceItems.splice(index, 1);
+    renderServiceItems();
+    updatePaymentSummary();
+}
+
+function updatePaymentSummary() {
+    let subtotal = 0;
+    let totalDiscount = 0;
+    
+    const discountApplicationType = document.querySelector('input[name="discount_application"]:checked')?.value;
+    
+    // Calculate subtotal and per-item discounts
+    serviceItems.forEach(item => {
+        const quantity = parseInt(item.quantity) || 0;
+        const unitPrice = parseFloat(item.unit_price) || 0;
+        const itemSubtotal = quantity * unitPrice;
+        subtotal += itemSubtotal;
+        
+        if (discountApplicationType === 'per_item' && item.discount_id) {
+            const discount = availableDiscounts.find(d => d.id == item.discount_id);
+            if (discount) {
+                let discountAmount = 0;
+                if (discount.discount_type === 'percentage') {
+                    discountAmount = itemSubtotal * (discount.value / 100);
+                } else {
+                    discountAmount = discount.value;
+                }
+                totalDiscount += Math.min(discountAmount, itemSubtotal);
+            }
+        }
+    });
+    
+    // Apply total discount if selected
+    if (discountApplicationType === 'total') {
+        const totalDiscountSelect = document.getElementById('id_total_discount');
+        const totalDiscountId = totalDiscountSelect.value;
+        
+        if (totalDiscountId) {
+            const discount = availableDiscounts.find(d => d.id == totalDiscountId);
+            if (discount) {
+                if (discount.discount_type === 'percentage') {
+                    totalDiscount = subtotal * (discount.value / 100);
+                } else {
+                    totalDiscount = discount.value;
+                }
+                totalDiscount = Math.min(totalDiscount, subtotal);
+            }
+        }
+        
+        // Hide per-item discount sections
+        document.querySelectorAll('.discount-section').forEach(section => {
+            section.classList.add('hidden');
+        });
+    } else {
+        // Show per-item discount sections
+        document.querySelectorAll('.discount-section').forEach(section => {
+            section.classList.remove('hidden');
+        });
+    }
+    
+    const total = subtotal - totalDiscount;
+    
+    // Update summary display
+    document.getElementById('summarySubtotal').textContent = `₱${subtotal.toFixed(2)}`;
+    document.getElementById('summaryDiscount').textContent = `₱${totalDiscount.toFixed(2)}`;
+    document.getElementById('summaryTotal').textContent = `₱${total.toFixed(2)}`;
+}
+
+function handleFormSubmission(e) {
+    // Update hidden field with current service items
+    document.getElementById('id_service_items_data').value = JSON.stringify(serviceItems);
+    
+    // Check for price violations
+    const violations = [];
+    serviceItems.forEach((item, index) => {
+        const unitPrice = parseFloat(item.unit_price) || 0;
+        const minPrice = item.min_price || 0;
+        const maxPrice = item.max_price || 999999;
+        
+        if (unitPrice < minPrice || unitPrice > maxPrice) {
+            violations.push({
+                index: index,
+                serviceName: item.service_name || 'Unknown Service',
+                unitPrice: unitPrice,
+                minPrice: minPrice,
+                maxPrice: maxPrice
+            });
+        }
+    });
+    
+    if (violations.length > 0) {
+        e.preventDefault();
+        showAdminOverrideModal(violations);
+        return false;
+    }
+    
+    return true;
+}
+
+function showAdminOverrideModal(violations) {
+    const modal = document.getElementById('adminOverrideModal');
+    const violationsContainer = document.getElementById('priceViolations');
+    
+    // Clear previous violations
+    violationsContainer.innerHTML = '';
+    
+    // Add violation details
+    violations.forEach(violation => {
+        const violationHtml = `
+            <div class="mb-2 p-2 bg-yellow-100 rounded">
+                <strong>${violation.serviceName}</strong><br>
+                Price: ₱${violation.unitPrice} (Range: ₱${violation.minPrice} - ₱${violation.maxPrice})
+            </div>
+        `;
+        violationsContainer.insertAdjacentHTML('beforeend', violationHtml);
+    });
+    
+    // Clear password field and errors
+    document.getElementById('adminPassword').value = '';
+    document.getElementById('passwordError').classList.add('hidden');
+    
+    // Show modal
+    modal.classList.remove('hidden');
+}
+
+function closeAdminModal() {
+    document.getElementById('adminOverrideModal').classList.add('hidden');
+}
+
+async function confirmAdminOverride() {
+    const password = document.getElementById('adminPassword').value;
+    const errorElement = document.getElementById('passwordError');
+    
+    if (!password) {
+        errorElement.textContent = 'Admin password is required';
+        errorElement.classList.remove('hidden');
+        return;
+    }
+    
+    // Verify admin password via AJAX
+    try {
+        const response = await fetch('{% url "appointments:verify_admin_password" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            },
+            body: JSON.stringify({
+                password: password
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (result.valid) {
+            // Close modal and submit form
+            closeAdminModal();
+            
+            // Add override flag to form data
+            const overrideField = document.createElement('input');
+            overrideField.type = 'hidden';
+            overrideField.name = 'admin_override_confirmed';
+            overrideField.value = 'true';
+            document.getElementById('paymentForm').appendChild(overrideField);
+            
+            // Submit form
+            document.getElementById('paymentForm').submit();
+        } else {
+            errorElement.textContent = result.error || 'Invalid admin password';
+            errorElement.classList.remove('hidden');
+        }
+    } catch (error) {
+        console.error('Admin verification error:', error);
+        errorElement.textContent = 'Error verifying admin password';
+        errorElement.classList.remove('hidden');
+    }
+}
 </script>
 {% endblock %}

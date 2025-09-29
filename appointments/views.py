@@ -164,6 +164,8 @@ class AppointmentCalendarView(LoginRequiredMixin, TemplateView):
             'today': today.strftime('%Y-%m-%d'),
             'pending_count': Appointment.objects.filter(status='pending').count(),
         })
+
+        context['can_accept_appointments'] = self.request.user.is_active_dentist
         
         return context
 
@@ -180,6 +182,12 @@ class AppointmentRequestsView(LoginRequiredMixin, ListView):
         if not request.user.has_permission('appointments'):
             messages.error(request, 'You do not have permission to access this page.')
             return redirect('core:dashboard')
+
+        # Check if user can accept appointments
+        if not request.user.is_active_dentist:
+            messages.error(request, 'Only users who can accept appointments may view pending requests.')
+            return redirect('core:dashboard')
+        
         return super().dispatch(request, *args, **kwargs)
     
     def get_queryset(self):

@@ -5,9 +5,10 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.urls import reverse_lazy
 from django.views.generic import ListView, DetailView, CreateView, UpdateView
-from django.db.models import Q, Count, Case, When
+from django.db.models import Q, Prefetch, Sum, Max, Count, Case, When, Value, DecimalField
 from django.http import JsonResponse, HttpResponse
-from datetime import date, timedelta
+from django.utils import timezone as django_timezone
+from datetime import date, timedelta, timezone
 import csv
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
@@ -32,8 +33,52 @@ class PatientListView(LoginRequiredMixin, ListView):
         return super().dispatch(request, *args, **kwargs)
     
     def get_queryset(self):
-        # Updated to use appointment_date instead of appointment_slot
-        queryset = Patient.objects.select_related().prefetch_related('appointments__service', 'appointments__assigned_dentist')
+        from appointments.models import Payment
+        from django.db.models import F
+        
+        queryset = Patient.objects.all().select_related()
+        
+        # Annotate with completed visit count
+        queryset = queryset.annotate(
+            visit_count=Count(
+                'appointments',
+                filter=Q(appointments__status='completed'),
+                distinct=True
+            )
+        )
+        
+        # Calculate outstanding balance (total_amount - amount_paid for all payments)
+        queryset = queryset.annotate(
+            outstanding_balance=Sum(
+                Case(
+                    When(
+                        appointments__payments__isnull=False,
+                        then=F('appointments__payments__total_amount') - F('appointments__payments__amount_paid')
+                    ),
+                    default=Value(0),
+                    output_field=DecimalField(max_digits=10, decimal_places=2)
+                )
+            )
+        )
+        
+        # Prefetch last completed appointment and next appointment
+        queryset = queryset.prefetch_related(
+            Prefetch(
+                'appointments',
+                queryset=Appointment.objects.filter(
+                    status='completed'
+                ).select_related('service').order_by('-appointment_date'),
+                to_attr='completed_appointments'
+            ),
+            Prefetch(
+                'appointments',
+                queryset=Appointment.objects.filter(
+                    status__in=['confirmed', 'pending'],
+                    appointment_date__gte=django_timezone.now().date()
+                ).select_related('service').order_by('appointment_date'),
+                to_attr='upcoming_appointments'
+            )
+        )
         
         # Get filter parameters
         search = self.request.GET.get('search', '').strip()
@@ -61,15 +106,21 @@ class PatientListView(LoginRequiredMixin, ListView):
         # Apply contact method filter
         if contact:
             if contact == 'email_only':
-                queryset = queryset.filter(email__isnull=False, contact_number='')
+                queryset = queryset.filter(email__isnull=False).exclude(email='')
+                queryset = queryset.filter(Q(contact_number__isnull=True) | Q(contact_number=''))
             elif contact == 'phone_only':
-                queryset = queryset.filter(contact_number__isnull=False, email='')
+                queryset = queryset.filter(contact_number__isnull=False).exclude(contact_number='')
+                queryset = queryset.filter(Q(email__isnull=True) | Q(email=''))
             elif contact == 'both':
                 queryset = queryset.filter(email__isnull=False, contact_number__isnull=False)
+                queryset = queryset.exclude(Q(email='') | Q(contact_number=''))
             elif contact == 'none':
-                queryset = queryset.filter(email='', contact_number='')
+                queryset = queryset.filter(
+                    Q(email__isnull=True) | Q(email=''),
+                    Q(contact_number__isnull=True) | Q(contact_number='')
+                )
         
-        # Apply activity filter - UPDATED to use appointment_date
+        # Apply activity filter
         if activity:
             today = date.today()
             if activity == 'recent':
@@ -82,7 +133,7 @@ class PatientListView(LoginRequiredMixin, ListView):
             elif activity == 'upcoming':
                 upcoming_patient_ids = Appointment.objects.filter(
                     appointment_date__gte=today,
-                    status__in=['approved', 'pending']
+                    status__in=['confirmed', 'pending']
                 ).values_list('patient_id', flat=True).distinct()
                 queryset = queryset.filter(id__in=upcoming_patient_ids)
             elif activity == 'no_recent':
@@ -92,7 +143,7 @@ class PatientListView(LoginRequiredMixin, ListView):
                 ).values_list('patient_id', flat=True).distinct()
                 queryset = queryset.exclude(id__in=recent_patient_ids)
         
-        # Apply sorting - UPDATED to use appointment_date
+        # Apply sorting
         if sort_by == 'name_asc':
             queryset = queryset.order_by('last_name', 'first_name')
         elif sort_by == 'name_desc':
@@ -102,27 +153,13 @@ class PatientListView(LoginRequiredMixin, ListView):
         elif sort_by == 'date_added_asc':
             queryset = queryset.order_by('created_at')
         elif sort_by == 'last_visit_desc':
-            # Updated to use appointment_date
             queryset = queryset.annotate(
-                last_visit_date=Case(
-                    When(appointments__appointment_date__isnull=False, 
-                         then='appointments__appointment_date'),
-                    default=None
-                )
-            ).order_by('-last_visit_date')
+                last_visit_date=Max('appointments__appointment_date')
+            ).order_by(F('last_visit_date').desc(nulls_last=True))
         elif sort_by == 'last_visit_asc':
             queryset = queryset.annotate(
-                last_visit_date=Case(
-                    When(appointments__appointment_date__isnull=False, 
-                         then='appointments__appointment_date'),
-                    default=None
-                )
-            ).order_by('last_visit_date')
-        
-        # Add appointment counts for display
-        queryset = queryset.annotate(
-            visit_count=Count('appointments', distinct=True)
-        )
+                last_visit_date=Max('appointments__appointment_date')
+            ).order_by(F('last_visit_date').asc(nulls_last=True))
         
         return queryset
     

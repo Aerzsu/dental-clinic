@@ -1,98 +1,178 @@
-<!-- templates/core/dashboard.html - UPDATED for AM/PM appointment system -->
 {% extends 'base.html' %}
 {% load user_tags %}
 
 {% block title %}Dashboard - KingJoy Appointment System{% endblock %}
 
 {% block content %}
-<div class="mb-8">
-    <h1 class="text-3xl font-bold text-gray-900">Dashboard</h1>
-    <p class="text-gray-600">Welcome back, {{ user.full_name }}!</p>
-</div>
-
-<!-- Statistics Cards -->
-<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-    <div class="bg-white rounded-lg shadow p-6">
-        <div class="flex items-center">
-            <div class="p-2 bg-blue-100 rounded-lg">
-                <svg class="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z"></path>
-                </svg>
-            </div>
-            <div class="ml-4">
-                <p class="text-sm font-medium text-gray-600">Total Patients</p>
-                <p class="text-2xl font-bold text-gray-900">{{ stats.total_patients }}</p>
-            </div>
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="sm:flex sm:items-center sm:justify-between">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900">Dashboard</h1>
+            <p class="mt-2 text-sm text-gray-700">Welcome back, {{ user.full_name }}!</p>
         </div>
     </div>
 
-    <div class="bg-white rounded-lg shadow p-6">
-        <div class="flex items-center">
-            <div class="p-2 bg-green-100 rounded-lg">
-                <svg class="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
-                </svg>
-            </div>
-            <div class="ml-4">
-                <p class="text-sm font-medium text-gray-600">Today's Appointments</p>
-                <p class="text-2xl font-bold text-gray-900">{{ stats.todays_appointments_count }}</p>
-            </div>
-        </div>
-    </div>
-
-    <div class="bg-white rounded-lg shadow p-6">
-        <div class="flex items-center">
-            <div class="p-2 bg-yellow-100 rounded-lg">
-                <svg class="w-8 h-8 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                </svg>
-            </div>
-            <div class="ml-4">
-                <p class="text-sm font-medium text-gray-600">Pending Requests</p>
-                <p class="text-2xl font-bold text-gray-900">{{ stats.pending_requests_count }}</p>
-            </div>
-        </div>
-    </div>
-
-    <div class="bg-white rounded-lg shadow p-6">
-        <div class="flex items-center">
-            <div class="p-2 bg-purple-100 rounded-lg">
-                <svg class="w-8 h-8 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
-                </svg>
-            </div>
-            <div class="ml-4">
-                <p class="text-sm font-medium text-gray-600">Active Dentists</p>
-                <p class="text-2xl font-bold text-gray-900">{{ stats.active_dentists }}</p>
-            </div>
-        </div>
-    </div>
-</div>
-
-<div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-    <!-- Today's Appointments -->
-    <div class="lg:col-span-2">
-        <div class="bg-white rounded-lg shadow">
-            <div class="px-6 py-4 border-b border-gray-200">
-                <div class="flex items-center justify-between">
-                    <h2 class="text-lg font-semibold text-gray-900">Today's Appointments</h2>
-                    {% if user|has_permission:'appointments' %}
-                    <a href="{% url 'appointments:appointment_calendar' %}" 
-                       class="text-primary-600 hover:text-primary-700 text-sm font-medium">
-                        View Calendar
-                    </a>
-                    {% endif %}
+    <!-- Quick Statistics -->
+    <div class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        <div class="bg-white overflow-hidden shadow rounded-lg">
+            <div class="p-5">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <svg class="h-6 w-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
+                        </svg>
+                    </div>
+                    <div class="ml-5 w-0 flex-1">
+                        <dl>
+                            <dt class="text-sm font-medium text-gray-500 truncate">Total Patients</dt>
+                            <dd class="text-lg font-medium text-gray-900">{{ stats.total_patients }}</dd>
+                        </dl>
+                    </div>
                 </div>
             </div>
-            <div class="px-6 py-4">
-                {% if todays_appointments %}
-                    <div class="space-y-4">
-                        {% for appointment in todays_appointments %}
-                        <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                            <div class="flex items-center space-x-4">
-                                <div class="flex-shrink-0">
-                                    <div class="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center">
-                                        <span class="text-primary-600 font-medium text-sm">
+        </div>
+
+        <div class="bg-white overflow-hidden shadow rounded-lg">
+            <div class="p-5">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <svg class="h-6 w-6 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                        </svg>
+                    </div>
+                    <div class="ml-5 w-0 flex-1">
+                        <dl>
+                            <dt class="text-sm font-medium text-gray-500 truncate">Today's Appointments</dt>
+                            <dd class="text-lg font-medium text-gray-900">{{ stats.todays_appointments_count }}</dd>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white overflow-hidden shadow rounded-lg">
+            <div class="p-5">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <svg class="h-6 w-6 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                    </div>
+                    <div class="ml-5 w-0 flex-1">
+                        <dl>
+                            <dt class="text-sm font-medium text-gray-500 truncate">Pending Requests</dt>
+                            <dd class="text-lg font-medium text-gray-900">{{ stats.pending_requests_count }}</dd>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white overflow-hidden shadow rounded-lg">
+            <div class="p-5">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <svg class="h-6 w-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                        </svg>
+                    </div>
+                    <div class="ml-5 w-0 flex-1">
+                        <dl>
+                            <dt class="text-sm font-medium text-gray-500 truncate">Active Dentists</dt>
+                            <dd class="text-lg font-medium text-gray-900">{{ stats.active_dentists }}</dd>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Today's Slot Availability -->
+    {% if todays_slot_summary %}
+    <div class="bg-white shadow rounded-lg">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h3 class="text-lg font-medium text-gray-900">Today's Slot Availability</h3>
+        </div>
+        <div class="px-6 py-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-sm font-medium text-gray-700">Morning (AM)</span>
+                        <span class="text-sm text-gray-600">
+                            {{ todays_slot_summary.am_available }}/{{ todays_slot_summary.am_total }} available
+                        </span>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-2">
+                        <div class="bg-green-600 h-2 rounded-full transition-all duration-300" 
+                             style="width: {{ todays_slot_summary.am_percentage }}%"></div>
+                    </div>
+                </div>
+                
+                <div>
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-sm font-medium text-gray-700">Afternoon (PM)</span>
+                        <span class="text-sm text-gray-600">
+                            {{ todays_slot_summary.pm_available }}/{{ todays_slot_summary.pm_total }} available
+                        </span>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-2">
+                        <div class="bg-blue-600 h-2 rounded-full transition-all duration-300" 
+                             style="width: {{ todays_slot_summary.pm_percentage }}%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Today's Appointments Table -->
+    <div class="bg-white shadow rounded-lg overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <div class="flex items-center justify-between">
+                <h3 class="text-lg font-medium text-gray-900">Today's Appointments</h3>
+                {% if user|has_permission:'appointments' %}
+                <a href="{% url 'appointments:appointment_calendar' %}" 
+                   class="inline-flex items-center px-3 py-1 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors duration-150">
+                    View Calendar
+                </a>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if todays_appointments %}
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Patient
+                        </th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Service
+                        </th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Period
+                        </th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Dentist
+                        </th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Status
+                        </th>
+                        <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Actions
+                        </th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for appointment in todays_appointments %}
+                    <tr class="hover:bg-gray-50 transition-colors duration-150">
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="flex items-center">
+                                <div class="flex-shrink-0 h-10 w-10">
+                                    <div class="h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center">
+                                        <span class="text-sm font-medium text-gray-600">
                                             {% if appointment.patient %}
                                                 {{ appointment.patient.first_name|first }}{{ appointment.patient.last_name|first }}
                                             {% else %}
@@ -101,129 +181,157 @@
                                         </span>
                                     </div>
                                 </div>
-                                <div>
-                                    <p class="text-sm font-medium text-gray-900">{{ appointment.patient_name }}</p>
-                                    <p class="text-sm text-gray-500">{{ appointment.service.name }}</p>
+                                <div class="ml-4">
+                                    <div class="text-sm font-medium text-gray-900">
+                                        {{ appointment.patient_name }}
+                                    </div>
+                                    {% if appointment.patient_type == 'new' %}
+                                    <div class="text-sm text-gray-500">New Patient</div>
+                                    {% endif %}
                                 </div>
                             </div>
-                            <div class="text-right">
-                                <p class="text-sm font-medium text-gray-900">
-                                    {{ appointment.period }}
-                                    {% if appointment.period == 'AM' %}
-                                        (8:00 AM - 12:00 PM)
-                                    {% else %}
-                                        (1:00 PM - 5:00 PM)
-                                    {% endif %}
-                                </p>
-                                <p class="text-sm text-gray-500">
-                                    {% if appointment.assigned_dentist %}
-                                        Dr. {{ appointment.assigned_dentist.get_full_name }}
-                                    {% else %}
-                                        <span class="text-yellow-600">Unassigned</span>
-                                    {% endif %}
-                                </p>
-                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-                                    {% if appointment.status == 'confirmed' %}bg-green-100 text-green-800
-                                    {% elif appointment.status == 'pending' %}bg-yellow-100 text-yellow-800
-                                    {% elif appointment.status == 'completed' %}bg-blue-100 text-blue-800
-                                    {% else %}bg-gray-100 text-gray-800{% endif %}">
-                                    {{ appointment.get_status_display }}
-                                </span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="text-sm text-gray-900">{{ appointment.service.name }}</div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="text-sm text-gray-900">{{ appointment.period }}</div>
+                            <div class="text-sm text-gray-500">
+                                {% if appointment.period == 'AM' %}
+                                    8:00 AM - 12:00 PM
+                                {% else %}
+                                    1:00 PM - 5:00 PM
+                                {% endif %}
                             </div>
-                        </div>
-                        {% endfor %}
-                    </div>
-                {% else %}
-                    <div class="text-center py-8">
-                        <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
-                        </svg>
-                        <p class="mt-2 text-sm text-gray-500">No appointments scheduled for today</p>
-                    </div>
-                {% endif %}
-            </div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            {% if appointment.assigned_dentist %}
+                            <div class="text-sm text-gray-900">{{ appointment.assigned_dentist.get_full_name }}</div>
+                            {% else %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
+                                Unassigned
+                            </span>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                                {% if appointment.status == 'confirmed' %}bg-green-100 text-green-800
+                                {% elif appointment.status == 'pending' %}bg-yellow-100 text-yellow-800
+                                {% elif appointment.status == 'completed' %}bg-blue-100 text-blue-800
+                                {% else %}bg-gray-100 text-gray-800{% endif %}">
+                                {{ appointment.get_status_display }}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                            {% if user|has_permission:'appointments' %}
+                            <a href="{% url 'appointments:appointment_detail' appointment.pk %}" 
+                               class="text-primary-600 hover:text-primary-900 transition-colors duration-150">
+                                View
+                            </a>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
         </div>
-    </div>
-
-    <!-- Quick Actions & Recent Patients -->
-    <div class="space-y-8">
-        <!-- Today's Slot Availability -->
-        {% if todays_slot_summary %}
-        <div class="bg-white rounded-lg shadow">
-            <div class="px-6 py-4 border-b border-gray-200">
-                <h2 class="text-lg font-semibold text-gray-900">Today's Availability</h2>
+        {% else %}
+        <div class="text-center py-12">
+            <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+            </svg>
+            <h3 class="mt-2 text-sm font-medium text-gray-900">No appointments today</h3>
+            <p class="mt-1 text-sm text-gray-500">No appointments are scheduled for today.</p>
+            {% if user|has_permission:'appointments' %}
+            <div class="mt-6">
+                <a href="{% url 'appointments:appointment_create' %}" 
+                   class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 transition-colors duration-150">
+                    <svg class="-ml-1 mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                    </svg>
+                    Book New Appointment
+                </a>
             </div>
-            <div class="px-6 py-4">
-                <div class="space-y-3">
-                    <div class="flex items-center justify-between">
-                        <span class="text-sm font-medium text-gray-700">Morning (AM)</span>
-                        <span class="text-sm text-gray-600">
-                            {{ todays_slot_summary.am_available }}/{{ todays_slot_summary.am_total }} available
-                        </span>
-                    </div>
-                    <div class="w-full bg-gray-200 rounded-full h-2">
-                        <div class="bg-green-600 h-2 rounded-full" 
-                             style="width: {{ todays_slot_summary.am_percentage }}%"></div>
-                    </div>
-                    
-                    <div class="flex items-center justify-between">
-                        <span class="text-sm font-medium text-gray-700">Afternoon (PM)</span>
-                        <span class="text-sm text-gray-600">
-                            {{ todays_slot_summary.pm_available }}/{{ todays_slot_summary.pm_total }} available
-                        </span>
-                    </div>
-                    <div class="w-full bg-gray-200 rounded-full h-2">
-                        <div class="bg-blue-600 h-2 rounded-full" 
-                             style="width: {{ todays_slot_summary.pm_percentage }}%"></div>
-                    </div>
-                </div>
-            </div>
+            {% endif %}
         </div>
         {% endif %}
+    </div>
 
-        <!-- Recent Patients -->
-        {% if user|has_permission:'patients' %}
-        <div class="bg-white rounded-lg shadow">
-            <div class="px-6 py-4 border-b border-gray-200">
-                <div class="flex items-center justify-between">
-                    <h2 class="text-lg font-semibold text-gray-900">Recent Patients</h2>
-                    <a href="{% url 'patients:patient_list' %}" 
-                       class="text-primary-600 hover:text-primary-700 text-sm font-medium">
-                        View All
-                    </a>
-                </div>
+    <!-- Recent Patients -->
+    {% if user|has_permission:'patients' and recent_patients %}
+    <div class="bg-white shadow rounded-lg overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <div class="flex items-center justify-between">
+                <h3 class="text-lg font-medium text-gray-900">Recent Patients</h3>
+                <a href="{% url 'patients:patient_list' %}" 
+                   class="inline-flex items-center px-3 py-1 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors duration-150">
+                    View All
+                </a>
             </div>
-            <div class="px-6 py-4">
-                {% if recent_patients %}
-                    <div class="space-y-3">
-                        {% for patient in recent_patients %}
-                        <div class="flex items-center justify-between">
-                            <div class="flex items-center space-x-3">
-                                <div class="flex-shrink-0">
-                                    <div class="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center">
-                                        <span class="text-gray-600 font-medium text-xs">
+        </div>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Patient
+                        </th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Contact
+                        </th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Added
+                        </th>
+                        <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Actions
+                        </th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for patient in recent_patients %}
+                    <tr class="hover:bg-gray-50 transition-colors duration-150">
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="flex items-center">
+                                <div class="flex-shrink-0 h-10 w-10">
+                                    <div class="h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center">
+                                        <span class="text-sm font-medium text-gray-600">
                                             {{ patient.first_name|first }}{{ patient.last_name|first }}
                                         </span>
                                     </div>
                                 </div>
-                                <div>
-                                    <p class="text-sm font-medium text-gray-900">{{ patient.full_name }}</p>
-                                    <p class="text-xs text-gray-500">{{ patient.created_at|date:"M d, Y" }}</p>
+                                <div class="ml-4">
+                                    <div class="text-sm font-medium text-gray-900">{{ patient.full_name }}</div>
                                 </div>
                             </div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="text-sm text-gray-900">
+                                {% if patient.email %}
+                                    <div>{{ patient.email }}</div>
+                                {% endif %}
+                                {% if patient.contact_number %}
+                                    <div>{{ patient.contact_number }}</div>
+                                {% endif %}
+                                {% if not patient.email and not patient.contact_number %}
+                                    <span class="text-gray-400">No contact info</span>
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {{ patient.created_at|date:"M d, Y" }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                             <a href="{% url 'patients:patient_detail' patient.pk %}" 
-                               class="text-primary-600 hover:text-primary-700 text-xs">
+                               class="text-primary-600 hover:text-primary-900 transition-colors duration-150">
                                 View
                             </a>
-                        </div>
-                        {% endfor %}
-                    </div>
-                {% else %}
-                    <p class="text-sm text-gray-500 text-center py-4">No recent patients</p>
-                {% endif %}
-            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
         </div>
-        {% endif %}
     </div>
+    {% endif %}
 </div>
 {% endblock %}

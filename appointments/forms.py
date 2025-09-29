@@ -1,4 +1,6 @@
 # appointments/forms.py - Cleaned for AM/PM slot system
+from decimal import Decimal
+import json
 from django import forms
 from django.forms import modelformset_factory, inlineformset_factory
 from django.core.exceptions import ValidationError
@@ -488,7 +490,39 @@ class AppointmentNoteFieldForm(forms.Form):
 
 # PAYMENT FORMS
 class PaymentForm(forms.ModelForm):
-    """Form for creating/editing payments"""
+    """Enhanced form for creating/editing payments with dynamic service items"""
+    
+    # Dynamic service items data (will be handled via JavaScript)
+    service_items_data = forms.CharField(
+        widget=forms.HiddenInput(),
+        required=False,
+        help_text="JSON data for service items"
+    )
+    
+    # Discount application choice
+    DISCOUNT_APPLICATION_CHOICES = [
+        ('per_item', 'Apply to Individual Services'),
+        ('total', 'Apply to Total Bill'),
+    ]
+    
+    discount_application = forms.ChoiceField(
+        choices=DISCOUNT_APPLICATION_CHOICES,
+        initial='per_item',
+        widget=forms.RadioSelect(attrs={
+            'class': 'focus:ring-primary-500 h-4 w-4 text-primary-600 border-gray-300'
+        }),
+        required=False
+    )
+    
+    # Total discount (when applying to total bill)
+    total_discount = forms.ModelChoiceField(
+        queryset=Discount.objects.none(),
+        required=False,
+        empty_label='No discount',
+        widget=forms.Select(attrs={
+            'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500'
+        })
+    )
     
     class Meta:
         model = Payment
@@ -519,12 +553,97 @@ class PaymentForm(forms.ModelForm):
         # Set default next due date to 30 days from now
         if not self.instance.pk:
             self.fields['next_due_date'].initial = date.today() + timedelta(days=30)
+        
+        # Set up discount queryset
+        self.fields['total_discount'].queryset = Discount.objects.filter(is_active=True).order_by('name')
+        
+        # Initialize service items data with appointment service
+        if self.appointment and not self.instance.pk:
+            initial_service_data = {
+                'service_id': self.appointment.service.id,
+                'service_name': self.appointment.service.name,
+                'quantity': 1,
+                'unit_price': '',
+                'discount_id': '',
+                'notes': '',
+                'min_price': float(self.appointment.service.min_price or 0),
+                'max_price': float(self.appointment.service.max_price or 999999),
+            }
+            self.fields['service_items_data'].initial = json.dumps([initial_service_data])
     
     def clean_next_due_date(self):
         next_due_date = self.cleaned_data.get('next_due_date')
         if next_due_date and next_due_date <= date.today():
             raise ValidationError('Next due date must be in the future.')
         return next_due_date
+    
+    def clean_service_items_data(self):
+        service_items_json = self.cleaned_data.get('service_items_data')
+        
+        if not service_items_json:
+            raise ValidationError('At least one service item is required.')
+        
+        try:
+            service_items = json.loads(service_items_json)
+        except (json.JSONDecodeError, TypeError):
+            raise ValidationError('Invalid service items data.')
+        
+        if not service_items or len(service_items) == 0:
+            raise ValidationError('At least one service item is required.')
+        
+        # Validate each service item
+        validated_items = []
+        for i, item in enumerate(service_items):
+            # Validate required fields
+            if not item.get('service_id'):
+                raise ValidationError(f'Service is required for item {i+1}.')
+            
+            if not item.get('quantity') or int(item.get('quantity', 0)) <= 0:
+                raise ValidationError(f'Valid quantity is required for item {i+1}.')
+            
+            if not item.get('unit_price'):
+                raise ValidationError(f'Unit price is required for item {i+1}.')
+            
+            # Validate service exists
+            try:
+                service = Service.objects.get(id=item['service_id'], is_archived=False)
+            except Service.DoesNotExist:
+                raise ValidationError(f'Invalid service for item {i+1}.')
+            
+            # Validate unit price
+            try:
+                unit_price = Decimal(str(item['unit_price']))
+            except (ValueError, TypeError):
+                raise ValidationError(f'Invalid unit price for item {i+1}.')
+            
+            # Check price range (unless admin override is requested)
+            min_price = getattr(service, 'min_price', None) or 0
+            max_price = getattr(service, 'max_price', None) or 999999
+            
+            if unit_price < min_price or unit_price > max_price:
+                # Flag for admin override check
+                item['requires_admin_override'] = True
+                item['price_violation'] = f'Price ₱{unit_price} is outside allowed range ₱{min_price} - ₱{max_price}'
+            
+            # Validate discount if specified
+            discount = None
+            if item.get('discount_id'):
+                try:
+                    discount = Discount.objects.get(id=item['discount_id'], is_active=True)
+                except Discount.DoesNotExist:
+                    raise ValidationError(f'Invalid discount for item {i+1}.')
+            
+            validated_items.append({
+                'service': service,
+                'quantity': int(item['quantity']),
+                'unit_price': unit_price,
+                'discount': discount,
+                'notes': item.get('notes', ''),
+                'requires_admin_override': item.get('requires_admin_override', False),
+                'price_violation': item.get('price_violation', ''),
+            })
+        
+        return validated_items
     
     def clean(self):
         cleaned_data = super().clean()
@@ -542,7 +661,7 @@ class PaymentForm(forms.ModelForm):
 
 
 class PaymentItemForm(forms.ModelForm):
-    """Form for payment items"""
+    """Form for editing individual payment items (used in detail view)"""
     
     class Meta:
         model = PaymentItem
@@ -583,31 +702,17 @@ class PaymentItemForm(forms.ModelForm):
         
         if service and unit_price:
             # Check against service price range if available
-            if hasattr(service, 'min_price') and service.min_price:
-                if unit_price < service.min_price:
-                    raise ValidationError(
-                        f'Price cannot be below ₱{service.min_price} for {service.name}'
-                    )
+            if service.min_price and unit_price < service.min_price:
+                raise ValidationError(
+                    f'Price cannot be below ₱{service.min_price} for {service.name}'
+                )
             
-            if hasattr(service, 'max_price') and service.max_price:
-                if unit_price > service.max_price:
-                    raise ValidationError(
-                        f'Price cannot exceed ₱{service.max_price} for {service.name}'
-                    )
+            if service.max_price and unit_price > service.max_price:
+                raise ValidationError(
+                    f'Price cannot exceed ₱{service.max_price} for {service.name}'
+                )
         
         return unit_price
-
-
-# Create formset for payment items
-PaymentItemFormSet = inlineformset_factory(
-    Payment,
-    PaymentItem,
-    form=PaymentItemForm,
-    extra=1,
-    can_delete=True,
-    min_num=1,
-    validate_min=True
-)
 
 
 class PaymentTransactionForm(forms.ModelForm):
@@ -689,6 +794,37 @@ class PaymentTransactionForm(forms.ModelForm):
             raise ValidationError('Payment date cannot be in the future.')
         
         return payment_date
+
+
+class AdminOverrideForm(forms.Form):
+    """Form for admin password confirmation for price overrides"""
+    
+    admin_password = forms.CharField(
+        widget=forms.PasswordInput(attrs={
+            'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
+            'placeholder': 'Enter admin password to override price restrictions'
+        }),
+        help_text='Admin password required to set prices outside the allowed range'
+    )
+    
+    def __init__(self, *args, **kwargs):
+        self.user = kwargs.pop('user', None)
+        super().__init__(*args, **kwargs)
+    
+    def clean_admin_password(self):
+        password = self.cleaned_data.get('admin_password')
+        
+        if not self.user:
+            raise ValidationError('User context required for validation.')
+        
+        # Check if user is admin and password is correct
+        if not self.user.check_password(password):
+            raise ValidationError('Invalid admin password.')
+        
+        if not getattr(self.user, 'is_admin', False) and self.user.role.name.lower() != 'admin':
+            raise ValidationError('Admin privileges required for price override.')
+        
+        return password
 
 
 class PaymentFilterForm(forms.Form):

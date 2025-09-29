@@ -1,5 +1,4 @@
-# appointments/views.py - Payment management views (add to existing file)
-
+# appointments/payment_views.py - Updated with enhanced payment creation
 from django.shortcuts import get_object_or_404, redirect, render
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.decorators import login_required
@@ -23,7 +22,8 @@ from reportlab.lib import colors
 from io import BytesIO
 
 from .models import Appointment, Payment, PaymentItem, PaymentTransaction
-from .forms import PaymentForm, PaymentItemFormSet
+from .forms import PaymentForm, AdminOverrideForm
+from services.models import Service, Discount
 
 
 class PaymentListView(LoginRequiredMixin, ListView):
@@ -34,7 +34,7 @@ class PaymentListView(LoginRequiredMixin, ListView):
     paginate_by = 15
     
     def dispatch(self, request, *args, **kwargs):
-        if not request.user.has_permission('billing'):
+        if not hasattr(request.user, 'has_permission') or not request.user.has_permission('billing'):
             messages.error(request, 'You do not have permission to access this page.')
             return redirect('core:dashboard')
         return super().dispatch(request, *args, **kwargs)
@@ -136,7 +136,7 @@ class PaymentDetailView(LoginRequiredMixin, DetailView):
     context_object_name = 'payment'
     
     def dispatch(self, request, *args, **kwargs):
-        if not request.user.has_permission('billing'):
+        if not hasattr(request.user, 'has_permission') or not request.user.has_permission('billing'):
             messages.error(request, 'You do not have permission to access this page.')
             return redirect('core:dashboard')
         return super().dispatch(request, *args, **kwargs)
@@ -164,18 +164,16 @@ class PaymentDetailView(LoginRequiredMixin, DetailView):
         }
         
         # Available services for adding items
-        from services.models import Service
         context['available_services'] = Service.objects.filter(is_archived=False).order_by('name')
         
         # Available discounts
-        from services.models import Discount
         context['available_discounts'] = Discount.objects.filter(is_active=True).order_by('name')
         
         return context
 
 
 class PaymentCreateView(LoginRequiredMixin, CreateView):
-    """Create payment for an appointment"""
+    """Enhanced payment creation with dynamic service items"""
     model = Payment
     form_class = PaymentForm
     template_name = 'payment/payment_form.html'
@@ -184,7 +182,7 @@ class PaymentCreateView(LoginRequiredMixin, CreateView):
         # Get appointment from URL parameter
         self.appointment = get_object_or_404(Appointment, pk=self.kwargs.get('appointment_pk'))
 
-        if not request.user.has_permission('billing'):
+        if not hasattr(request.user, 'has_permission') or not request.user.has_permission('billing'):
             messages.error(request, 'You do not have permission to access this page.')
             return redirect('core:dashboard')
         
@@ -201,42 +199,148 @@ class PaymentCreateView(LoginRequiredMixin, CreateView):
         kwargs['appointment'] = self.appointment
         return kwargs
     
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['appointment'] = self.appointment
+        
+        # Add services and discounts data for JavaScript
+        services_data = []
+        for service in Service.objects.filter(is_archived=False):
+            services_data.append({
+                'id': service.id,
+                'name': service.name,
+                'min_price': float(service.min_price or 0),
+                'max_price': float(service.max_price or 999999),
+            })
+        
+        discounts_data = []
+        for discount in Discount.objects.filter(is_active=True):
+            discounts_data.append({
+                'id': discount.id,
+                'name': discount.name,
+                'discount_type': 'percentage' if discount.is_percentage else 'fixed',
+                'value': float(discount.amount),
+            })
+        
+        context['services_json'] = json.dumps(services_data)
+        context['discounts_json'] = json.dumps(discounts_data)
+        
+        return context
+    
     def form_valid(self, form):
         form.instance.appointment = self.appointment
         form.instance.patient = self.appointment.patient
         
-        with transaction.atomic():
-            response = super().form_valid(form)
+        # Check for admin override if needed
+        admin_override_confirmed = self.request.POST.get('admin_override_confirmed')
+        
+        try:
+            validated_items = form.cleaned_data['service_items_data']
             
-            # Create default payment item based on appointment service
-            PaymentItem.objects.create(
-                payment=form.instance,
-                service=self.appointment.service,
-                quantity=1,
-                unit_price=getattr(self.appointment.service, 'default_price', 0) or 0,
-            )
+            # Check if admin override is required but not confirmed
+            requires_override = any(item.get('requires_admin_override', False) for item in validated_items)
             
-            # Update total amount
-            form.instance.total_amount = form.instance.calculate_total_from_items()
-            form.instance.save()
+            if requires_override and not admin_override_confirmed:
+                # This should not happen if frontend validation works properly
+                messages.error(self.request, 'Admin override required for price violations.')
+                return self.form_invalid(form)
             
-            messages.success(self.request, f'Payment record created for {self.appointment.patient.full_name}')
-            
-        return response
+            with transaction.atomic():
+                # Save payment instance
+                response = super().form_valid(form)
+                payment = form.instance
+                
+                # Create payment items
+                total_amount = Decimal('0')
+                
+                for item_data in validated_items:
+                    payment_item = PaymentItem.objects.create(
+                        payment=payment,
+                        service=item_data['service'],
+                        quantity=item_data['quantity'],
+                        unit_price=item_data['unit_price'],
+                        discount=item_data['discount'],
+                        notes=item_data['notes']
+                    )
+                    total_amount += payment_item.total
+                
+                # Apply total discount if specified
+                discount_application = form.cleaned_data.get('discount_application')
+                if discount_application == 'total' and form.cleaned_data.get('total_discount'):
+                    total_discount = form.cleaned_data['total_discount']
+                    # Apply discount to total (this would need additional model field or logic)
+                    # For now, we'll add it as a negative payment item
+                    if total_discount.discount_type == 'percentage':
+                        discount_amount = total_amount * (total_discount.value / 100)
+                    else:
+                        discount_amount = min(total_discount.value, total_amount)
+                    
+                    if discount_amount > 0:
+                        PaymentItem.objects.create(
+                            payment=payment,
+                            service=Service.objects.filter(is_archived=False).first(),  # Use any service as placeholder
+                            quantity=1,
+                            unit_price=-discount_amount,  # Negative amount for discount
+                            notes=f'Total discount: {total_discount.name}'
+                        )
+                        total_amount -= discount_amount
+                
+                # Update payment total amount
+                payment.total_amount = max(total_amount, Decimal('0'))
+                payment.save()
+                
+                messages.success(self.request, f'Payment record created for {self.appointment.patient.full_name}')
+                
+            return response
+                
+        except Exception as e:
+            messages.error(self.request, f'Error creating payment record: {str(e)}')
+            return self.form_invalid(form)
     
     def get_success_url(self):
         return reverse_lazy('appointments:payment_detail', kwargs={'pk': self.object.pk})
+
+
+@login_required
+def verify_admin_password(request):
+    """AJAX endpoint to verify admin password for price overrides"""
+    if not hasattr(request.user, 'has_permission') or not request.user.has_permission('billing'):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
     
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context['appointment'] = self.appointment
-        return context
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    
+    try:
+        data = json.loads(request.body)
+        password = data.get('password')
+        
+        if not password:
+            return JsonResponse({'valid': False, 'error': 'Password is required'})
+        
+        # Check if user is admin and password is correct
+        if not request.user.check_password(password):
+            return JsonResponse({'valid': False, 'error': 'Invalid password'})
+        
+        # Check admin role (adjust based on your user model)
+        is_admin = (
+            getattr(request.user, 'is_superuser', False) or
+            (hasattr(request.user, 'role') and request.user.role and 
+             request.user.role.name == 'admin')
+        )
+        
+        if not is_admin:
+            return JsonResponse({'valid': False, 'error': 'Admin privileges required'})
+        
+        return JsonResponse({'valid': True})
+        
+    except Exception as e:
+        return JsonResponse({'valid': False, 'error': 'Verification failed'})
 
 
 @login_required
 def add_payment_item(request, payment_pk):
     """Add service item to payment via AJAX"""
-    if not request.user.has_permission('billing'):
+    if not hasattr(request.user, 'has_permission') or not request.user.has_permission('billing'):
         return JsonResponse({'error': 'Permission denied'}, status=403)
     
     payment = get_object_or_404(Payment, pk=payment_pk)
@@ -245,17 +349,16 @@ def add_payment_item(request, payment_pk):
         try:
             data = json.loads(request.body)
             
-            from services.models import Service, Discount
             service = get_object_or_404(Service, pk=data['service_id'])
             
             # Validate unit price against service price range
             unit_price = Decimal(str(data['unit_price']))
-            if hasattr(service, 'min_price') and unit_price < service.min_price:
+            if service.min_price and unit_price < service.min_price:
                 return JsonResponse({
                     'error': f'Price must be at least ₱{service.min_price}'
                 }, status=400)
             
-            if hasattr(service, 'max_price') and unit_price > service.max_price:
+            if service.max_price and unit_price > service.max_price:
                 return JsonResponse({
                     'error': f'Price cannot exceed ₱{service.max_price}'
                 }, status=400)
@@ -301,9 +404,10 @@ def add_payment_item(request, payment_pk):
     
     return JsonResponse({'error': 'Method not allowed'}, status=405)
 
+
 @login_required
 def delete_payment_item(request, pk):
-    if not request.user.has_permission('billing'):
+    if not hasattr(request.user, 'has_permission') or not request.user.has_permission('billing'):
         return JsonResponse({'error': 'Permission denied'}, status=403)
     
     if request.method == 'POST':
@@ -321,10 +425,11 @@ def delete_payment_item(request, pk):
     
     return JsonResponse({'error': 'Method not allowed'}, status=405)
 
+
 @login_required
 def add_payment_transaction(request, payment_pk):
     """Add cash payment transaction"""
-    if not request.user.has_permission('billing'):
+    if not hasattr(request.user, 'has_permission') or not request.user.has_permission('billing'):
         return JsonResponse({'error': 'Permission denied'}, status=403)
     
     payment = get_object_or_404(Payment, pk=payment_pk)
@@ -372,7 +477,7 @@ def add_payment_transaction(request, payment_pk):
 @login_required
 def generate_receipt_pdf(request, transaction_pk):
     """Generate PDF receipt for payment transaction"""
-    if not request.user.has_permission('billing'):
+    if not hasattr(request.user, 'has_permission') or not request.user.has_permission('billing'):
         messages.error(request, 'You do not have permission to access this page.')
         return redirect('core:dashboard')
     
@@ -517,10 +622,11 @@ def generate_receipt_pdf(request, transaction_pk):
     
     return response
 
+
 @login_required 
 def payment_dashboard(request):
     """Payment dashboard with key metrics"""
-    if not request.user.has_permission('billing'):
+    if not hasattr(request.user, 'has_permission') or not request.user.has_permission('billing'):
         messages.error(request, 'You do not have permission to access this page.')
         return redirect('core:dashboard')
     
@@ -529,7 +635,7 @@ def payment_dashboard(request):
     
     # Key metrics
     metrics = {
-        # FIXED: Calculate outstanding balance using F expressions
+        # Calculate outstanding balance using F expressions
         'total_outstanding': Payment.objects.filter(
             status__in=['pending', 'partially_paid']
         ).aggregate(

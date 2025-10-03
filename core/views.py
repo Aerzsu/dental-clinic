@@ -85,7 +85,7 @@ class BookAppointmentView(TemplateView):
             }, status=500)
     
     def _handle_json_request(self, data):
-        """Handle JSON appointment request - UPDATED to store in temp fields"""
+        """Handle JSON appointment request - UPDATED to skip automatic audit log"""
         # Validate required fields
         required_fields = ['patient_type', 'service', 'appointment_date', 'period']
         for field in required_fields:
@@ -130,16 +130,15 @@ class BookAppointmentView(TemplateView):
                 if isinstance(patient_data, JsonResponse):  # Error response
                     return patient_data
                 
-                # Create appointment with temp patient data - NO patient FK linking yet
+                # Create appointment with temp patient data
                 appointment = Appointment.objects.create(
-                    patient=patient_data.get('existing_patient'),  # Only set if existing patient
+                    patient=patient_data.get('existing_patient'),
                     service=service,
                     appointment_date=appointment_date,
                     period=period,
                     patient_type=patient_type,
                     reason=data.get('reason', '').strip(),
                     status='pending',
-                    # Store patient data in temp fields
                     temp_first_name=patient_data.get('first_name', ''),
                     temp_last_name=patient_data.get('last_name', ''),
                     temp_email=patient_data.get('email', ''),
@@ -147,18 +146,10 @@ class BookAppointmentView(TemplateView):
                     temp_address=patient_data.get('address', ''),
                 )
                 
-                # Log the booking
-                AuditLog.log_action(
-                    user=None,  # Public booking
-                    action='create',
-                    model_instance=appointment,
-                    changes={
-                        'source': 'public_booking', 
-                        'period': period,
-                        'patient_type': patient_type
-                    },
-                    request=self.request
-                )
+                # Skip automatic audit log for public bookings
+                # (We don't want anonymous bookings cluttering the audit log)
+                # Staff will see it in the "Pending Requests" page
+                # When they approve it, that action will be logged
                 
                 # Generate reference number
                 reference_number = f'APT-{appointment.id:06d}'
@@ -655,9 +646,9 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         return actions
 
 class AuditLogListView(LoginRequiredMixin, ListView):
-    """View audit logs for system activities"""
+    """Enhanced view for audit logs with comprehensive filtering"""
     model = AuditLog
-    template_name = 'core/audit_logs.html'
+    template_name = 'core/audit_log_list.html'
     context_object_name = 'logs'
     paginate_by = 50
     
@@ -668,17 +659,34 @@ class AuditLogListView(LoginRequiredMixin, ListView):
         return super().dispatch(request, *args, **kwargs)
     
     def get_queryset(self):
-        queryset = AuditLog.objects.select_related('user')
+        queryset = AuditLog.objects.select_related('user').order_by('-timestamp')
         
-        # Filter by user if specified
+        # Build active filters list for display
+        self.active_filters = []
+        
+        # Filter by user
         user_filter = self.request.GET.get('user')
         if user_filter:
-            queryset = queryset.filter(user_id=user_filter)
+            try:
+                user_id = int(user_filter)
+                queryset = queryset.filter(user_id=user_id)
+                user = User.objects.get(id=user_id)
+                self.active_filters.append(f"User: {user.get_full_name()}")
+            except (ValueError, User.DoesNotExist):
+                pass
         
-        # Filter by action if specified
+        # Filter by action
         action_filter = self.request.GET.get('action')
         if action_filter:
             queryset = queryset.filter(action=action_filter)
+            action_display = dict(AuditLog.ACTION_CHOICES).get(action_filter, action_filter)
+            self.active_filters.append(f"Action: {action_display}")
+        
+        # Filter by model name
+        model_filter = self.request.GET.get('model_name')
+        if model_filter:
+            queryset = queryset.filter(model_name=model_filter)
+            self.active_filters.append(f"Module: {model_filter.title()}")
         
         # Filter by date range
         date_from = self.request.GET.get('date_from')
@@ -686,30 +694,49 @@ class AuditLogListView(LoginRequiredMixin, ListView):
         
         if date_from:
             try:
-                date_from = datetime.strptime(date_from, '%Y-%m-%d').date()
-                queryset = queryset.filter(timestamp__date__gte=date_from)
+                date_from_obj = datetime.strptime(date_from, '%Y-%m-%d').date()
+                queryset = queryset.filter(timestamp__date__gte=date_from_obj)
+                self.active_filters.append(f"From: {date_from_obj.strftime('%b %d, %Y')}")
             except ValueError:
                 pass
         
         if date_to:
             try:
-                date_to = datetime.strptime(date_to, '%Y-%m-%d').date()
-                queryset = queryset.filter(timestamp__date__lte=date_to)
+                date_to_obj = datetime.strptime(date_to, '%Y-%m-%d').date()
+                queryset = queryset.filter(timestamp__date__lte=date_to_obj)
+                self.active_filters.append(f"To: {date_to_obj.strftime('%b %d, %Y')}")
             except ValueError:
                 pass
         
-        return queryset.order_by('-timestamp')
+        return queryset
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['users'] = User.objects.filter(is_active=True)
-        context['actions'] = AuditLog.ACTION_CHOICES if hasattr(AuditLog, 'ACTION_CHOICES') else []
+        
+        # Get all users for filter dropdown
+        context['users'] = User.objects.filter(is_active=True).order_by('first_name', 'last_name')
+        
+        # Action choices
+        context['action_choices'] = AuditLog.ACTION_CHOICES
+        
+        # Get unique model names for filter
+        context['model_choices'] = AuditLog.objects.values_list('model_name', flat=True).distinct().order_by('model_name')
+        
+        # Current filters
         context['filters'] = {
             'user': self.request.GET.get('user', ''),
             'action': self.request.GET.get('action', ''),
+            'model_name': self.request.GET.get('model_name', ''),
             'date_from': self.request.GET.get('date_from', ''),
             'date_to': self.request.GET.get('date_to', ''),
         }
+        
+        # Active filters for display
+        context['active_filters'] = getattr(self, 'active_filters', [])
+        
+        # Total count
+        context['total_count'] = self.get_queryset().count()
+        
         return context
 
 class MaintenanceHubView(LoginRequiredMixin, TemplateView):

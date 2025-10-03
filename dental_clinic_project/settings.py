@@ -41,7 +41,7 @@ INSTALLED_APPS = [
     'crispy_tailwind',
     
     # Local apps
-    'core',
+    'core.apps.CoreConfig',
     'users',
     'patients',
     'appointments',
@@ -56,6 +56,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'core.middleware.AuditMiddleware',
 ]
 
 ROOT_URLCONF = 'dental_clinic_project.urls'

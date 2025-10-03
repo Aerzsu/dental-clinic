@@ -864,7 +864,7 @@ def approve_appointment(request, pk):
                 messages.error(request, f'Cannot approve: {message}')
                 return redirect('appointments:appointment_detail', pk=pk)
             
-            # Get dentist to assign (from POST data or assign first available)
+            # Get dentist to assign
             assigned_dentist_id = request.POST.get('assigned_dentist')
             if assigned_dentist_id:
                 try:
@@ -874,32 +874,52 @@ def approve_appointment(request, pk):
             else:
                 assigned_dentist = User.objects.filter(is_active_dentist=True).first()
             
-            # Approve appointment (this will create/update patient record automatically)
+            # Store info for logging before approval changes it
+            patient_name = appointment.patient_name
+            was_new_patient = appointment.patient_type == 'new'
+            
+            # Approve appointment (automatic logging is disabled inside this method)
             appointment.approve(request.user, assigned_dentist)
             
-            # Log the action
+            # Create a single comprehensive audit log entry
+            changes = {
+                'status': {'old': 'pending', 'new': 'confirmed', 'label': 'Status'},
+                'assigned_dentist': {
+                    'old': None, 
+                    'new': assigned_dentist.full_name if assigned_dentist else 'Unassigned',
+                    'label': 'Assigned Dentist'
+                }
+            }
+            
+            if was_new_patient:
+                changes['patient_created'] = {
+                    'old': None,
+                    'new': f'Created patient record for {patient_name}',
+                    'label': 'Patient Record'
+                }
+            
+            description = f"Approved appointment for {patient_name}"
+            if was_new_patient:
+                description += " (new patient)"
+            if assigned_dentist:
+                description += f" and assigned to Dr. {assigned_dentist.get_full_name()}"
+            
             AuditLog.log_action(
                 user=request.user,
                 action='approve',
                 model_instance=appointment,
-                changes={
-                    'assigned_dentist': assigned_dentist.full_name if assigned_dentist else None,
-                    'patient_created': appointment.patient.id,
-                    'patient_name': appointment.patient.full_name
-                },
+                changes=changes,
+                description=description,
                 request=request
             )
             
-            dentist_name = assigned_dentist.full_name if assigned_dentist else 'staff'
-            messages.success(
-                request, 
-                f'Appointment for {appointment.patient.full_name} has been approved.'
-            )
+            messages.success(request, f'Appointment for {patient_name} has been approved.')
             
     except Exception as e:
         messages.error(request, f'Error approving appointment: {str(e)}')
     
     return redirect('appointments:appointment_detail', pk=pk)
+
 
 @login_required  
 def reject_appointment(request, pk):
@@ -916,16 +936,23 @@ def reject_appointment(request, pk):
                 messages.error(request, 'Only pending appointments can be rejected.')
                 return redirect('appointments:appointment_detail', pk=pk)
             
-            # Store patient name before rejection
-            patient_name = appointment.patient_name  # Use the property instead of appointment.patient.full_name
+            # Store info before rejection
+            patient_name = appointment.patient_name
+            old_status = appointment.status
             
+            # Disable automatic logging
+            appointment._skip_audit_log = True
             appointment.reject()
             
-            # Log the action
+            # Create single audit log entry
             AuditLog.log_action(
                 user=request.user,
                 action='reject',
                 model_instance=appointment,
+                changes={
+                    'status': {'old': old_status, 'new': 'rejected', 'label': 'Status'}
+                },
+                description=f"Rejected appointment request from {patient_name}",
                 request=request
             )
             

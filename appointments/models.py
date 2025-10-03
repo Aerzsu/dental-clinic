@@ -417,15 +417,23 @@ class Appointment(models.Model):
             return patient
     
     def approve(self, approved_by_user, assigned_dentist=None):
-        """Approve/Confirm the appointment, create/update patient record, and assign a dentist"""
+        """
+        Approve/Confirm the appointment, create/update patient record, and assign a dentist
+        FIXED: Disable automatic audit logging for internal operations
+        """
         from django.db import transaction
         
         with transaction.atomic():
             # Create or update patient record from temp data
-            if not self.patient:  # Only if not already linked
-                self.patient = self.create_or_update_patient()
+            if not self.patient:
+                patient = self.create_or_update_patient()
+                # Disable audit log for this patient creation (we'll log the approval instead)
+                patient._skip_audit_log = True
+                patient.save()
+                self.patient = patient
             
             # Update appointment status
+            old_status = self.status
             self.status = 'confirmed'
             self.confirmed_at = timezone.now()
             self.confirmed_by = approved_by_user
@@ -433,9 +441,11 @@ class Appointment(models.Model):
             if assigned_dentist:
                 self.assigned_dentist = assigned_dentist
             
+            # Disable automatic audit log for this save (manual log will be created in view)
+            self._skip_audit_log = True
             self.save()
             
-            # Clear temp data after successful approval (optional, for cleanliness)
+            # Clear temp data after successful approval
             self.clear_temp_data()
     
     def clear_temp_data(self):

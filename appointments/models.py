@@ -61,7 +61,7 @@ class DailySlots(models.Model):
         if include_pending:
             # For public booking - count pending appointments to prevent overbooking
             blocking_statuses = ['pending', 'confirmed', 'completed']
-        else:
+        else:   
             # For admin backend - only count confirmed/completed appointments
             blocking_statuses = ['confirmed', 'completed']
         

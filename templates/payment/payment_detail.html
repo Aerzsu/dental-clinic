@@ -568,7 +568,7 @@ function showAddPaymentModal() {
             } else {
                 amountInput.value = '';
                 amountInput.readOnly = false;
-                if (installmentOptions && {{ payment.payment_type != 'installment'|yesno:'true,false' }}) {
+                if (installmentOptions && {% if payment.payment_type != 'installment' %}true{% else %}false{% endif %}) {
                     installmentOptions.classList.remove('hidden');
                 }
             }

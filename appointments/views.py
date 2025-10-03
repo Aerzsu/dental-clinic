@@ -371,7 +371,7 @@ class AppointmentCreateView(LoginRequiredMixin, CreateView):
             with transaction.atomic():
                 # Auto-approve staff bookings
                 if self.request.user.has_permission('appointments'):
-                    form.instance.status = 'approved'
+                    form.instance.status = 'confirmed'
                     form.instance.approved_at = timezone.now()
                     form.instance.approved_by = self.request.user
                     
@@ -774,16 +774,40 @@ def get_slot_availability_api(request):
 
 def find_patient_api(request):
     """
-    API ENDPOINT: Find existing patient by email or contact number
+    API ENDPOINT: Find existing patient by name, email, or contact number
+    Supports both exact matching and autocomplete search
     """
     if request.method != 'GET':
         return JsonResponse({'error': 'Method not allowed'}, status=405)
     
     identifier = request.GET.get('identifier', '').strip()
-    if not identifier or len(identifier) < 3:
-        return JsonResponse({'found': False})
+    search_type = request.GET.get('type', 'exact')  # 'exact' or 'autocomplete'
     
-    # Search logic
+    if not identifier or len(identifier) < 2:
+        return JsonResponse({'found': False, 'patients': []})
+    
+    # AUTOCOMPLETE MODE: Return list of matching patients
+    if search_type == 'autocomplete':
+        patients = Patient.objects.filter(
+            is_active=True
+        ).filter(
+            Q(first_name__icontains=identifier) |
+            Q(last_name__icontains=identifier)
+        ).select_related().order_by('last_name', 'first_name')[:10]
+        
+        patient_list = [{
+            'id': p.id,
+            'name': p.full_name,
+            'email': p.email or 'No email',
+            'contact_number': p.contact_number or 'No phone'
+        } for p in patients]
+        
+        return JsonResponse({
+            'patients': patient_list,
+            'count': len(patient_list)
+        })
+    
+    # EXACT MODE: Original functionality for booking form
     query = Q(is_active=True)
     
     if '@' in identifier:

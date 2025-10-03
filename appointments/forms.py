@@ -32,9 +32,6 @@ class AppointmentForm(forms.ModelForm):
             'period': forms.Select(attrs={
                 'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500'
             }),
-            'patient': forms.Select(attrs={
-                'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500'
-            }),
             'service': forms.Select(attrs={
                 'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500'
             }),
@@ -61,7 +58,12 @@ class AppointmentForm(forms.ModelForm):
     
     def __init__(self, *args, **kwargs):
         self.user = kwargs.pop('user', None)
+        self.is_creating = kwargs.get('instance') is None or kwargs['instance'].pk is None
         super().__init__(*args, **kwargs)
+        
+        # Patient field is not rendered in template (using autocomplete instead)
+        self.fields['patient'].widget = forms.HiddenInput()
+        self.fields['patient'].required = True
         
         # Filter active patients
         self.fields['patient'].queryset = Patient.objects.filter(is_active=True).order_by('last_name', 'first_name')
@@ -71,33 +73,52 @@ class AppointmentForm(forms.ModelForm):
         
         # Filter active dentists
         self.fields['assigned_dentist'].queryset = User.objects.filter(is_active_dentist=True).order_by('first_name', 'last_name')
-        self.fields['assigned_dentist'].required = False  # Can be assigned later
+        self.fields['assigned_dentist'].required = False
         
         # Add empty labels
-        self.fields['patient'].empty_label = "Select a patient..."
         self.fields['service'].empty_label = "Select a service..."
         self.fields['assigned_dentist'].empty_label = "Select a dentist (optional)..."
+        
+        # Handle status field based on context
+        if self.is_creating:
+            # For new appointments, don't show status field - it will default to 'confirmed'
+            self.fields['status'].required = False
+            self.fields['status'].widget = forms.HiddenInput()
+        else:
+            # For editing, status field is shown
+            self.fields['status'].required = True
         
         # Adjust field requirements based on user permissions
         if not self.user or not self.user.has_permission('appointments'):
             # Hide staff-only fields for non-staff users
-            del self.fields['staff_notes']
-            del self.fields['status']
-            del self.fields['assigned_dentist']
+            if 'staff_notes' in self.fields:
+                del self.fields['staff_notes']
+            if 'status' in self.fields:
+                del self.fields['status']
+            if 'assigned_dentist' in self.fields:
+                del self.fields['assigned_dentist']
+    
+    def clean_patient(self):
+        patient = self.cleaned_data.get('patient')
+        if not patient:
+            raise ValidationError('Please select a patient from the list.')
+        if not patient.is_active:
+            raise ValidationError('The selected patient record is not active.')
+        return patient
     
     def clean_appointment_date(self):
         appointment_date = self.cleaned_data.get('appointment_date')
         
         if not appointment_date:
-            raise ValidationError('Appointment date is required.')
+            raise ValidationError('Please select an appointment date.')
         
         # Check if date is in the future
         if appointment_date <= timezone.now().date():
-            raise ValidationError('Appointment date must be in the future.')
+            raise ValidationError('Please select a future date for the appointment.')
         
         # Check if it's not a Sunday
         if appointment_date.weekday() == 6:
-            raise ValidationError('Appointments are not available on Sundays.')
+            raise ValidationError('Appointments cannot be scheduled on Sundays.')
         
         return appointment_date
     
@@ -105,6 +126,10 @@ class AppointmentForm(forms.ModelForm):
         cleaned_data = super().clean()
         appointment_date = cleaned_data.get('appointment_date')
         period = cleaned_data.get('period')
+        
+        # Set default status for new appointments
+        if self.is_creating and self.user and self.user.has_permission('appointments'):
+            cleaned_data['status'] = 'confirmed'
         
         if appointment_date and period:
             # Check slot availability (excluding current appointment if updating)
@@ -117,9 +142,24 @@ class AppointmentForm(forms.ModelForm):
             )
             
             if not can_book:
-                raise ValidationError(f'Cannot book appointment: {message}')
+                raise ValidationError(f'This time slot is not available. {message}')
         
         return cleaned_data
+    
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        
+        # Set default status for new appointments if not already set
+        if self.is_creating and not instance.status:
+            if self.user and self.user.has_permission('appointments'):
+                instance.status = 'confirmed'
+            else:
+                instance.status = 'pending'
+        
+        if commit:
+            instance.save()
+        
+        return instance
 
 
 class DailySlotsForm(forms.ModelForm):
@@ -528,8 +568,9 @@ class PaymentForm(forms.ModelForm):
         model = Payment
         fields = ['payment_type', 'installment_months', 'next_due_date', 'notes']
         widgets = {
-            'payment_type': forms.Select(attrs={
-                'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500'
+            # FIX: Add RadioSelect widget for payment_type
+            'payment_type': forms.RadioSelect(attrs={
+                'class': 'focus:ring-primary-500 h-4 w-4 text-primary-600 border-gray-300'
             }),
             'installment_months': forms.NumberInput(attrs={
                 'class': 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500',
